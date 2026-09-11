@@ -147,6 +147,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	if _, err := b.client.Rest.CreateMessage(channelID, welcomeMessage(ticket, tt), rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to send welcome message", slog.Any("err", err))
 	}
+	go b.logEvent(guildID, openedLog(ticket))
 	b.log.Info("ticket opened",
 		slog.String("guild_id", guildID.String()), slog.Int("number", number), slog.String("mode", string(tt.Mode)))
 	return channelID, nil
@@ -294,6 +295,7 @@ func (b *Bot) toggleClaim(ctx context.Context, channelID snowflake.ID, m *discor
 	if !ok {
 		return "", userErr("Someone else claimed this ticket just now.")
 	}
+	go b.logEvent(t.GuildID, claimedLog(t, me))
 	return "🙋 " + discord.UserMention(me) + " has claimed this ticket and will help you from here.", nil
 }
 
@@ -339,6 +341,7 @@ func (b *Bot) finishClose(t store.Ticket) {
 
 	// The close message has been posted, so the transcript is complete.
 	b.tickets.remove(t.ChannelID)
+	b.logEvent(t.GuildID, b.closedLog(t))
 	b.notifyOpener(ctx, t)
 
 	var err error

@@ -12,6 +12,7 @@
 ## Done since v1
 
 - Dashboard roles: members with roles chosen in Settings can use the dashboard (everything except changing those roles)
+- Log channel: ticket opened/claimed/closed events are posted to a channel chosen in Settings, with a transcript link on close when `PUBLIC_URL` is https
 
 ## Not yet verified by hand
 
@@ -20,14 +21,13 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 ## Next up (suggested order)
 
 1. **Deploy to Railway**: set up the services and env vars, set a real `PUBLIC_URL` (which enables transcript links in DMs), unset `DEV_GUILD_ID`, and add the production OAuth redirect. Reset the bot token/secret first (they were shared in a chat).
-2. **Log channel**: post open/close/claim events (and optionally transcripts) to a chosen channel.
-4. **Pre-ticket forms**: questions shown in a modal when opening a ticket, with answers posted in the welcome message. This is part of the original plan's "Forms & automation".
-5. **Auto-close**: close inactive tickets after N hours, with a warning first.
-6. **Reopen**: reopen threads within a grace window (channels are deleted, so reopening them would need a delay or archiving instead).
-7. **Canned responses / tags**: `/tag` for common replies, managed in the dashboard.
-8. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
-9. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile.
-10. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.
+2. **Pre-ticket forms**: questions shown in a modal when opening a ticket, with answers posted in the welcome message. This is part of the original plan's "Forms & automation".
+3. **Auto-close**: close inactive tickets after N hours, with a warning first.
+4. **Reopen**: reopen threads within a grace window (channels are deleted, so reopening them would need a delay or archiving instead).
+5. **Canned responses / tags**: `/tag` for common replies, managed in the dashboard.
+6. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
+7. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile.
+8. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.
 
 ## Nice to have
 

@@ -33,9 +33,12 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, err)
 		return
 	}
+	// Decoding writes through pointers and reuses slices, so give in its own
+	// copies; otherwise cur would change too and hide what was edited.
 	in := cur
-	// Decoding into a slice reuses its backing array, so don't share it.
+	in.TranscriptRetentionDays = clonePtr(cur.TranscriptRetentionDays)
 	in.DashboardRoleIDs = slices.Clone(cur.DashboardRoleIDs)
+	in.LogChannelID = clonePtr(cur.LogChannelID)
 	if !decodeJSON(w, r, &in) {
 		return
 	}
@@ -53,6 +56,23 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) validateSettings(ctx context.Context, guildID snowflake.ID, manager bool, cur store.GuildSettings, in *store.GuildSettings) error {
 	if d := in.TranscriptRetentionDays; d != nil && !slices.Contains(retentionOptions, *d) {
 		return invalid("transcript_retention_days", "Choose one of the listed retention periods.")
+	}
+
+	if in.LogChannelID != nil && *in.LogChannelID == 0 {
+		in.LogChannelID = nil
+	}
+	// Only check a newly chosen channel, so a log channel deleted in Discord
+	// doesn't block saving other settings.
+	if in.LogChannelID != nil && (cur.LogChannelID == nil || *cur.LogChannelID != *in.LogChannelID) {
+		channels, err := s.guildChannels(ctx, guildID)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(channels, func(c channelResponse) bool {
+			return c.ID == *in.LogChannelID && (c.Kind == "text" || c.Kind == "announcement")
+		}) {
+			return invalid("log_channel_id", "Choose a text channel for the ticket log.")
+		}
 	}
 
 	in.DashboardRoleIDs = normaliseIDs(in.DashboardRoleIDs)
@@ -74,4 +94,12 @@ func (s *Server) validateSettings(ctx context.Context, guildID snowflake.ID, man
 		})
 	}
 	return nil
+}
+
+func clonePtr[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }

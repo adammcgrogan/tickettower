@@ -14,14 +14,14 @@ func TestGuildSettings(t *testing.T) {
 
 	// Unknown guilds get defaults rather than an error.
 	st, err := s.GetGuildSettings(ctx, 9999)
-	if err != nil || st.TranscriptRetentionDays != nil || st.DashboardRoleIDs == nil || len(st.DashboardRoleIDs) != 0 {
+	if err != nil || st.TranscriptRetentionDays != nil || st.DashboardRoleIDs == nil || len(st.DashboardRoleIDs) != 0 || st.LogChannelID != nil {
 		t.Fatalf("defaults = %+v, err = %v", st, err)
 	}
 
 	seedGuild(t, s, testGuild)
 	seedGuild(t, s, 3001)
-	days := 30
-	want := GuildSettings{TranscriptRetentionDays: &days, DashboardRoleIDs: []snowflake.ID{10, 20}}
+	days, logChannel := 30, snowflake.ID(4242)
+	want := GuildSettings{TranscriptRetentionDays: &days, DashboardRoleIDs: []snowflake.ID{10, 20}, LogChannelID: &logChannel}
 	if err := s.UpdateGuildSettings(ctx, testGuild, want); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,8 @@ func TestGuildSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *got.TranscriptRetentionDays != 30 || !slices.Equal(got.DashboardRoleIDs, want.DashboardRoleIDs) {
+	if *got.TranscriptRetentionDays != 30 || !slices.Equal(got.DashboardRoleIDs, want.DashboardRoleIDs) ||
+		got.LogChannelID == nil || *got.LogChannelID != logChannel {
 		t.Errorf("round trip = %+v", got)
 	}
 
@@ -48,5 +49,8 @@ func TestGuildSettings(t *testing.T) {
 	}
 	if roles, _ := s.DashboardRoles(ctx, []snowflake.ID{testGuild}); len(roles) != 0 {
 		t.Errorf("after clearing = %v", roles)
+	}
+	if got, _ := s.GetGuildSettings(ctx, testGuild); got.LogChannelID != nil || got.TranscriptRetentionDays != nil {
+		t.Errorf("after clearing = %+v", got)
 	}
 }

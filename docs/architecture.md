@@ -21,7 +21,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | Table | Purpose |
 |---|---|
 | `guilds` | Servers the bot is or was in (`left_at` set when removed; data kept for re-adds) |
-| `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (extra roles allowed into the dashboard) |
+| `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (extra roles allowed into the dashboard), `log_channel_id` |
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
 | `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit |
 | `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
@@ -52,6 +52,8 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
    - deletes the channel after 5s, or archives and locks a thread
 
 Deleting a ticket channel by hand also closes the ticket.
+
+**Ticket log.** When a guild has `log_channel_id` set, `ticketbot/log.go` posts an embed there when a ticket is opened, claimed or closed (including when its channel is deleted by hand). The close entry links to the transcript if `PUBLIC_URL` is https. Posting is best effort: failures are logged, never shown to members.
 
 **Feedback.** The DM rating buttons (`/rate/{ticketID}/{n}`) save the rating and swap the buttons for "Add a comment" (a modal). Only the opener can rate.
 
