@@ -6,7 +6,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 func TestParseEmoji(t *testing.T) {

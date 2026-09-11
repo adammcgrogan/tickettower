@@ -11,8 +11,8 @@ import (
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
-	"github.com/adammcgrogan/ticketsbot/internal/entitlements"
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/entitlements"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 const discordCacheTTL = 15 * time.Second

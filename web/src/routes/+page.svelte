@@ -7,7 +7,7 @@
 	import Logo from '$lib/components/Logo.svelte';
 	import PanelPreview from '$lib/components/PanelPreview.svelte';
 
-	const GITHUB_URL = 'https://github.com/adammcgrogan/ticketsbot';
+	const GITHUB_URL = 'https://github.com/adammcgrogan/tickettower';
 
 	let user = $state<User | null>(null);
 	const loginFailed = $derived(page.url.searchParams.get('error') === 'login_failed');

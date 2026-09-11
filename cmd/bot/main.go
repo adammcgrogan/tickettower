@@ -7,10 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/adammcgrogan/ticketsbot/internal/config"
-	"github.com/adammcgrogan/ticketsbot/internal/logging"
-	"github.com/adammcgrogan/ticketsbot/internal/store"
-	"github.com/adammcgrogan/ticketsbot/internal/ticketbot"
+	"github.com/adammcgrogan/tickettower/internal/config"
+	"github.com/adammcgrogan/tickettower/internal/logging"
+	"github.com/adammcgrogan/tickettower/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/ticketbot"
 )
 
 func main() {

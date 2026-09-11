@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 var testQuestions = []store.Question{

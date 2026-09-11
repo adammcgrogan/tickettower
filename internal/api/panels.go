@@ -13,9 +13,9 @@ import (
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
-	"github.com/adammcgrogan/ticketsbot/internal/discordx"
-	"github.com/adammcgrogan/ticketsbot/internal/panels"
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/discordx"
+	"github.com/adammcgrogan/tickettower/internal/panels"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 type panelInput struct {

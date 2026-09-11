@@ -9,8 +9,8 @@ import (
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
-	"github.com/adammcgrogan/ticketsbot/internal/auth"
-	"github.com/adammcgrogan/ticketsbot/internal/discordx"
+	"github.com/adammcgrogan/tickettower/internal/auth"
+	"github.com/adammcgrogan/tickettower/internal/discordx"
 )
 
 // memberCacheTTL bounds how long a member's roles are trusted, so removing a

@@ -16,8 +16,8 @@ import (
 	"github.com/disgoorg/disgo/oauth2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/adammcgrogan/ticketsbot/internal/auth"
-	"github.com/adammcgrogan/ticketsbot/internal/config"
+	"github.com/adammcgrogan/tickettower/internal/auth"
+	"github.com/adammcgrogan/tickettower/internal/config"
 )
 
 type testEnv struct {

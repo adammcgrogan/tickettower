@@ -10,7 +10,7 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/snowflake/v2"
 
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 // ticketCache tracks open ticket channels so message events from ordinary
