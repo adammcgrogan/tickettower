@@ -36,4 +36,3 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 - Timezone-aware analytics (currently UTC)
 - Search and pagination on the Tickets page (currently the newest 200)
 - Custom bot branding per server
-- Rename the product and pick a domain

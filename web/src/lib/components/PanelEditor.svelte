@@ -31,7 +31,7 @@
 	}: { guildId: string; initial?: Panel; types: TicketType[]; channels: Channel[] } = $props();
 
 	const MAX_TYPES = 25;
-	// Embed colours for the panel in Discord, starting with Relay's amber.
+	// Embed colours for the panel in Discord, starting with Ticket Tower's amber.
 	const swatches = [0xf2b544, 0x5865f2, 0x3ecf8e, 0x38bdf8, 0xf97316, 0xf0616d, 0xec4899, 0x66738a];
 	const styles: { value: PanelStyle; label: string }[] = [
 		{ value: 'buttons', label: 'Buttons' },
