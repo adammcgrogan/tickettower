@@ -144,17 +144,58 @@ export type Stats = {
 	limits: { max_panels: number; max_ticket_types: number };
 };
 
-export type Analytics = {
-	days: number;
-	daily: { date: string; opened: number; closed: number }[];
+export type AnalyticsSummary = {
 	opened: number;
 	closed: number;
 	first_response_median_seconds: number | null;
 	resolution_median_seconds: number | null;
 	rating_avg: number | null;
 	rating_count: number;
-	by_type: { name: string; count: number }[];
-	staff: { user_id: string; name: string; claimed: number; closed: number; avg_rating: number | null }[];
+	closed_unanswered: number;
+	transcripts: number;
+	team_messages: number;
+	member_messages: number;
+	one_touch: number;
+};
+
+export type Analytics = {
+	/** 0 means all time. */
+	days: number;
+	from: string;
+	bucket: 'day' | 'week' | 'month';
+	summary: AnalyticsSummary;
+	previous: AnalyticsSummary | null;
+	open_now: number;
+	waiting_now: number;
+	series: { date: string; opened: number; closed: number; backlog: number }[];
+	/** [weekday, Sunday first][hour], UTC. */
+	heatmap: number[][];
+	response_by_hour: (number | null)[];
+	/** Counts of 1 to 5 star ratings. */
+	ratings: number[];
+	closures: { team: number; member: number; auto: number; deleted: number };
+	close_reasons: { reason: string; count: number }[];
+	threads: number;
+	channels: number;
+	by_type: {
+		type_id: number | null;
+		name: string;
+		emoji: string;
+		opened: number;
+		first_response_median_seconds: number | null;
+		resolution_median_seconds: number | null;
+		rating_avg: number | null;
+		rating_count: number;
+	}[];
+	staff: {
+		user_id: string;
+		name: string;
+		claimed: number;
+		closed: number;
+		replies: number;
+		tickets: number;
+		avg_rating: number | null;
+	}[];
 };
 
 export class ApiError extends Error {

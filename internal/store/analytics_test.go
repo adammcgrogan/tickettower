@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 )
@@ -14,24 +16,39 @@ func TestAnalytics(t *testing.T) {
 	billing := newType(t, s, testGuild, "Billing")
 	support := newType(t, s, testGuild, "Support")
 	staff := snowflake.ID(100)
+	opener := snowflake.ID(42)
 
 	open := func(n int, tt TicketType, channel snowflake.ID) Ticket {
 		tk := Ticket{GuildID: testGuild, Number: n, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
-			ChannelID: channel, OpenerID: 42, OpenerName: "adam"}
+			ChannelID: channel, OpenerID: opener, OpenerName: "adam"}
 		if err := s.CreateTicket(ctx, &tk); err != nil {
 			t.Fatal(err)
 		}
 		return tk
 	}
+	msgID := snowflake.ID(1)
+	say := func(tk Ticket, author snowflake.ID) {
+		msgID++
+		err := s.InsertTicketMessage(ctx, TicketMessage{ID: msgID, TicketID: tk.ID, AuthorID: author,
+			AuthorName: "someone", CreatedAt: time.Now()})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	a := open(1, billing, 9001)
 	b := open(2, billing, 9002)
-	open(3, support, 9003)
+	c := open(3, support, 9003)
+	d := open(4, billing, 9004)
 
-	// a: responded after 10 minutes, resolved after an hour, rated 4.
+	// a: responded after 10 minutes with one team message, resolved after an
+	// hour by staff, rated 4.
 	s.pool.Exec(ctx, `UPDATE tickets SET opened_at = now() - interval '1 hour',
 		first_response_at = now() - interval '50 minutes' WHERE id = $1`, a.ID)
+	say(a, opener)
+	say(a, staff)
+	say(a, opener)
 	s.ClaimTicket(ctx, a.ID, staff, "staff")
-	s.CloseTicket(ctx, a.ID, staff, "staff", "")
+	s.CloseTicket(ctx, a.ID, staff, "staff", "Resolved")
 	if err := s.SetFeedbackRating(ctx, a.ID, 4); err != nil {
 		t.Fatal(err)
 	}
@@ -41,42 +58,97 @@ func TestAnalytics(t *testing.T) {
 	if ok, _ := s.SetFeedbackComment(ctx, b.ID, "no rating"); ok {
 		t.Error("comment without a rating should report false")
 	}
+	// b: claimed and still open. c: closed by the member, with the same reason
+	// spelled differently. d: auto-closed.
 	s.ClaimTicket(ctx, b.ID, staff, "staff")
+	s.CloseTicket(ctx, c.ID, opener, "adam", " resolved ")
+	s.pool.Exec(ctx, `UPDATE tickets SET status = 'closed', closed_at = now(), auto_closed = true,
+		close_reason = 'No activity for 1 day' WHERE id = $1`, d.ID)
 
-	got, err := s.Analytics(ctx, testGuild, 7)
+	got, err := s.Analytics(ctx, testGuild, AnalyticsQuery{Days: 7})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Daily) != 7 || got.Opened != 3 || got.Closed != 1 {
-		t.Errorf("daily=%d opened=%d closed=%d", len(got.Daily), got.Opened, got.Closed)
+	sm := got.Summary
+	if len(got.Series) != 7 || got.Bucket != "day" || sm.Opened != 4 || sm.Closed != 3 {
+		t.Errorf("series=%d bucket=%s opened=%d closed=%d", len(got.Series), got.Bucket, sm.Opened, sm.Closed)
 	}
-	today := got.Daily[6]
-	if today.Opened != 3 || today.Closed != 1 {
+	if today := got.Series[6]; today.Opened != 4 || today.Closed != 3 || today.Backlog != 1 {
 		t.Errorf("today = %+v", today)
 	}
-	if got.FirstResponseMedianSec == nil || int(*got.FirstResponseMedianSec) != 600 {
-		t.Errorf("first response median = %v, want 600", got.FirstResponseMedianSec)
+	if got.OpenNow != 1 {
+		t.Errorf("open now = %d", got.OpenNow)
 	}
-	if got.ResolutionMedianSec == nil || *got.ResolutionMedianSec < 3500 {
-		t.Errorf("resolution median = %v, want ~3600", got.ResolutionMedianSec)
+	if sm.FirstResponseMedianSec == nil || int(*sm.FirstResponseMedianSec) != 600 {
+		t.Errorf("first response median = %v, want 600", sm.FirstResponseMedianSec)
 	}
-	if got.RatingAvg == nil || *got.RatingAvg != 4 || got.RatingCount != 1 {
-		t.Errorf("rating = %v (%d)", got.RatingAvg, got.RatingCount)
+	if sm.RatingAvg == nil || *sm.RatingAvg != 4 || sm.RatingCount != 1 || got.Ratings[3] != 1 {
+		t.Errorf("rating = %v (%d) %v", sm.RatingAvg, sm.RatingCount, got.Ratings)
 	}
-	if len(got.ByType) != 2 || got.ByType[0].Name != "Billing" || got.ByType[0].Count != 2 {
+	if sm.ClosedUnanswered != 2 || sm.Transcripts != 1 || sm.TeamMessages != 1 || sm.MemberMessages != 2 || sm.OneTouch != 1 {
+		t.Errorf("summary = %+v", sm)
+	}
+	if got.Closures != (Closures{Team: 1, Member: 1, Auto: 1}) {
+		t.Errorf("closures = %+v", got.Closures)
+	}
+	if len(got.CloseReasons) != 1 || got.CloseReasons[0].Count != 2 || strings.ToLower(got.CloseReasons[0].Reason) != "resolved" {
+		t.Errorf("close reasons = %+v", got.CloseReasons)
+	}
+	heat := 0
+	for _, day := range got.Heatmap {
+		for _, n := range day {
+			heat += n
+		}
+	}
+	if heat != 4 || got.Channels != 4 || got.Threads != 0 {
+		t.Errorf("heatmap total = %d, channels = %d", heat, got.Channels)
+	}
+	if len(got.ByType) != 2 || got.ByType[0].Name != "Billing" || got.ByType[0].Opened != 3 ||
+		got.ByType[0].RatingCount != 1 || *got.ByType[0].TypeID != billing.ID {
 		t.Errorf("by type = %+v", got.ByType)
 	}
-	if len(got.Staff) != 1 || got.Staff[0].Claimed != 2 || got.Staff[0].Closed != 1 || *got.Staff[0].AvgRating != 4 {
+	if len(got.Staff) != 1 || got.Staff[0].Claimed != 2 || got.Staff[0].Closed != 1 || got.Staff[0].Replies != 1 ||
+		got.Staff[0].Tickets != 1 || *got.Staff[0].AvgRating != 4 {
 		t.Errorf("staff = %+v", got.Staff)
+	}
+	if got.Previous == nil || got.Previous.Opened != 0 {
+		t.Errorf("previous = %+v", got.Previous)
+	}
+
+	// Filtering by type only counts that type's tickets.
+	only, err := s.Analytics(ctx, testGuild, AnalyticsQuery{Days: 7, TypeID: &support.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if only.Summary.Opened != 1 || only.OpenNow != 0 || len(only.ByType) != 1 || len(only.Staff) != 0 {
+		t.Errorf("filtered = %+v", only)
+	}
+
+	// All time has no previous window and still shows at least a week.
+	all, err := s.Analytics(ctx, testGuild, AnalyticsQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all.Previous != nil || all.Days != 0 || len(all.Series) != 7 || all.Summary.Opened != 4 {
+		t.Errorf("all time: previous=%v days=%d series=%d opened=%d", all.Previous, all.Days, len(all.Series), all.Summary.Opened)
+	}
+
+	// A year is bucketed by week.
+	year, err := s.Analytics(ctx, testGuild, AnalyticsQuery{Days: 365})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if year.Bucket != "week" || len(year.Series) < 53 || year.Series[len(year.Series)-1].Opened != 4 {
+		t.Errorf("year: bucket=%s series=%d", year.Bucket, len(year.Series))
 	}
 
 	// A guild with no tickets still gets a full, zero-filled series.
 	seedGuild(t, s, 4001)
-	empty, err := s.Analytics(ctx, 4001, 30)
+	empty, err := s.Analytics(ctx, 4001, AnalyticsQuery{Days: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(empty.Daily) != 30 || empty.RatingAvg != nil || empty.FirstResponseMedianSec != nil {
+	if len(empty.Series) != 30 || empty.Summary.RatingAvg != nil || empty.Summary.FirstResponseMedianSec != nil {
 		t.Errorf("empty analytics = %+v", empty)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
@@ -125,14 +126,21 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getAnalytics(w http.ResponseWriter, r *http.Request) {
-	days := 30
+	q := store.AnalyticsQuery{Days: 30}
 	switch r.URL.Query().Get("days") {
 	case "7":
-		days = 7
+		q.Days = 7
 	case "90":
-		days = 90
+		q.Days = 90
+	case "365":
+		q.Days = 365
+	case "all":
+		q.Days = 0
 	}
-	a, err := s.store.Analytics(r.Context(), guildFrom(r).ID, days)
+	if v, err := strconv.ParseInt(r.URL.Query().Get("type"), 10, 64); err == nil {
+		q.TypeID = &v
+	}
+	a, err := s.store.Analytics(r.Context(), guildFrom(r).ID, q)
 	if err != nil {
 		s.writeFailure(w, err)
 		return

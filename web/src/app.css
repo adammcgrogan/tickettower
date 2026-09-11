@@ -27,6 +27,12 @@
 	/* Chart marks: the accent stepped into the dataviz validator's dark
 	   lightness band (#f2b544 is too light for a data mark). */
 	--color-chart: #c28622;
+	/* Heatmap ramp, quietest to busiest (more is lighter on a dark surface).
+	   Validated as an ordinal ramp against surface; empty cells use elevated. */
+	--color-heat-1: #6b5426;
+	--color-heat-2: #8f6824;
+	--color-heat-3: #c28622;
+	--color-heat-4: #f2b544;
 	--color-success: #4cc38a;
 	--color-danger: #f06a6a;
 }
