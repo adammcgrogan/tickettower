@@ -43,5 +43,9 @@ Variables on both: `DATABASE_URL` (reference to Postgres), `DISCORD_TOKEN`,
 The production Discord application has `https://tickettower.net/api/auth/callback`
 as its OAuth2 redirect.
 
-Deploy by hand with `railway up -s api` and `railway up -s bot`, or connect the
-services to the GitHub repo to deploy on every push to `main`.
+Both services deploy from the GitHub repo on every push to `main`, once CI
+passes ("Wait for CI"). Root Directory is empty, since the Dockerfiles build
+from the repo root. `bot` has watch paths (`/cmd/bot/**`, `/internal/**`,
+`go.mod`, `go.sum`, `Dockerfile.bot`) so dashboard-only changes don't restart
+it; `api` redeploys on any change. `railway up -s api` / `railway up -s bot`
+still deploy the local checkout by hand.

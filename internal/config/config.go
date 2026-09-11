@@ -11,6 +11,8 @@ import (
 )
 
 // BotPermissions are the permissions requested when a server adds the bot.
+// Servers that added it earlier keep their old grant until they re-invite it,
+// so code can't assume a newly added permission is there.
 const BotPermissions = discord.PermissionViewChannel |
 	discord.PermissionManageChannels |
 	discord.PermissionManageRoles |
