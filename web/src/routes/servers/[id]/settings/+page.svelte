@@ -5,11 +5,14 @@
 		ApiError,
 		errorMessage,
 		send,
+		type Channel,
 		type Guild,
 		type GuildSettings,
 		type Role
 	} from '$lib/api';
+	import { APP_NAME } from '$lib/brand';
 	import { toast } from '$lib/toast.svelte';
+	import ChannelSelect from '$lib/components/ChannelSelect.svelte';
 	import Field from '$lib/components/Field.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import RolePicker from '$lib/components/RolePicker.svelte';
@@ -28,9 +31,11 @@
 
 	let settings = $state<GuildSettings | null>(null);
 	let roles = $state<Role[]>([]);
+	let channels = $state<Channel[]>([]);
 	let loadError = $state('');
 	let retentionValue = $state('');
 	let dashboardRoles = $state<string[]>([]);
+	let logChannel = $state<string | null>(null);
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 
@@ -40,23 +45,27 @@
 	const dirty = $derived(
 		settings !== null &&
 			(retentionValue !== (settings.transcript_retention_days?.toString() ?? '') ||
-				!sameSet(dashboardRoles, settings.dashboard_role_ids))
+				!sameSet(dashboardRoles, settings.dashboard_role_ids) ||
+				logChannel !== settings.log_channel_id)
 	);
 
 	function reset(s: GuildSettings) {
 		settings = s;
 		retentionValue = s.transcript_retention_days?.toString() ?? '';
 		dashboardRoles = [...s.dashboard_role_ids];
+		logChannel = s.log_channel_id;
 	}
 
 	async function load() {
 		loadError = '';
 		try {
-			const [s, r] = await Promise.all([
+			const [s, r, c] = await Promise.all([
 				api<GuildSettings>(`/guilds/${guild.id}/settings`),
-				api<Role[]>(`/guilds/${guild.id}/roles`)
+				api<Role[]>(`/guilds/${guild.id}/roles`),
+				api<Channel[]>(`/guilds/${guild.id}/channels`)
 			]);
 			roles = r;
+			channels = c;
 			reset(s);
 		} catch (e) {
 			loadError = errorMessage(e);
@@ -71,7 +80,8 @@
 		errors = {};
 		try {
 			const body: Partial<GuildSettings> = {
-				transcript_retention_days: retentionValue ? Number(retentionValue) : null
+				transcript_retention_days: retentionValue ? Number(retentionValue) : null,
+				log_channel_id: logChannel
 			};
 			if (guild.can_manage) body.dashboard_role_ids = dashboardRoles;
 			reset(await api<GuildSettings>(`/guilds/${guild.id}/settings`, send('PATCH', body)));
@@ -106,6 +116,32 @@
 	</div>
 {:else}
 	<form onsubmit={save} class="mt-6 space-y-5">
+		<section class="card space-y-5 p-5">
+			<div>
+				<h2 class="font-medium">Ticket log</h2>
+				<p class="hint mt-1">
+					{APP_NAME} posts a short note here whenever a ticket is opened, claimed or closed, so your
+					team can follow along in one place.
+				</p>
+			</div>
+			<Field
+				label="Log channel"
+				for="log_channel"
+				optional
+				hint="Use a channel only staff can see. {APP_NAME} needs permission to send messages there."
+				error={errors.log_channel_id}
+			>
+				<ChannelSelect
+					id="log_channel"
+					{channels}
+					kinds={['text', 'announcement']}
+					bind:value={logChannel}
+					placeholder="Don't log tickets"
+					invalid={!!errors.log_channel_id}
+				/>
+			</Field>
+		</section>
+
 		<section class="card space-y-5 p-5">
 			<div>
 				<h2 class="font-medium">Dashboard access</h2>

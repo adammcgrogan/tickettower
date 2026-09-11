@@ -173,7 +173,15 @@ func (b *Bot) closeDeletedChannel(channelID snowflake.ID) {
 	b.tickets.remove(channelID)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := b.store.CloseTicketByChannel(ctx, channelID, "Channel was deleted"); err != nil {
+	closed, err := b.store.CloseTicketByChannel(ctx, channelID, "Channel was deleted")
+	if err != nil {
 		b.log.Error("failed to close ticket for deleted channel", slog.Any("err", err))
+		return
+	}
+	if !closed {
+		return // not a ticket, or the bot already closed it
+	}
+	if t, err := b.store.GetTicketByChannel(ctx, channelID); err == nil {
+		go b.logEvent(t.GuildID, b.closedLog(t))
 	}
 }

@@ -10,31 +10,37 @@ type GuildSettings struct {
 	TranscriptRetentionDays *int `json:"transcript_retention_days"`
 	// DashboardRoleIDs let members without Manage Server use the dashboard.
 	DashboardRoleIDs []snowflake.ID `json:"dashboard_role_ids"`
+	// LogChannelID is where ticket events are posted, if set.
+	LogChannelID *snowflake.ID `json:"log_channel_id"`
 }
 
 func (s *Store) GetGuildSettings(ctx context.Context, guildID snowflake.ID) (GuildSettings, error) {
 	var (
-		st    GuildSettings
-		roles []int64
+		st         GuildSettings
+		roles      []int64
+		logChannel *int64
 	)
 	err := s.pool.QueryRow(ctx, `
-		SELECT transcript_retention_days, dashboard_role_ids FROM guild_settings WHERE guild_id = $1`,
-		int64(guildID)).Scan(&st.TranscriptRetentionDays, &roles)
+		SELECT transcript_retention_days, dashboard_role_ids, log_channel_id FROM guild_settings WHERE guild_id = $1`,
+		int64(guildID)).Scan(&st.TranscriptRetentionDays, &roles, &logChannel)
 	if notFound(err) == ErrNotFound {
 		return GuildSettings{DashboardRoleIDs: []snowflake.ID{}}, nil
 	}
 	st.DashboardRoleIDs = fromInt64s(roles)
+	st.LogChannelID = idFromNullable(logChannel)
 	return st, err
 }
 
 func (s *Store) UpdateGuildSettings(ctx context.Context, guildID snowflake.ID, st GuildSettings) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO guild_settings (guild_id, transcript_retention_days, dashboard_role_ids) VALUES ($1, $2, $3)
+		INSERT INTO guild_settings (guild_id, transcript_retention_days, dashboard_role_ids, log_channel_id)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (guild_id) DO UPDATE
 		SET transcript_retention_days = EXCLUDED.transcript_retention_days,
 		    dashboard_role_ids = EXCLUDED.dashboard_role_ids,
+		    log_channel_id = EXCLUDED.log_channel_id,
 		    updated_at = now()`,
-		int64(guildID), st.TranscriptRetentionDays, toInt64s(st.DashboardRoleIDs))
+		int64(guildID), st.TranscriptRetentionDays, toInt64s(st.DashboardRoleIDs), nullableID(st.LogChannelID))
 	return err
 }
 

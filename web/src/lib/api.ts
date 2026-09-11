@@ -17,6 +17,7 @@ export type Guild = {
 export type GuildSettings = {
 	transcript_retention_days: number | null;
 	dashboard_role_ids: string[];
+	log_channel_id: string | null;
 };
 
 export type Channel = {
