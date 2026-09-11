@@ -88,4 +88,4 @@ Authenticated: `/api/me`, `/api/guilds`, `/api/transcripts/{ticketID}`, and unde
 
 ## Deployment
 
-Railway: two services from one repo (`Dockerfile.bot`, `Dockerfile.api`) plus Postgres and Redis. The API image builds the SPA and serves it from `STATIC_DIR`. See the README for environment variables.
+Railway: two services from one repo (`Dockerfile.bot`, `Dockerfile.api`) plus Postgres and Redis. The API image builds the SPA and serves it from `STATIC_DIR`. See `docs/development.md` for environment variables.

@@ -4,7 +4,7 @@ Open-source Discord ticket bot (a simpler, better-looking alternative to Ticket 
 
 Named "Ticket Tower" (tickettower.net), configurable via `APP_NAME` (Go) and `VITE_APP_NAME` (web).
 
-More detail: `docs/architecture.md` (how it fits together) and `docs/roadmap.md` (what's done and what's next).
+More detail: `docs/architecture.md` (how it fits together), `docs/development.md` (local setup and the Railway deployment) and `docs/roadmap.md` (what's done and what's next).
 
 ## Stack
 
