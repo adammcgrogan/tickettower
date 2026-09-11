@@ -103,7 +103,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	switch tt.Mode {
 	case store.ModeThread:
 		invitable := false
-		thread, err := b.client.Rest.CreateThread(*tt.ParentID, discord.GuildPrivateThreadCreate{
+		thread, err := b.rest.CreateThread(*tt.ParentID, discord.GuildPrivateThreadCreate{
 			Name:                name,
 			AutoArchiveDuration: discord.AutoArchiveDuration1w,
 			Invitable:           &invitable,
@@ -112,7 +112,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 			return 0, err
 		}
 		channelID = thread.ID()
-		if err := b.client.Rest.AddThreadMember(channelID, user.ID, rest.WithCtx(ctx)); err != nil {
+		if err := b.rest.AddThreadMember(channelID, user.ID, rest.WithCtx(ctx)); err != nil {
 			b.cleanupChannel(channelID)
 			return 0, err
 		}
@@ -125,7 +125,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 		if tt.ParentID != nil {
 			create.ParentID = *tt.ParentID
 		}
-		ch, err := b.client.Rest.CreateGuildChannel(guildID, create, rest.WithCtx(ctx))
+		ch, err := b.rest.CreateGuildChannel(guildID, create, rest.WithCtx(ctx))
 		if err != nil {
 			return 0, err
 		}
@@ -153,7 +153,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	// captured in the transcript.
 	b.tickets.put(store.TicketRef{ID: ticket.ID, ChannelID: channelID, OpenerID: user.ID})
 
-	if _, err := b.client.Rest.CreateMessage(channelID, welcomeMessage(ticket, tt, answers), rest.WithCtx(ctx)); err != nil {
+	if _, err := b.rest.CreateMessage(channelID, welcomeMessage(ticket, tt, answers), rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to send welcome message", slog.Any("err", err))
 	}
 	go b.logEvent(guildID, openedLog(ticket))
@@ -251,7 +251,7 @@ func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer) d
 
 // cleanupChannel deletes a half-created ticket channel after a failure.
 func (b *Bot) cleanupChannel(channelID snowflake.ID) {
-	if err := b.client.Rest.DeleteChannel(channelID); err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
+	if err := b.rest.DeleteChannel(channelID); err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
 		b.log.Warn("failed to clean up ticket channel", slog.Any("err", err))
 	}
 }
@@ -389,10 +389,10 @@ func (b *Bot) finishClose(t store.Ticket) {
 	switch t.Mode {
 	case store.ModeThread:
 		archived, locked := true, true
-		_, err = b.client.Rest.UpdateChannel(t.ChannelID, discord.GuildThreadUpdate{Archived: &archived, Locked: &locked}, rest.WithCtx(ctx))
+		_, err = b.rest.UpdateChannel(t.ChannelID, discord.GuildThreadUpdate{Archived: &archived, Locked: &locked}, rest.WithCtx(ctx))
 	default:
 		time.Sleep(closeDelay)
-		err = b.client.Rest.DeleteChannel(t.ChannelID, rest.WithCtx(ctx))
+		err = b.rest.DeleteChannel(t.ChannelID, rest.WithCtx(ctx))
 	}
 	if err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
 		b.log.Warn("failed to clean up closed ticket", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
@@ -400,25 +400,34 @@ func (b *Bot) finishClose(t store.Ticket) {
 }
 
 func (b *Bot) notifyOpener(ctx context.Context, t store.Ticket) {
-	dm, err := b.client.Rest.CreateDMChannel(t.OpenerID, rest.WithCtx(ctx))
+	dm, err := b.rest.CreateDMChannel(t.OpenerID, rest.WithCtx(ctx))
 	if err != nil {
 		return
 	}
-	guildName := "the server"
-	if g, ok := b.client.Caches.Guild(t.GuildID); ok {
-		guildName = g.Name
-	}
-	desc := fmt.Sprintf("Your **%s** ticket (#%d) in **%s** has been closed.", t.TypeName, t.Number, guildName)
+	desc := fmt.Sprintf("Your **%s** ticket (#%d) in **%s** has been closed.", t.TypeName, t.Number, b.guildName(ctx, t.GuildID))
 	if t.CloseReason != "" {
 		desc += "\n**Reason:** " + t.CloseReason
 	}
 	desc += "\n\nHow did we do? Rate your experience below."
 	embed := discord.NewEmbed().WithTitle("Ticket closed").WithDescription(desc).WithColor(colorMuted)
 	msg := discord.NewMessageCreate().WithEmbeds(embed).WithComponents(b.feedbackComponents(t.ID)...)
-	_, err = b.client.Rest.CreateMessage(dm.ID(), msg, rest.WithCtx(ctx))
+	_, err = b.rest.CreateMessage(dm.ID(), msg, rest.WithCtx(ctx))
 	if err != nil && !discordx.IsCode(err, discordx.CodeCannotDMUser) {
 		b.log.Warn("failed to DM ticket opener", slog.Any("err", err))
 	}
+}
+
+// guildName prefers the gateway cache, which the dashboard doesn't have.
+func (b *Bot) guildName(ctx context.Context, id snowflake.ID) string {
+	if b.client != nil {
+		if g, ok := b.client.Caches.Guild(id); ok {
+			return g.Name
+		}
+	}
+	if g, err := b.store.GetGuild(ctx, id); err == nil {
+		return g.Name
+	}
+	return "the server"
 }
 
 // addToTicket gives a user access to the ticket.
@@ -431,10 +440,10 @@ func (b *Bot) addToTicket(ctx context.Context, channelID snowflake.ID, m *discor
 		return userErr("Only support staff can add people to tickets.")
 	}
 	if t.Mode == store.ModeThread {
-		return b.client.Rest.AddThreadMember(t.ChannelID, target.ID, rest.WithCtx(ctx))
+		return b.rest.AddThreadMember(t.ChannelID, target.ID, rest.WithCtx(ctx))
 	}
 	allow := ticketMemberPerms
-	return b.client.Rest.UpdatePermissionOverwrite(t.ChannelID, target.ID,
+	return b.rest.UpdatePermissionOverwrite(t.ChannelID, target.ID,
 		discord.MemberPermissionOverwriteUpdate{Allow: &allow}, rest.WithCtx(ctx))
 }
 
@@ -451,9 +460,9 @@ func (b *Bot) removeFromTicket(ctx context.Context, channelID snowflake.ID, m *d
 		return userErr("You can't remove the person who opened the ticket.")
 	}
 	if t.Mode == store.ModeThread {
-		return b.client.Rest.RemoveThreadMember(t.ChannelID, target.ID, rest.WithCtx(ctx))
+		return b.rest.RemoveThreadMember(t.ChannelID, target.ID, rest.WithCtx(ctx))
 	}
-	return b.client.Rest.DeletePermissionOverwrite(t.ChannelID, target.ID, rest.WithCtx(ctx))
+	return b.rest.DeletePermissionOverwrite(t.ChannelID, target.ID, rest.WithCtx(ctx))
 }
 
 // renameTicket renames the ticket's channel or thread.
@@ -474,7 +483,7 @@ func (b *Bot) renameTicket(ctx context.Context, channelID snowflake.ID, m *disco
 	if t.Mode == store.ModeThread {
 		update = discord.GuildThreadUpdate{Name: &name}
 	}
-	_, err = b.client.Rest.UpdateChannel(t.ChannelID, update, rest.WithCtx(ctx))
+	_, err = b.rest.UpdateChannel(t.ChannelID, update, rest.WithCtx(ctx))
 	if errors.Is(err, context.DeadlineExceeded) {
 		// disgo waits out rate limits; renames are limited to 2 per 10 minutes.
 		return userErr("Discord only allows renaming a channel twice every 10 minutes. Try again later.")

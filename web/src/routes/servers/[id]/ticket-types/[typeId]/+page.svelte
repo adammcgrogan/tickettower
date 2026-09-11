@@ -2,11 +2,12 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, errorMessage, send, type TicketType } from '$lib/api';
+	import { api, errorMessage, send, type SetupProblem, type TicketType } from '$lib/api';
 	import { toast } from '$lib/toast.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import SetupProblems from '$lib/components/SetupProblems.svelte';
 	import TicketTypeForm from '$lib/components/TicketTypeForm.svelte';
 
 	const guildId = page.params.id!;
@@ -16,8 +17,16 @@
 	let missing = $state(false);
 	let confirmDelete = $state(false);
 	let deleting = $state(false);
+	let problems = $state<SetupProblem[]>([]);
+
+	function checkSetup() {
+		return api<{ problems: SetupProblem[] }>(`/guilds/${guildId}/setup-check`)
+			.then((r) => (problems = r.problems.filter((p) => p.id === typeId && p.kind !== 'panel')))
+			.catch(() => {});
+	}
 
 	onMount(async () => {
+		checkSetup();
 		try {
 			const types = await api<TicketType[]>(`/guilds/${guildId}/ticket-types`);
 			type = types.find((t) => t.id === typeId) ?? null;
@@ -63,6 +72,11 @@
 	{#if missing}
 		<p class="card p-5 text-sm text-muted">This ticket type doesn't exist any more.</p>
 	{:else if type}
+		{#if problems.length}
+			<div class="mb-6">
+				<SetupProblems {problems} {guildId} onrecheck={checkSetup} />
+			</div>
+		{/if}
 		<TicketTypeForm {guildId} initial={type} />
 	{:else}
 		<div class="card h-64 animate-pulse"></div>

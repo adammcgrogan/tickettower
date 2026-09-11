@@ -3,7 +3,9 @@ package ticketbot
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/config"
@@ -24,9 +27,12 @@ import (
 
 type Bot struct {
 	client *bot.Client
-	store  *store.Store
-	log    *slog.Logger
-	cfg    config.Config
+	// rest is client.Rest, or a plain REST client when the dashboard uses the
+	// bot's ticket logic without a gateway connection (client is then nil).
+	rest  rest.Rest
+	store *store.Store
+	log   *slog.Logger
+	cfg   config.Config
 
 	// readyGuilds collects guild IDs seen during startup so guilds removed
 	// while the bot was offline can be marked as left.
@@ -89,6 +95,7 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 		return nil, err
 	}
 	b.client = client
+	b.rest = client.Rest
 	return b, nil
 }
 
@@ -157,6 +164,34 @@ func (b *Bot) onGuildsReady(_ *events.GuildsReady) {
 func (b *Bot) onGuildJoin(e *events.GuildJoin) {
 	b.log.Info("joined guild", slog.String("guild_id", e.Guild.ID.String()), slog.String("name", e.Guild.Name))
 	b.upsertGuild(e.Guild.Guild)
+	if e.Guild.SystemChannelID != nil {
+		go b.welcome(e.Guild.ID, *e.Guild.SystemChannelID)
+	}
+}
+
+// welcome points whoever added the bot to the dashboard, in the server's
+// system channel. Best effort: the bot may not be allowed to post there.
+func (b *Bot) welcome(guildID, channelID snowflake.ID) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	url := fmt.Sprintf("%s/servers/%s", b.cfg.PublicURL, guildID)
+	desc := "Members will be able to open a private ticket with your team from a button, and every conversation " +
+		"is saved as a transcript.\n\nTo get started, choose where tickets open and who handles them, then post " +
+		"your ticket buttons. It takes about a minute in the dashboard."
+	msg := discord.NewMessageCreate()
+	// Discord rejects link buttons to non-https URLs.
+	if strings.HasPrefix(url, "https://") {
+		msg = msg.AddActionRow(discord.NewLinkButton("Set up tickets", url))
+	} else {
+		desc += "\n" + url
+	}
+	msg = msg.WithEmbeds(discord.NewEmbed().
+		WithTitle("Thanks for adding " + b.cfg.AppName).
+		WithDescription(desc).
+		WithColor(colorAccent))
+	if _, err := b.rest.CreateMessage(channelID, msg, rest.WithCtx(ctx)); err != nil {
+		b.log.Info("couldn't post welcome message", slog.String("guild_id", guildID.String()), slog.Any("err", err))
+	}
 }
 
 func (b *Bot) onGuildLeave(e *events.GuildLeave) {

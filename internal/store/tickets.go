@@ -118,6 +118,12 @@ func (s *Store) GetTicket(ctx context.Context, id int64) (Ticket, error) {
 	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` FROM tickets WHERE id = $1`, id))
 }
 
+// GetGuildTicket returns one of a guild's tickets.
+func (s *Store) GetGuildTicket(ctx context.Context, guildID snowflake.ID, id int64) (Ticket, error) {
+	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` FROM tickets WHERE guild_id = $1 AND id = $2`,
+		int64(guildID), id))
+}
+
 func (s *Store) GetTicketByChannel(ctx context.Context, channelID snowflake.ID) (Ticket, error) {
 	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` FROM tickets WHERE channel_id = $1`, int64(channelID)))
 }

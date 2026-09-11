@@ -2,9 +2,12 @@
 	import { getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, errorMessage, type Guild, type Ticket, type Transcript } from '$lib/api';
+	import { api, ApiError, errorMessage, send, type Guild, type Ticket, type Transcript } from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { discordURL, ticketState, timeAgo } from '$lib/format';
+	import { toast } from '$lib/toast.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
+	import Field from '$lib/components/Field.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
@@ -103,6 +106,50 @@
 			stale = true;
 		};
 	});
+
+	// --- Closing from the dashboard ---
+
+	let closeOpen = $state(false);
+	let closeReason = $state('');
+	let closeError = $state('');
+	let closing = $state(false);
+
+	function openClose() {
+		closeReason = '';
+		closeError = '';
+		closeOpen = true;
+	}
+
+	async function closeTicket() {
+		if (!detail) return;
+		const t = detail.ticket;
+		closing = true;
+		closeError = '';
+		try {
+			const updated = await api<Ticket>(
+				`/guilds/${guild.id}/tickets/${t.id}/close`,
+				send('POST', { reason: closeReason })
+			);
+			detail = { ...detail, ticket: updated };
+			closedCache.set(t.id, detail);
+			if (tickets) {
+				tickets =
+					filter === 'open'
+						? tickets.filter((x) => x.id !== t.id)
+						: tickets.map((x) => (x.id === t.id ? updated : x));
+			}
+			closeOpen = false;
+			toast(`Ticket #${t.number} closed`);
+		} catch (e) {
+			if (e instanceof ApiError && e.field) closeError = e.message;
+			else {
+				closeOpen = false;
+				toast(errorMessage(e), 'error');
+			}
+		} finally {
+			closing = false;
+		}
+	}
 
 	const emptyText = $derived(
 		filter === 'open'
@@ -239,6 +286,9 @@
 							>
 								Open in Discord <Icon name="external" size={13} />
 							</a>
+							<button class="btn btn-secondary h-8 px-3" onclick={openClose}>
+								<Icon name="lock" size={13} /> Close ticket
+							</button>
 						{/if}
 						<a href="/transcripts/{t.id}" target="_blank" rel="noopener" class="btn btn-ghost h-8 px-3">
 							Transcript page <Icon name="external" size={13} />
@@ -252,3 +302,30 @@
 		{/if}
 	</div>
 </div>
+
+<Dialog
+	bind:open={closeOpen}
+	title="Close ticket #{detail?.ticket.number ?? ''}?"
+	description="{detail?.ticket.opener_name ?? 'The member'} is told it's closed and asked to rate it. {detail?.ticket
+		.mode === 'thread'
+		? 'The thread is archived'
+		: 'The channel is deleted after a few seconds'}, and the transcript is kept."
+>
+	<Field label="Reason" for="close-reason" optional hint="Shown to the member and in the ticket log." error={closeError}>
+		<textarea
+			id="close-reason"
+			class="input"
+			rows="3"
+			maxlength="500"
+			bind:value={closeReason}
+			placeholder="e.g. Resolved, refund issued"
+			aria-invalid={!!closeError}
+		></textarea>
+	</Field>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (closeOpen = false)}>Cancel</button>
+		<button class="btn btn-primary" onclick={closeTicket} disabled={closing}>
+			{closing ? 'Closing…' : 'Close ticket'}
+		</button>
+	{/snippet}
+</Dialog>

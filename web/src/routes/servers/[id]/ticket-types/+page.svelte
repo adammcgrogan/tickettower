@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { api, errorMessage, type Channel, type TicketType } from '$lib/api';
+	import { api, errorMessage, type Channel, type SetupProblem, type TicketType } from '$lib/api';
 	import { emojiText, hoursLabel } from '$lib/format';
 	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -10,10 +10,19 @@
 
 	let types = $state<TicketType[] | null>(null);
 	let channels = $state<Channel[]>([]);
+	let problems = $state<SetupProblem[]>([]);
 	let error = $state('');
+
+	// Ticket types that members can't open, or can't choose.
+	const needsAttention = $derived(
+		new Set(problems.filter((p) => p.kind === 'ticket_type' || p.kind === 'unlisted').map((p) => p.id))
+	);
 
 	async function load() {
 		error = '';
+		api<{ problems: SetupProblem[] }>(`/guilds/${guildId}/setup-check`)
+			.then((r) => (problems = r.problems))
+			.catch(() => {});
 		try {
 			types = await api<TicketType[]>(`/guilds/${guildId}/ticket-types`);
 			channels = await api<Channel[]>(`/guilds/${guildId}/channels`).catch(() => []);
@@ -86,7 +95,13 @@
 						</span>
 						<div class="min-w-0 flex-1">
 							<div class="truncate font-medium">{t.name}</div>
-							<div class="mt-0.5 truncate text-sm text-muted">{where(t)}</div>
+							{#if needsAttention.has(t.id)}
+								<div class="mt-0.5 flex items-center gap-1.5 text-sm text-danger">
+									<Icon name="alert" size={14} /> Needs attention
+								</div>
+							{:else}
+								<div class="mt-0.5 truncate text-sm text-muted">{where(t)}</div>
+							{/if}
 						</div>
 						<ul class="hidden flex-wrap justify-end gap-1.5 md:flex">
 							{#each facts(t) as fact (fact)}

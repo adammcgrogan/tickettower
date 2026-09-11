@@ -53,6 +53,19 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 
 Deleting a ticket channel by hand also closes the ticket.
 
+Tickets can also be closed from the dashboard (`POST …/tickets/{id}/close`). The API uses `ticketbot.Closer`, which is the bot's close logic with a plain REST client in place of the gateway (`Bot.rest`), so the close message, log entry, DM and cleanup match a close in Discord. The bot drops a deleted channel from its `ticketCache` as usual. An archived thread stays cached until the bot restarts, which only matters if someone posts in the locked thread.
+
+**Setup check.** `GET …/setup-check` (`api/checks.go`) looks for problems that would stop tickets working, before a member hits them:
+- permissions the bot lacks where a ticket type opens tickets, worked out from its roles and the channel's overwrites (`discordx.Permissions`)
+- categories and channels that were deleted
+- published ticket buttons whose channel is gone or that have no ticket types
+- ticket types that aren't on any published ticket buttons
+- a log channel the bot can't post in
+
+Home, the ticket types list and the ticket type editor show the problems, each linking to its fix.
+
+**Joining a server.** When the bot is added it posts a short welcome in the server's system channel (if it has one and can post there), with a link to that server's dashboard.
+
 **Ticket log.** When a guild has `log_channel_id` set, `ticketbot/log.go` posts an embed there when a ticket is opened, claimed or closed (including when its channel is deleted by hand). The close entry links to the transcript if `PUBLIC_URL` is https. Posting is best effort: failures are logged, never shown to members.
 
 **Auto-close.** Every human message in a ticket calls `store.RecordActivity`, which bumps `last_activity_at`, clears any pending warning and sets `waiting_on_staff` (true if the opener wrote it). A ticket opened with form answers starts as waiting on staff. `ticketbot/autoclose.go` runs every 5 minutes:
@@ -71,8 +84,8 @@ The SQL rules live in `store/autoclose.go`; the dashboard hint repeats the lead 
 Editing a ticket type re-renders every published panel that uses it.
 
 **Dashboard auth.**
-1. `/api/auth/login` goes to Discord OAuth (`identify guilds`).
-2. The callback stores the session in Redis and sets an HttpOnly cookie.
+1. `/api/auth/login` goes to Discord OAuth (`identify guilds`). `?next=` (a local path) is kept in Redis next to the OAuth state, so someone opening a transcript link from a DM lands back on it after logging in. The frontend adds it on any 401.
+2. The callback stores the session in Redis, sets an HttpOnly cookie and redirects to `next`, or to `/servers` if there isn't one.
 3. Access to a guild needs the bot in the guild, plus either Owner, Administrator or Manage Server (from the OAuth guild list), or one of the guild's `dashboard_role_ids` (checked via bot-token `GetMember`, cached 30s). `internal/api/access.go` has the logic.
 4. Dashboard-role members can do everything except change the dashboard roles themselves; `can_manage` on the guild response tells the frontend which kind of user it has.
 5. Transcripts (`/api/transcripts/{id}`) are visible to anyone with dashboard access, the ticket's opener, and that type's support roles. Anyone else gets a 404, so ticket IDs can't be probed.
@@ -82,7 +95,7 @@ Editing a ticket type re-renders every published panel that uses it.
 Public: `/healthz`, `/api/config`, `/api/invite`, `/api/auth/{login,callback,logout}`
 
 Authenticated: `/api/me`, `/api/guilds`, `/api/transcripts/{ticketID}`, and under `/api/guilds/{guildID}`:
-- `channels`, `roles`, `stats`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=`, `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
+- `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=`, `tickets/{id}/close` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
 - `ticket-types` (GET/POST), `ticket-types/{id}` (PATCH/DELETE)
 - `panels` (GET/POST), `panels/{id}` (PATCH/DELETE), `panels/{id}/publish` (POST)
 

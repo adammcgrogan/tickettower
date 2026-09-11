@@ -9,6 +9,8 @@
 		type Channel,
 		type Guild,
 		type Panel,
+		type Role,
+		type SetupProblem,
 		type Ticket,
 		type TicketMode,
 		type TicketType
@@ -20,7 +22,9 @@
 	import Field from '$lib/components/Field.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import PanelPreview from '$lib/components/PanelPreview.svelte';
+	import RolePicker from '$lib/components/RolePicker.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
+	import SetupProblems from '$lib/components/SetupProblems.svelte';
 	import TicketStub from '$lib/components/TicketStub.svelte';
 
 	const getGuild = getContext<() => Guild>('guild');
@@ -32,12 +36,15 @@
 	let panels = $state<Panel[] | null>(null);
 	let week = $state<Analytics | null>(null);
 	let channels = $state<Channel[]>([]);
+	let roles = $state<Role[]>([]);
+	let problems = $state<SetupProblem[]>([]);
 	let error = $state('');
 	let now = $state(Date.now());
 
 	async function load() {
 		error = '';
 		const g = `/guilds/${guild.id}`;
+		checkSetup();
 		try {
 			[open, types, panels, week] = await Promise.all([
 				api<Ticket[]>(`${g}/tickets?status=open`),
@@ -46,11 +53,21 @@
 				api<Analytics>(`${g}/analytics?days=7`)
 			]);
 			if (types.length === 0 && panels.length === 0) {
-				channels = await api<Channel[]>(`${g}/channels`).catch(() => []);
+				[channels, roles] = await Promise.all([
+					api<Channel[]>(`${g}/channels`).catch(() => []),
+					api<Role[]>(`${g}/roles`).catch(() => [])
+				]);
 			}
 		} catch (e) {
 			error = errorMessage(e);
 		}
+	}
+
+	// A bonus: Home still works if Discord can't be reached for the check.
+	function checkSetup() {
+		return api<{ problems: SetupProblem[] }>(`/guilds/${guild.id}/setup-check`)
+			.then((r) => (problems = r.problems))
+			.catch(() => {});
 	}
 
 	onMount(() => {
@@ -117,6 +134,7 @@
 		name: 'General support',
 		mode: 'channel' as TicketMode,
 		parent: null as string | null,
+		roles: [] as string[],
 		panelChannel: null as string | null
 	});
 	let qsErrors = $state<Record<string, string>>({});
@@ -157,7 +175,7 @@
 					description: '',
 					mode: qs.mode,
 					parent_id: parent,
-					support_role_ids: [],
+					support_role_ids: qs.roles,
 					name_format: 'ticket-{number}',
 					welcome_message: '',
 					max_open_per_user: 1,
@@ -210,8 +228,8 @@
 				<div>
 					<h2 class="text-lg font-semibold">Get your ticket buttons live</h2>
 					<p class="mt-1 max-w-lg text-sm text-muted">
-						Answer three questions and {APP_NAME} will create a ticket type and post buttons members can
-						click to open a ticket. You can add support roles, questions and more afterwards.
+						Answer a few questions and {APP_NAME} will create a ticket type and post buttons members can
+						click to open a ticket. You can add questions, auto-close and more afterwards.
 					</p>
 				</div>
 
@@ -251,6 +269,18 @@
 								invalid={!!qsErrors.parent_id}
 							/>
 						</div>
+					</div>
+				</Field>
+
+				<Field
+					label="Who handles tickets?"
+					for="qs-roles"
+					optional
+					hint="These roles can see and reply to every ticket. People with Manage Server always can."
+					error={qsErrors.support_role_ids}
+				>
+					<div class="sm:max-w-sm">
+						<RolePicker id="qs-roles" {roles} bind:value={qs.roles} />
 					</div>
 				</Field>
 
@@ -295,6 +325,12 @@
 		</div>
 	</section>
 {:else}
+	{#if problems.length}
+		<div class="mt-8">
+			<SetupProblems {problems} guildId={guild.id} onrecheck={checkSetup} />
+		</div>
+	{/if}
+
 	{#if loaded && !live}
 		<section class="mt-8 rounded-xl border border-border bg-surface">
 			<div class="border-b border-border px-5 py-4">
