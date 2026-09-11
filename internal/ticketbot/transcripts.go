@@ -146,6 +146,9 @@ func toEmbeds(in []discord.Embed) []store.Embed {
 		if e.Footer != nil {
 			se.Footer = e.Footer.Text
 		}
+		for _, f := range e.Fields {
+			se.Fields = append(se.Fields, store.EmbedField{Name: f.Name, Value: f.Value})
+		}
 		out = append(out, se)
 	}
 	return out

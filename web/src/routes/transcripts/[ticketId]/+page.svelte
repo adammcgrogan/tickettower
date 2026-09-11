@@ -8,7 +8,13 @@
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 
-	type Embed = { title?: string; description?: string; color?: number; footer?: string };
+	type Embed = {
+		title?: string;
+		description?: string;
+		color?: number;
+		footer?: string;
+		fields?: { name: string; value: string }[];
+	};
 	type Attachment = { name: string; url: string; size: number; content_type?: string };
 	type Message = {
 		id: string;
@@ -199,6 +205,14 @@
 												{@html renderMarkdown(embed.description, users)}
 											</div>
 										{/if}
+										{#each embed.fields ?? [] as field, k (k)}
+											<div class="mt-2 text-sm">
+												<div class="font-semibold text-white">{field.name}</div>
+												<div class="break-words whitespace-pre-wrap">
+													{@html renderMarkdown(field.value, users)}
+												</div>
+											</div>
+										{/each}
 										{#if embed.footer}<div class="mt-2 text-xs text-[#949ba4]">{embed.footer}</div>{/if}
 									</div>
 								{/each}

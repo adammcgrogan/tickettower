@@ -5,8 +5,10 @@
 		api,
 		ApiError,
 		errorMessage,
+		MAX_QUESTIONS,
 		send,
 		type Channel,
+		type QuestionStyle,
 		type Role,
 		type TicketMode,
 		type TicketType,
@@ -17,6 +19,7 @@
 	import Field from './Field.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import RolePicker from './RolePicker.svelte';
+	import Segmented from './Segmented.svelte';
 
 	let { guildId, initial }: { guildId: string; initial?: TicketType } = $props();
 
@@ -33,9 +36,24 @@
 			support_role_ids: initial?.support_role_ids ?? [],
 			name_format: initial?.name_format ?? 'ticket-{number}',
 			welcome_message: initial?.welcome_message ?? '',
-			max_open_per_user: initial?.max_open_per_user ?? 1
+			max_open_per_user: initial?.max_open_per_user ?? 1,
+			questions: initial?.questions.map((q) => ({ ...q })) ?? []
 		}))
 	);
+
+	const answerStyles: { value: QuestionStyle; label: string }[] = [
+		{ value: 'short', label: 'Short answer' },
+		{ value: 'paragraph', label: 'Paragraph' }
+	];
+
+	function addQuestion() {
+		form.questions.push({ label: '', placeholder: '', style: 'short', required: true });
+	}
+
+	function moveQuestion(i: number, by: -1 | 1) {
+		const qs = form.questions;
+		[qs[i], qs[i + by]] = [qs[i + by], qs[i]];
+	}
 
 	let channels = $state<Channel[]>([]);
 	let roles = $state<Role[]>([]);
@@ -247,6 +265,103 @@
 		<Field label="Support roles" for="roles" error={errors.support_role_ids}>
 			<RolePicker id="roles" {roles} bind:value={form.support_role_ids} />
 		</Field>
+	</section>
+
+	<section class="card space-y-5 p-5">
+		<div class="flex items-start justify-between gap-4">
+			<div>
+				<h2 class="font-medium">Questions</h2>
+				<p class="hint mt-1">
+					Ask members a few questions before their ticket opens. Their answers are posted in the
+					welcome message, so your team has the details up front.
+				</p>
+			</div>
+			{#if form.questions.length > 0 && form.questions.length < MAX_QUESTIONS}
+				<button type="button" class="btn btn-secondary h-8 shrink-0 px-3" onclick={addQuestion}>
+					<Icon name="plus" size={14} /> Add question
+				</button>
+			{/if}
+		</div>
+
+		{#if form.questions.length === 0}
+			<div class="rounded-xl border border-dashed border-border px-6 py-8 text-center">
+				<p class="text-sm font-medium">No questions</p>
+				<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+					Members go straight to their ticket. Add up to {MAX_QUESTIONS} questions, like an order number
+					or what they need help with.
+				</p>
+				<button type="button" class="btn btn-secondary mt-4 h-8 px-3" onclick={addQuestion}>
+					<Icon name="plus" size={14} /> Add question
+				</button>
+			</div>
+		{:else}
+			<ol class="space-y-3">
+				{#each form.questions as q, i (i)}
+					<li class="space-y-4 rounded-lg border border-border bg-bg/40 p-4">
+						<div class="flex items-center gap-2">
+							<span class="text-xs font-medium text-muted">Question {i + 1}</span>
+							<div class="ml-auto flex items-center gap-0.5">
+								<button
+									type="button"
+									class="btn btn-ghost h-7 px-1.5"
+									disabled={i === 0}
+									onclick={() => moveQuestion(i, -1)}
+									aria-label="Move question {i + 1} up"
+								>
+									<Icon name="chevron-up" size={14} />
+								</button>
+								<button
+									type="button"
+									class="btn btn-ghost h-7 px-1.5"
+									disabled={i === form.questions.length - 1}
+									onclick={() => moveQuestion(i, 1)}
+									aria-label="Move question {i + 1} down"
+								>
+									<Icon name="chevron-down" size={14} />
+								</button>
+								<button
+									type="button"
+									class="btn btn-ghost h-7 px-1.5 hover:text-danger"
+									onclick={() => form.questions.splice(i, 1)}
+									aria-label="Remove question {i + 1}"
+								>
+									<Icon name="trash" size={14} />
+								</button>
+							</div>
+						</div>
+						<div class="grid gap-4 sm:grid-cols-2">
+							<Field label="Question" for="q-{i}-label">
+								<input
+									id="q-{i}-label"
+									class="input"
+									bind:value={q.label}
+									maxlength="45"
+									placeholder="e.g. What's your order number?"
+									required
+								/>
+							</Field>
+							<Field label="Placeholder" for="q-{i}-placeholder" optional>
+								<input
+									id="q-{i}-placeholder"
+									class="input"
+									bind:value={q.placeholder}
+									maxlength="100"
+									placeholder="e.g. #12345"
+								/>
+							</Field>
+						</div>
+						<div class="flex flex-wrap items-center justify-between gap-3">
+							<Segmented label="Answer length" options={answerStyles} bind:value={q.style} />
+							<label class="flex cursor-pointer items-center gap-2 text-sm">
+								<input type="checkbox" class="size-4 accent-accent" bind:checked={q.required} />
+								Required
+							</label>
+						</div>
+					</li>
+				{/each}
+			</ol>
+		{/if}
+		{#if errors.questions}<p class="text-xs text-danger">{errors.questions}</p>{/if}
 	</section>
 
 	<section class="card space-y-5 p-5">

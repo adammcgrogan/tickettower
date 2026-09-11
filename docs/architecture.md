@@ -23,7 +23,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | `guilds` | Servers the bot is or was in (`left_at` set when removed; data kept for re-adds) |
 | `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (extra roles allowed into the dashboard), `log_channel_id` |
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
-| `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit |
+| `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5) |
 | `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
 | `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at` |
 | `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags) |
@@ -33,12 +33,12 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 
 ## Key flows
 
-**Opening a ticket.** A panel button (`/panel/open/{typeID}`) or the dropdown (`/panel/select`) triggers `ticketbot.openTicket`:
-1. Lock the member, check the type exists, and check their open-ticket limit.
+**Opening a ticket.** A panel button (`/panel/open/{typeID}`) or the dropdown (`/panel/select`) triggers `ticketbot.openTicket`. If the type has questions, `formFor` first checks the member's limit and shows a modal (`/ticket-form/{source}/{typeID}/{version}`); its submit then calls `openTicket` with the answers. `version` fingerprints the questions, so answers to a form edited mid-fill are rejected rather than mismatched.
+1. Lock the member, check the type exists, check their open-ticket limit, and pair any form answers with the questions.
 2. Get the next number from `guild_settings.ticket_counter`.
 3. Create the channel (with permission overwrites: deny @everyone, allow the opener, the support roles and the bot) or a private thread (and add the opener).
 4. Insert the ticket row. If that fails, delete the channel.
-5. Add the channel to `ticketCache`, then post the welcome embed with Claim/Close buttons.
+5. Add the channel to `ticketCache`, then post the welcome embed with Claim/Close buttons. Form answers are embed fields; the welcome text is trimmed if needed to stay under Discord's 6,000-character embed limit.
 
 **Transcripts.** `onMessageCreate/Update/Delete` only act on channels in `ticketCache`, which is loaded from open tickets at startup, so normal server traffic costs nothing. The first non-bot message from someone other than the opener sets `first_response_at`. `purgeTranscripts` runs hourly to apply retention.
 

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -34,7 +35,9 @@ func TestTranscriptMessages(t *testing.T) {
 	if err := s.InsertTicketMessage(ctx, msg); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.InsertTicketMessage(ctx, TicketMessage{ID: 901, TicketID: tk.ID, AuthorID: 100, AuthorName: "staff", Content: "hey", CreatedAt: now}); err != nil {
+	fields := []EmbedField{{Name: "Order number", Value: "#1234"}}
+	if err := s.InsertTicketMessage(ctx, TicketMessage{ID: 901, TicketID: tk.ID, AuthorID: 100, AuthorName: "staff", Content: "hey",
+		Embeds: []Embed{{Title: "Support · #1", Fields: fields}}, CreatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.UpdateTicketMessage(ctx, 900, "hello (edited)", nil, &now); err != nil {
@@ -56,6 +59,9 @@ func TestTranscriptMessages(t *testing.T) {
 	}
 	if msgs[1].DeletedAt == nil {
 		t.Error("second message should be marked deleted")
+	}
+	if len(msgs[1].Embeds) != 1 || !slices.Equal(msgs[1].Embeds[0].Fields, fields) {
+		t.Errorf("embed fields = %+v", msgs[1].Embeds)
 	}
 
 	// First response is only recorded once.

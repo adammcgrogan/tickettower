@@ -2,6 +2,7 @@ package ticketbot
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
+
+	"github.com/adammcgrogan/ticketsbot/internal/store"
 )
 
 const (
@@ -99,15 +102,29 @@ func (b *Bot) handlePing(e *handler.CommandEvent) error {
 
 // --- Opening tickets ---
 
+// formTimeout keeps the form lookup inside Discord's 3 second window for
+// showing a modal.
+const formTimeout = 2 * time.Second
+
 func (b *Bot) handleOpenButton(e *handler.ComponentEvent) error {
 	typeID, err := strconv.ParseInt(e.Vars["typeID"], 10, 64)
 	if err != nil {
 		return e.CreateMessage(ephemeral("This button is out of date."))
 	}
+	ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
+	modal, err := b.formFor(ctx, e.GuildID(), e.User(), typeID, formFromButton)
+	cancel()
+	if err != nil {
+		return e.CreateMessage(ephemeral(b.describe(err)))
+	}
+	if modal != nil {
+		return e.Modal(*modal)
+	}
+
 	if err := e.DeferCreateMessage(true); err != nil {
 		return err
 	}
-	content := b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID)
+	content := b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID, nil)
 	_, err = e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent(content))
 	return err
 }
@@ -115,28 +132,79 @@ func (b *Bot) handleOpenButton(e *handler.ComponentEvent) error {
 func (b *Bot) handleOpenSelect(e *handler.ComponentEvent) error {
 	values := e.StringSelectMenuInteractionData().Values
 	// Re-send the panel's components so the dropdown resets for the user.
-	if err := e.UpdateMessage(discord.NewMessageUpdate().WithComponents(e.Message.Components...)); err != nil {
-		return err
-	}
+	reset := discord.NewMessageUpdate().WithComponents(e.Message.Components...)
 	if len(values) == 0 {
-		return nil
+		return e.UpdateMessage(reset)
 	}
-	typeID, err := strconv.ParseInt(values[0], 10, 64)
-	if err != nil {
-		_, err = e.CreateFollowupMessage(ephemeral("This panel is out of date."))
+	typeID, parseErr := strconv.ParseInt(values[0], 10, 64)
+
+	var modal *discord.ModalCreate
+	var formErr error
+	if parseErr == nil {
+		ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
+		modal, formErr = b.formFor(ctx, e.GuildID(), e.User(), typeID, formFromSelect)
+		cancel()
+	}
+	if modal != nil && formErr == nil {
+		// The dropdown is reset when the form is submitted.
+		return e.Modal(*modal)
+	}
+
+	if err := e.UpdateMessage(reset); err != nil {
 		return err
 	}
-	_, err = e.CreateFollowupMessage(ephemeral(b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID)))
+	var content string
+	switch {
+	case parseErr != nil:
+		content = "This panel is out of date."
+	case formErr != nil:
+		content = b.describe(formErr)
+	default:
+		content = b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID, nil)
+	}
+	_, err := e.CreateFollowupMessage(ephemeral(content))
 	return err
 }
 
-func (b *Bot) openForUser(ctx context.Context, guildID *snowflake.ID, user discord.User, typeID int64) string {
+func (b *Bot) handleFormModal(e *handler.ModalEvent) error {
+	var reply func(content string) error
+	if e.Vars["source"] == formFromSelect && e.Message != nil {
+		// Reset the panel's dropdown, as handleOpenSelect does.
+		if err := e.UpdateMessage(discord.NewMessageUpdate().WithComponents(e.Message.Components...)); err != nil {
+			return err
+		}
+		reply = func(content string) error {
+			_, err := e.CreateFollowupMessage(ephemeral(content))
+			return err
+		}
+	} else {
+		if err := e.DeferCreateMessage(true); err != nil {
+			return err
+		}
+		reply = func(content string) error {
+			_, err := e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent(content))
+			return err
+		}
+	}
+
+	typeID, err := strconv.ParseInt(e.Vars["typeID"], 10, 64)
+	if err != nil {
+		return reply("This form is out of date.")
+	}
+	form := &formSubmission{version: e.Vars["version"]}
+	for i := range store.MaxQuestions {
+		form.values = append(form.values, strings.TrimSpace(e.Data.Text(fmt.Sprintf("q%d", i))))
+	}
+	return reply(b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID, form))
+}
+
+func (b *Bot) openForUser(ctx context.Context, guildID *snowflake.ID, user discord.User, typeID int64, form *formSubmission) string {
 	if guildID == nil {
 		return "Tickets can only be opened in a server."
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	channelID, err := b.openTicket(ctx, *guildID, user, typeID)
+	channelID, err := b.openTicket(ctx, *guildID, user, typeID, form)
 	if err != nil {
 		return b.describe(err)
 	}

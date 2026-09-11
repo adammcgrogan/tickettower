@@ -56,6 +56,7 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 	r.Command("/close", b.handleCloseCommand)
 	r.Component(panels.OpenButtonPrefix+"{typeID}", b.handleOpenButton)
 	r.Component(panels.OpenSelectID, b.handleOpenSelect)
+	r.Modal(formModalPrefix+"{source}/{typeID}/{version}", b.handleFormModal)
 	r.Component(claimButtonID, b.handleClaimButton)
 	r.Component(closeButtonID, b.handleCloseButton)
 	r.Modal(closeModalID, b.handleCloseModal)
