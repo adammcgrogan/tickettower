@@ -1,26 +1,34 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/inter';
+@import '@fontsource-variable/instrument-sans';
+@import '@fontsource-variable/big-shoulders-display';
 
 @theme {
-	--font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+	/* Condensed signage face for page titles and ticket numbers only. */
+	--font-display: 'Big Shoulders Display Variable', 'Instrument Sans Variable', ui-sans-serif, sans-serif;
 
-	/* Surfaces, darkest to lightest */
-	--color-bg: #09090b;
-	--color-surface: #111114;
-	--color-elevated: #19191d;
-	--color-border: #232328;
-	--color-border-strong: #313138;
+	/* Ink navy surfaces, darkest to lightest */
+	--color-bg: #0e1522;
+	--color-surface: #151e2e;
+	--color-elevated: #1d2839;
+	--color-border: #27344a;
+	--color-border-strong: #35445d;
 
 	/* Text */
-	--color-fg: #ededf0;
-	--color-muted: #8c8c96;
-	--color-subtle: #5d5d66;
+	--color-fg: #e8ecf3;
+	--color-muted: #94a0b4;
+	--color-subtle: #66738a;
 
-	/* The single accent, plus status colours */
-	--color-accent: #7c6cff;
-	--color-accent-hover: #9083ff;
-	--color-success: #3ecf8e;
-	--color-danger: #f0616d;
+	/* Signal amber marks what needs action: primary buttons and tickets
+	   waiting on the team. Text on it uses on-accent. */
+	--color-accent: #f2b544;
+	--color-accent-hover: #f7c566;
+	--color-on-accent: #1c1405;
+	/* Chart marks: the accent stepped into the dataviz validator's dark
+	   lightness band (#f2b544 is too light for a data mark). */
+	--color-chart: #c28622;
+	--color-success: #4cc38a;
+	--color-danger: #f06a6a;
 }
 
 html {
@@ -31,9 +39,22 @@ html {
 
 body {
 	font-family: var(--font-sans);
-	font-feature-settings: 'cv11', 'ss01';
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	::before,
+	::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
 }
 
 @layer components {
@@ -46,7 +67,7 @@ body {
 	select.input {
 		appearance: none;
 		padding-right: 2rem;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238c8c96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a0b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 		background-position: right 0.6rem center;
 		background-repeat: no-repeat;
 		background-size: 14px;
@@ -59,10 +80,10 @@ body {
 		@apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50;
 	}
 	.btn-primary {
-		@apply bg-accent text-white hover:bg-accent-hover;
+		@apply bg-accent text-on-accent hover:bg-accent-hover;
 	}
 	.btn-secondary {
-		@apply border border-border bg-surface text-fg hover:bg-elevated;
+		@apply border border-border bg-surface text-fg hover:border-border-strong hover:bg-elevated;
 	}
 	.btn-ghost {
 		@apply text-muted hover:bg-elevated hover:text-fg;
@@ -79,6 +100,22 @@ body {
 	}
 	.hint {
 		@apply text-xs text-muted;
+	}
+
+	/* An admission-ticket shape: half-circle notches cut from both sides. */
+	.stub {
+		--notch: 4px;
+		@apply inline-flex shrink-0 items-center justify-center rounded-[5px];
+		-webkit-mask:
+			radial-gradient(circle at 0 50%, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) left / 51% 100%
+				no-repeat,
+			radial-gradient(circle at 100% 50%, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) right / 51%
+				100% no-repeat;
+		mask:
+			radial-gradient(circle at 0 50%, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) left / 51% 100%
+				no-repeat,
+			radial-gradient(circle at 100% 50%, #0000 var(--notch), #000 calc(var(--notch) + 0.5px)) right / 51%
+				100% no-repeat;
 	}
 }
 

@@ -29,6 +29,12 @@
 		thread:
 			'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
 		'chevron-up': '<path d="m18 15-6-6-6 6"/>',
+		'chevrons-up-down': '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+		home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9"/>',
+		menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
+		logout:
+			'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+		clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 		grip: '<circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>'
 	} as const;
 

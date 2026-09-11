@@ -99,9 +99,44 @@ export type Ticket = {
 	claimed_by_name: string | null;
 	status: 'open' | 'closed';
 	close_reason: string;
+	closed_by_name: string | null;
 	opened_at: string;
 	first_response_at: string | null;
 	closed_at: string | null;
+	last_activity_at: string;
+	/** True when the member sent the last message, so the team owes a reply. */
+	waiting_on_staff: boolean;
+};
+
+export type Embed = {
+	title?: string;
+	description?: string;
+	color?: number;
+	footer?: string;
+	fields?: { name: string; value: string }[];
+};
+
+export type Attachment = { name: string; url: string; size: number; content_type?: string };
+
+export type TranscriptMessage = {
+	id: string;
+	author_id: string;
+	author_name: string;
+	author_avatar: string;
+	author_bot: boolean;
+	content: string;
+	embeds: Embed[];
+	attachments: Attachment[];
+	created_at: string;
+	edited_at: string | null;
+	deleted_at: string | null;
+};
+
+export type Transcript = {
+	ticket: Ticket;
+	messages: TranscriptMessage[];
+	/** can_manage means the viewer has dashboard access to the server. */
+	guild: { id: string; name: string; icon_url: string | null; can_manage: boolean };
 };
 
 export type Stats = {

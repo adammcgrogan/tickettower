@@ -69,7 +69,7 @@
 					<!-- Hover dims the other columns so the data colour stays the validated accent. -->
 					<path
 						d={column(i, d.value)}
-						fill="var(--color-accent)"
+						fill="var(--color-chart)"
 						opacity={active === null || active === i ? 1 : 0.45}
 						class="transition-opacity duration-100"
 					/>
