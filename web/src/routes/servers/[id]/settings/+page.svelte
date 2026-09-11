@@ -105,7 +105,7 @@
 		</button>
 	</div>
 {:else if !settings}
-	<div class="mt-6 space-y-5" aria-busy="true">
+	<div class="mt-8 max-w-3xl space-y-5" aria-busy="true">
 		{#each Array(2) as _, i (i)}
 			<div class="card space-y-4 p-5">
 				<div class="h-4 w-32 animate-pulse rounded bg-elevated"></div>
@@ -115,7 +115,7 @@
 		{/each}
 	</div>
 {:else}
-	<form onsubmit={save} class="mt-6 space-y-5">
+	<form onsubmit={save} class="mt-8 max-w-3xl space-y-5">
 		<section class="card space-y-5 p-5">
 			<div>
 				<h2 class="font-medium">Ticket log</h2>
@@ -131,14 +131,16 @@
 				hint="Use a channel only staff can see. {APP_NAME} needs permission to send messages there."
 				error={errors.log_channel_id}
 			>
-				<ChannelSelect
-					id="log_channel"
-					{channels}
-					kinds={['text', 'announcement']}
-					bind:value={logChannel}
-					placeholder="Don't log tickets"
-					invalid={!!errors.log_channel_id}
-				/>
+				<div class="sm:max-w-sm">
+					<ChannelSelect
+						id="log_channel"
+						{channels}
+						kinds={['text', 'announcement']}
+						bind:value={logChannel}
+						placeholder="Don't log tickets"
+						invalid={!!errors.log_channel_id}
+					/>
+				</div>
 			</Field>
 		</section>
 
@@ -159,12 +161,14 @@
 					: 'Only people with Manage Server can change who has access.'}
 				error={errors.dashboard_role_ids}
 			>
-				<RolePicker
-					id="dashboard_roles"
-					{roles}
-					bind:value={dashboardRoles}
-					disabled={!guild.can_manage}
-				/>
+				<div class="sm:max-w-sm">
+					<RolePicker
+						id="dashboard_roles"
+						{roles}
+						bind:value={dashboardRoles}
+						disabled={!guild.can_manage}
+					/>
+				</div>
 				{#if !guild.can_manage && dashboardRoles.length === 0}
 					<p class="text-sm text-muted">No roles yet.</p>
 				{/if}

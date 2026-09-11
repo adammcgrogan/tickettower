@@ -30,8 +30,8 @@
 <!-- A close approximation of how Discord renders the panel message. -->
 <div class="rounded-xl bg-[#313338] p-4 font-[system-ui] text-[15px] leading-snug">
 	<div class="flex gap-4">
-		<div class="grid size-10 shrink-0 place-items-center rounded-full bg-accent">
-			<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<div class="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-on-accent">
+			<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 				<path d="M4 12h10" /><path d="m10 6 6 6-6 6" /><path d="M20 5v14" />
 			</svg>
 		</div>

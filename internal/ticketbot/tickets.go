@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	colorAccent = 0x7c6cff
+	colorAccent = 0xf2b544 // the dashboard's signal amber
 	colorMuted  = 0x5d5d66
 
 	// closeDelay gives people a moment to read the close message before a

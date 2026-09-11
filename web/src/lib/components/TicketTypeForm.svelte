@@ -20,6 +20,7 @@
 	import Icon, { type IconName } from './Icon.svelte';
 	import RolePicker from './RolePicker.svelte';
 	import Segmented from './Segmented.svelte';
+	import WelcomePreview from './WelcomePreview.svelte';
 
 	let { guildId, initial }: { guildId: string; initial?: TicketType } = $props();
 
@@ -148,6 +149,7 @@
 	}
 </script>
 
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
 <form onsubmit={save} class="space-y-5">
 	<section class="card space-y-5 p-5">
 		<h2 class="font-medium">Basics</h2>
@@ -450,3 +452,17 @@
 		</button>
 	</div>
 </form>
+
+<aside class="lg:sticky lg:top-6 lg:self-start">
+	<p class="mb-3 text-sm text-muted">The welcome message in each new ticket</p>
+	<WelcomePreview
+		name={form.name}
+		welcome={form.welcome_message}
+		fallback={DEFAULT_WELCOME}
+		questions={form.questions}
+		supportRoles={form.support_role_ids
+			.map((id) => roles.find((r) => r.id === id))
+			.filter((r): r is Role => !!r)}
+	/>
+</aside>
+</div>

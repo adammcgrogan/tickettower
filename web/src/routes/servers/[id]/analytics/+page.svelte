@@ -65,24 +65,24 @@
 {#if error && !data}
 	<p class="card mt-6 p-5 text-sm text-danger">{error}</p>
 {:else if !data}
-	<div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-		{#each Array(5) as _, i (i)}<div class="card h-[92px] animate-pulse"></div>{/each}
-	</div>
-	<div class="card mt-4 h-72 animate-pulse"></div>
+	<div class="mt-8 h-[124px] animate-pulse rounded-xl bg-surface"></div>
+	<div class="mt-4 h-72 animate-pulse rounded-xl bg-surface"></div>
 {:else}
 	<div class="transition-opacity {loading ? 'opacity-60' : ''}">
-		<div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+		<dl
+			class="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3 lg:grid-cols-5"
+		>
 			{#each tiles as tile (tile.label)}
-				<div class="card p-4">
-					<div class="text-xs text-muted">{tile.label}</div>
-					<div class="mt-2 text-2xl font-semibold tracking-tight">{tile.value}</div>
-					<div class="mt-1 h-4 text-xs text-subtle">{tile.hint ?? ''}</div>
+				<div class="bg-surface p-5">
+					<dt class="text-sm text-muted">{tile.label}</dt>
+					<dd class="mt-3 font-display text-4xl leading-none font-bold tabular-nums">{tile.value}</dd>
+					<dd class="mt-2 h-4 text-xs text-subtle">{tile.hint ?? ''}</dd>
 				</div>
 			{/each}
-		</div>
+		</dl>
 
 		<section class="card mt-4 p-5">
-			<h2 class="font-medium">Tickets opened per day</h2>
+			<h2 class="font-semibold">Tickets opened per day</h2>
 			<p class="hint mt-0.5">Last {data.days} days</p>
 			<div class="mt-4">
 				<ColumnChart data={daily} label="Tickets opened per day over the last {data.days} days" />
@@ -91,7 +91,7 @@
 
 		<div class="mt-4 grid gap-4 lg:grid-cols-2">
 			<section class="card p-5">
-				<h2 class="font-medium">By ticket type</h2>
+				<h2 class="font-semibold">By ticket type</h2>
 				<p class="hint mt-0.5">Tickets opened in this period</p>
 				{#if data.by_type.length === 0}
 					<p class="mt-6 text-sm text-subtle">No tickets in this period.</p>
@@ -104,7 +104,7 @@
 									<span class="text-muted tabular-nums">{t.count}</span>
 								</div>
 								<div class="mt-1.5 h-2 rounded-full bg-elevated">
-									<div class="h-full rounded-full bg-accent" style="width:{(t.count / typeMax) * 100}%"></div>
+									<div class="h-full rounded-full bg-chart" style="width:{(t.count / typeMax) * 100}%"></div>
 								</div>
 							</li>
 						{/each}
@@ -114,7 +114,7 @@
 
 			<section class="card overflow-hidden">
 				<div class="p-5 pb-3">
-					<h2 class="font-medium">Support team</h2>
+					<h2 class="font-semibold">Support team</h2>
 					<p class="hint mt-0.5">Tickets claimed in this period</p>
 				</div>
 				{#if data.staff.length === 0}
