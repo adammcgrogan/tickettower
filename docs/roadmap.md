@@ -16,6 +16,7 @@
 - Pre-ticket forms: up to 5 questions per ticket type, asked in a modal when a member opens a ticket; answers are posted in the welcome message (and so appear in transcripts)
 - Dashboard redesign: new visual identity (ink navy, signal amber, Big Shoulders Display for titles and ticket numbers), a sidebar with a server switcher, a Home page with a "waiting on your team" queue and one-step quick setup, a two-pane Tickets inbox with search and inline transcripts, and live Discord previews in the ticket type and panel editors
 - Auto-close: per ticket type, close tickets after 12h–1 week without messages, but only when the team is waiting on the member. The member gets a "Still need help?" warning first (a quarter of the window ahead, at most a day), and any message or the "I still need help" button keeps it open
+- Deeper analytics: 7 days to all time (weekly or monthly buckets past 90 days), a ticket type filter, comparison with the previous period, open-now and backlog trend, a busiest-times heatmap, first response by hour, one-reply resolution, messages per ticket, tickets closed without a reply, how tickets were closed (team, member, auto-close, channel deleted; `tickets.auto_closed`), top close reasons, rating distribution, per-type performance and a team table with replies
 
 ## Not yet verified by hand
 

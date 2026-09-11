@@ -76,14 +76,14 @@
 		{ label: 'Open tickets', value: open && (open.length >= 200 ? '200+' : String(open.length)) },
 		{
 			label: 'First response',
-			value: week && formatDuration(week.first_response_median_seconds),
+			value: week && formatDuration(week.summary.first_response_median_seconds),
 			hint: 'Median, last 7 days'
 		},
 		{
 			label: 'Satisfaction',
-			value: week && (week.rating_avg != null ? week.rating_avg.toFixed(1) : '—'),
-			hint: week?.rating_count
-				? `Out of 5, from ${week.rating_count} rating${week.rating_count === 1 ? '' : 's'}`
+			value: week && (week.summary.rating_avg != null ? week.summary.rating_avg.toFixed(1) : '—'),
+			hint: week?.summary.rating_count
+				? `Out of 5, from ${week.summary.rating_count} rating${week.summary.rating_count === 1 ? '' : 's'}`
 				: 'No ratings in the last 7 days'
 		}
 	]);

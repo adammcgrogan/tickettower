@@ -28,8 +28,9 @@ support team.
 - **Transcripts**: every ticket is saved and viewable in a Discord-style viewer
 - **Feedback**: members rate their ticket 1 to 5 after it closes
 - **Auto-close**: inactive tickets get a reminder, then close on their own
-- **Analytics**: ticket volume, first response and resolution times,
-  satisfaction, and breakdowns by type and staff member
+- **Analytics**: ticket volume and backlog, first response and resolution
+  times, busiest hours, satisfaction, close reasons, and breakdowns by type
+  and staff member, compared with the previous period
 
 ## Privacy
 

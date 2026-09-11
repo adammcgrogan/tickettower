@@ -106,7 +106,7 @@ func (s *Store) RecordActivity(ctx context.Context, ticketID int64, at time.Time
 // due. It reports false if someone replied in the meantime.
 func (s *Store) AutoCloseTicket(ctx context.Context, ticketID int64, reason string, now time.Time) (bool, error) {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE tickets t SET status = 'closed', close_reason = $3, closed_at = $1
+		UPDATE tickets t SET status = 'closed', close_reason = $3, closed_at = $1, auto_closed = true
 		FROM ticket_types tt
 		WHERE t.id = $2 AND tt.id = t.ticket_type_id AND `+autoCloseEligible+` AND `+autoCloseDue,
 		now, ticketID, reason)
