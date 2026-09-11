@@ -146,26 +146,3 @@ func (s *Store) PurgeExpiredTranscripts(ctx context.Context) (int64, error) {
 		  AND t.closed_at < now() - make_interval(days => gs.transcript_retention_days)`)
 	return tag.RowsAffected(), err
 }
-
-type GuildSettings struct {
-	TranscriptRetentionDays *int `json:"transcript_retention_days"`
-}
-
-func (s *Store) GetGuildSettings(ctx context.Context, guildID snowflake.ID) (GuildSettings, error) {
-	var st GuildSettings
-	err := s.pool.QueryRow(ctx, `SELECT transcript_retention_days FROM guild_settings WHERE guild_id = $1`,
-		int64(guildID)).Scan(&st.TranscriptRetentionDays)
-	if notFound(err) == ErrNotFound {
-		return GuildSettings{}, nil
-	}
-	return st, err
-}
-
-func (s *Store) UpdateGuildSettings(ctx context.Context, guildID snowflake.ID, st GuildSettings) error {
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO guild_settings (guild_id, transcript_retention_days) VALUES ($1, $2)
-		ON CONFLICT (guild_id) DO UPDATE
-		SET transcript_retention_days = EXCLUDED.transcript_retention_days, updated_at = now()`,
-		int64(guildID), st.TranscriptRetentionDays)
-	return err
-}

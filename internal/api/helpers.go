@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/disgoorg/snowflake/v2"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/adammcgrogan/ticketsbot/internal/discordx"
@@ -56,6 +58,17 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
+}
+
+// normaliseIDs sorts and de-duplicates ids, returning an empty (not nil)
+// slice so it encodes as [].
+func normaliseIDs(ids []snowflake.ID) []snowflake.ID {
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	if ids == nil {
+		return []snowflake.ID{}
+	}
+	return ids
 }
 
 func pathID(r *http.Request, name string) (int64, bool) {

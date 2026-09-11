@@ -9,6 +9,10 @@
 - Feedback (1–5 + comment via DM) and analytics (volume, median first response/resolution, satisfaction, by type, by staff)
 - Landing page, privacy page, CI workflow, README deploy guide
 
+## Done since v1
+
+- Dashboard roles: members with roles chosen in Settings can use the dashboard (everything except changing those roles)
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.
@@ -16,8 +20,7 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 ## Next up (suggested order)
 
 1. **Deploy to Railway**: set up the services and env vars, set a real `PUBLIC_URL` (which enables transcript links in DMs), unset `DEV_GUILD_ID`, and add the production OAuth redirect. Reset the bot token/secret first (they were shared in a chat).
-2. **Dashboard roles**: let members with configured roles use the dashboard, not just Manage Server (`guild_settings.dashboard_role_ids` already exists; see the TODO on `canManage` in `internal/api/server.go`).
-3. **Log channel**: post open/close/claim events (and optionally transcripts) to a chosen channel.
+2. **Log channel**: post open/close/claim events (and optionally transcripts) to a chosen channel.
 4. **Pre-ticket forms**: questions shown in a modal when opening a ticket, with answers posted in the welcome message. This is part of the original plan's "Forms & automation".
 5. **Auto-close**: close inactive tickets after N hours, with a warning first.
 6. **Reopen**: reopen threads within a grace window (channels are deleted, so reopening them would need a delay or archiving instead).

@@ -31,7 +31,7 @@ type Ticket struct {
 	CloseReason     string        `json:"close_reason"`
 	ClosedBy        *snowflake.ID `json:"closed_by"`
 	ClosedByName    *string       `json:"closed_by_name"`
-	OpenedAt       time.Time     `json:"opened_at"`
+	OpenedAt        time.Time     `json:"opened_at"`
 	FirstResponseAt *time.Time    `json:"first_response_at"`
 	ClosedAt        *time.Time    `json:"closed_at"`
 }

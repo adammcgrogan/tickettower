@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	rateButtonPrefix  = "/rate/"         // + {ticketID}/{rating}
+	rateButtonPrefix    = "/rate/"         // + {ticketID}/{rating}
 	commentButtonPrefix = "/rate-comment/" // + {ticketID}
 	commentModalPrefix  = "/rate-modal/"   // + {ticketID}
 )
