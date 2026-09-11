@@ -1,0 +1,116 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@theme {
+	--font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+	/* Surfaces, darkest to lightest */
+	--color-bg: #09090b;
+	--color-surface: #111114;
+	--color-elevated: #19191d;
+	--color-border: #232328;
+	--color-border-strong: #313138;
+
+	/* Text */
+	--color-fg: #ededf0;
+	--color-muted: #8c8c96;
+	--color-subtle: #5d5d66;
+
+	/* The single accent, plus status colours */
+	--color-accent: #7c6cff;
+	--color-accent-hover: #9083ff;
+	--color-success: #3ecf8e;
+	--color-danger: #f0616d;
+}
+
+html {
+	background: var(--color-bg);
+	color: var(--color-fg);
+	color-scheme: dark;
+}
+
+body {
+	font-family: var(--font-sans);
+	font-feature-settings: 'cv11', 'ss01';
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+@layer components {
+	.input {
+		@apply h-9 w-full rounded-lg border border-border bg-bg px-3 text-sm text-fg transition-colors placeholder:text-subtle focus:border-accent focus:ring-2 focus:ring-accent/25 focus:outline-none disabled:opacity-50;
+	}
+	textarea.input {
+		@apply h-auto min-h-24 py-2 leading-relaxed;
+	}
+	select.input {
+		appearance: none;
+		padding-right: 2rem;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238c8c96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+		background-position: right 0.6rem center;
+		background-repeat: no-repeat;
+		background-size: 14px;
+	}
+	.input[aria-invalid='true'] {
+		@apply border-danger focus:ring-danger/25;
+	}
+
+	.btn {
+		@apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50;
+	}
+	.btn-primary {
+		@apply bg-accent text-white hover:bg-accent-hover;
+	}
+	.btn-secondary {
+		@apply border border-border bg-surface text-fg hover:bg-elevated;
+	}
+	.btn-ghost {
+		@apply text-muted hover:bg-elevated hover:text-fg;
+	}
+	.btn-danger {
+		@apply border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20;
+	}
+
+	.card {
+		@apply rounded-xl border border-border bg-surface;
+	}
+	.label {
+		@apply text-sm font-medium;
+	}
+	.hint {
+		@apply text-xs text-muted;
+	}
+}
+
+/* Discord markdown in transcripts (see lib/markdown.ts). */
+.md-code {
+	@apply rounded bg-[#1e1f22] px-1 py-0.5 font-mono text-[0.85em];
+}
+.md-pre {
+	@apply my-1 overflow-x-auto rounded-md border border-[#1e1f22] bg-[#2b2d31] p-2 font-mono text-[0.85em];
+}
+.md-mention {
+	@apply rounded bg-[#5865f2]/30 px-0.5 font-medium text-[#c9cdfb];
+}
+.md-link {
+	@apply text-[#00a8fc] hover:underline;
+}
+.md-quote {
+	@apply block border-l-4 border-[#4e5058] pl-3;
+}
+.md-spoiler {
+	@apply rounded bg-[#1e1f22] px-0.5 text-transparent transition-colors hover:text-inherit;
+}
+.md-h1 {
+	@apply block text-xl font-bold;
+}
+.md-h2 {
+	@apply block text-lg font-bold;
+}
+.md-h3 {
+	@apply block font-bold;
+}
+
+::selection {
+	background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
