@@ -20,6 +20,9 @@ import (
 
 const maxSupportRoles = 10
 
+// autoCloseOptions are the inactivity windows offered in the dashboard.
+var autoCloseOptions = []int{12, 24, 48, 72, 168}
+
 type ticketTypeInput struct {
 	Name           string           `json:"name"`
 	Emoji          string           `json:"emoji"`
@@ -31,6 +34,7 @@ type ticketTypeInput struct {
 	WelcomeMessage string           `json:"welcome_message"`
 	MaxOpenPerUser int              `json:"max_open_per_user"`
 	Questions      []store.Question `json:"questions"`
+	AutoCloseHours *int             `json:"auto_close_hours"`
 }
 
 func (in ticketTypeInput) apply(t *store.TicketType) {
@@ -44,6 +48,7 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.WelcomeMessage = in.WelcomeMessage
 	t.MaxOpenPerUser = in.MaxOpenPerUser
 	t.Questions = in.Questions
+	t.AutoCloseHours = in.AutoCloseHours
 }
 
 // validateQuestions normalises a ticket type's form questions.
@@ -112,6 +117,9 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 		return err
 	}
 	in.Questions = questions
+	if h := in.AutoCloseHours; h != nil && !slices.Contains(autoCloseOptions, *h) {
+		return invalid("auto_close_hours", "Choose one of the listed auto-close times.")
+	}
 
 	if in.ParentID != nil && *in.ParentID == 0 {
 		in.ParentID = nil

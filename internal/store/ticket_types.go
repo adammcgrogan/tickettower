@@ -63,11 +63,14 @@ type TicketType struct {
 	WelcomeMessage string         `json:"welcome_message"`
 	MaxOpenPerUser int            `json:"max_open_per_user"`
 	Questions      []Question     `json:"questions"`
-	CreatedAt      time.Time      `json:"created_at"`
+	// AutoCloseHours is how long a ticket can sit without activity before
+	// it closes itself; nil means never.
+	AutoCloseHours *int      `json:"auto_close_hours"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_id, support_role_ids,
-	name_format, welcome_message, max_open_per_user, questions, created_at`
+	name_format, welcome_message, max_open_per_user, questions, auto_close_hours, created_at`
 
 func scanTicketType(row pgx.Row) (TicketType, error) {
 	var (
@@ -78,7 +81,7 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 		roles    []int64
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Name, &t.Emoji, &t.Description, &mode, &parentID, &roles,
-		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.CreatedAt)
+		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours, &t.CreatedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
@@ -133,11 +136,11 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 	t.Questions = questionsOrEmpty(t.Questions)
 	return s.pool.QueryRow(ctx, `
 		INSERT INTO ticket_types (guild_id, name, emoji, description, mode, parent_id, support_role_ids,
-		                          name_format, welcome_message, max_open_per_user, questions)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		                          name_format, welcome_message, max_open_per_user, questions, auto_close_hours)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
-		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions,
+		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.AutoCloseHours,
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
@@ -145,10 +148,12 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE ticket_types
 		SET name = $3, emoji = $4, description = $5, mode = $6, parent_id = $7, support_role_ids = $8,
-		    name_format = $9, welcome_message = $10, max_open_per_user = $11, questions = $12, updated_at = now()
+		    name_format = $9, welcome_message = $10, max_open_per_user = $11, questions = $12, auto_close_hours = $13,
+		    updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
-		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, questionsOrEmpty(t.Questions))
+		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, questionsOrEmpty(t.Questions),
+		t.AutoCloseHours)
 	if err != nil {
 		return err
 	}

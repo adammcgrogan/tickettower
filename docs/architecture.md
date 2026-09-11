@@ -23,9 +23,9 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | `guilds` | Servers the bot is or was in (`left_at` set when removed; data kept for re-adds) |
 | `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (extra roles allowed into the dashboard), `log_channel_id` |
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
-| `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5) |
+| `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5), `auto_close_hours` |
 | `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
-| `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at` |
+| `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at`, plus auto-close state (`last_activity_at`, `waiting_on_staff`, `auto_close_warned_at`) |
 | `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags) |
 | `ticket_feedback` | 1–5 rating + comment per ticket |
 
@@ -54,6 +54,12 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 Deleting a ticket channel by hand also closes the ticket.
 
 **Ticket log.** When a guild has `log_channel_id` set, `ticketbot/log.go` posts an embed there when a ticket is opened, claimed or closed (including when its channel is deleted by hand). The close entry links to the transcript if `PUBLIC_URL` is https. Posting is best effort: failures are logged, never shown to members.
+
+**Auto-close.** Every human message in a ticket calls `store.RecordActivity`, which bumps `last_activity_at`, clears any pending warning and sets `waiting_on_staff` (true if the opener wrote it). A ticket opened with form answers starts as waiting on staff. `ticketbot/autoclose.go` runs every 5 minutes:
+1. Tickets whose type has `auto_close_hours`, that aren't waiting on staff, and that are within the warning lead (a quarter of the window, at most 24h) get a "Still need help?" message with "I still need help" and Close buttons. `auto_close_warned_at` is set first and cleared again if posting fails, so a ticket is never closed unwarned.
+2. Warned tickets that have been inactive for the whole window, and warned for the full lead, are closed with `store.AutoCloseTicket` (conditional, so a last-moment reply wins). `closed_by` is NULL, and the usual close message, log entry, DM and cleanup follow via `finishClose`.
+
+The SQL rules live in `store/autoclose.go`; the dashboard hint repeats the lead formula.
 
 **Feedback.** The DM rating buttons (`/rate/{ticketID}/{n}`) save the rating and swap the buttons for "Add a comment" (a modal). Only the opener can rate.
 

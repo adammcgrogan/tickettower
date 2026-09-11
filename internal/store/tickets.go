@@ -34,10 +34,15 @@ type Ticket struct {
 	OpenedAt        time.Time     `json:"opened_at"`
 	FirstResponseAt *time.Time    `json:"first_response_at"`
 	ClosedAt        *time.Time    `json:"closed_at"`
+	LastActivityAt  time.Time     `json:"last_activity_at"`
+	// WaitingOnStaff is true when the opener sent the last message, which
+	// pauses auto-close.
+	WaitingOnStaff bool `json:"waiting_on_staff"`
 }
 
 const ticketColumns = `id, guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name,
-	claimed_by, claimed_by_name, status, close_reason, closed_by, closed_by_name, opened_at, first_response_at, closed_at`
+	claimed_by, claimed_by_name, status, close_reason, closed_by, closed_by_name, opened_at, first_response_at, closed_at,
+	last_activity_at, waiting_on_staff`
 
 func scanTicket(row pgx.Row) (Ticket, error) {
 	var (
@@ -48,7 +53,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Number, &t.TicketTypeID, &t.TypeName, &mode, &channelID, &opener,
 		&t.OpenerName, &claimedBy, &t.ClaimedByName, &status, &t.CloseReason, &closedBy, &t.ClosedByName, &t.OpenedAt,
-		&t.FirstResponseAt, &t.ClosedAt)
+		&t.FirstResponseAt, &t.ClosedAt, &t.LastActivityAt, &t.WaitingOnStaff)
 	if err != nil {
 		return t, notFound(err)
 	}
@@ -94,16 +99,17 @@ func (s *Store) OpenTicketChannels(ctx context.Context, guildID snowflake.ID, ty
 	return out, rows.Err()
 }
 
-// CreateTicket inserts t and sets its ID, Status and OpenedAt.
+// CreateTicket inserts t and sets its ID, Status, OpenedAt and LastActivityAt.
 func (s *Store) CreateTicket(ctx context.Context, t *Ticket) error {
 	var status string
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO tickets (guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, status, opened_at`,
+		INSERT INTO tickets (guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name,
+		                     waiting_on_staff)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, status, opened_at, last_activity_at`,
 		int64(t.GuildID), t.Number, t.TicketTypeID, t.TypeName, string(t.Mode), int64(t.ChannelID),
-		int64(t.OpenerID), t.OpenerName,
-	).Scan(&t.ID, &status, &t.OpenedAt)
+		int64(t.OpenerID), t.OpenerName, t.WaitingOnStaff,
+	).Scan(&t.ID, &status, &t.OpenedAt, &t.LastActivityAt)
 	t.Status = TicketStatus(status)
 	return err
 }

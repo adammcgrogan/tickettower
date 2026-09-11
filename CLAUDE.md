@@ -34,7 +34,7 @@ internal/config       env config, BotPermissions
 internal/store        all SQL. One file per area (guilds, settings, ticket_types, panels, tickets, transcripts, analytics)
 internal/ticketbot    bot: bot.go (wiring/events), tickets.go (ticket logic), commands.go (slash/buttons),
                       transcripts.go (message capture, retention), feedback.go (ratings), log.go (log channel),
-                      forms.go (pre-ticket question modals)
+                      forms.go (pre-ticket question modals), autoclose.go (inactivity warnings and closing)
 internal/api          HTTP handlers; server.go has all routes, access.go decides who can use a guild's dashboard
 internal/auth         Discord OAuth2 + Redis sessions
 internal/panels       renders panel messages (shared by API publish + bot interaction IDs)
