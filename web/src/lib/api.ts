@@ -62,6 +62,8 @@ export type TicketType = {
 	welcome_message: string;
 	max_open_per_user: number;
 	questions: Question[];
+	/** Hours without activity before a ticket closes itself, or null for never. */
+	auto_close_hours: number | null;
 	created_at: string;
 };
 

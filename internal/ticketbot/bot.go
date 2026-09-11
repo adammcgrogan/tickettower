@@ -59,6 +59,7 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 	r.Modal(formModalPrefix+"{source}/{typeID}/{version}", b.handleFormModal)
 	r.Component(claimButtonID, b.handleClaimButton)
 	r.Component(closeButtonID, b.handleCloseButton)
+	r.Component(keepOpenButtonID, b.handleKeepOpen)
 	r.Modal(closeModalID, b.handleCloseModal)
 	r.Component(rateButtonPrefix+"{ticketID}/{rating}", b.handleRate)
 	r.Component(commentButtonPrefix+"{ticketID}", b.handleCommentButton)
@@ -112,6 +113,7 @@ func (b *Bot) Run(ctx context.Context) error {
 	}
 	b.log.Info("bot connected", slog.Int("open_tickets", len(refs)))
 	go b.purgeTranscripts(ctx)
+	go b.autoCloseTickets(ctx)
 
 	<-ctx.Done()
 	closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

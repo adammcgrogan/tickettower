@@ -37,9 +37,30 @@
 			name_format: initial?.name_format ?? 'ticket-{number}',
 			welcome_message: initial?.welcome_message ?? '',
 			max_open_per_user: initial?.max_open_per_user ?? 1,
-			questions: initial?.questions.map((q) => ({ ...q })) ?? []
+			questions: initial?.questions.map((q) => ({ ...q })) ?? [],
+			auto_close_hours: initial?.auto_close_hours ?? null
 		}))
 	);
+
+	const autoCloseOptions = [
+		{ value: '', label: 'Never' },
+		{ value: '12', label: 'After 12 hours' },
+		{ value: '24', label: 'After 1 day' },
+		{ value: '48', label: 'After 2 days' },
+		{ value: '72', label: 'After 3 days' },
+		{ value: '168', label: 'After 1 week' }
+	];
+
+	const hoursLabel = (h: number) =>
+		h % 24 === 0 ? `${h / 24} day${h === 24 ? '' : 's'}` : `${h} hours`;
+
+	// Matches the bot: members are warned a quarter of the window ahead, at most a day.
+	const autoCloseHint = $derived.by(() => {
+		const h = form.auto_close_hours;
+		if (!h) return 'Tickets stay open until someone closes them.';
+		const lead = Math.min(h / 4, 24);
+		return `Only when your team is waiting on the member. They're reminded ${hoursLabel(lead)} before, and any message keeps the ticket open.`;
+	});
 
 	const answerStyles: { value: QuestionStyle; label: string }[] = [
 		{ value: 'short', label: 'Short answer' },
@@ -398,6 +419,25 @@
 				bind:value={form.max_open_per_user}
 				aria-invalid={!!errors.max_open_per_user}
 			/>
+		</Field>
+		<Field
+			label="Close inactive tickets"
+			for="auto_close"
+			hint={autoCloseHint}
+			error={errors.auto_close_hours}
+		>
+			<select
+				id="auto_close"
+				class="input sm:w-56"
+				value={form.auto_close_hours?.toString() ?? ''}
+				onchange={(e) =>
+					(form.auto_close_hours = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+				aria-invalid={!!errors.auto_close_hours}
+			>
+				{#each autoCloseOptions as o (o.value)}
+					<option value={o.value}>{o.label}</option>
+				{/each}
+			</select>
 		</Field>
 	</section>
 

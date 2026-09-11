@@ -92,6 +92,12 @@ func (b *Bot) onMessageCreate(e *events.GuildMessageCreate) {
 			b.log.Error("failed to record first response", slog.Any("err", err))
 		}
 	}
+	// Any human message restarts the auto-close clock.
+	if !m.Author.Bot {
+		if err := b.store.RecordActivity(ctx, ref.ID, m.CreatedAt, m.Author.ID == ref.OpenerID); err != nil {
+			b.log.Error("failed to record ticket activity", slog.Any("err", err))
+		}
+	}
 }
 
 func (b *Bot) onMessageUpdate(e *events.GuildMessageUpdate) {

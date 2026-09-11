@@ -141,6 +141,9 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 		ChannelID:    channelID,
 		OpenerID:     user.ID,
 		OpenerName:   user.EffectiveName(),
+		// Form answers mean the member has already explained, so it's the
+		// team's turn and auto-close waits for their reply.
+		WaitingOnStaff: len(answers) > 0,
 	}
 	if err := b.store.CreateTicket(ctx, &ticket); err != nil {
 		b.cleanupChannel(channelID)
@@ -350,18 +353,25 @@ func (b *Bot) closeTicket(ctx context.Context, channelID snowflake.ID, m *discor
 		return t, discord.MessageCreate{}, userErr("This ticket is already closed.")
 	}
 	t.Status, t.ClosedBy, t.CloseReason = store.StatusClosed, &closer, reason
+	return t, closedMessage(t), nil
+}
 
-	desc := "Closed by " + discord.UserMention(closer)
-	if reason != "" {
-		desc += "\n**Reason:** " + reason
+// closedMessage is posted in a ticket as it closes. Tickets without a closer
+// were closed automatically.
+func closedMessage(t store.Ticket) discord.MessageCreate {
+	desc := "Closed automatically"
+	if t.ClosedBy != nil {
+		desc = "Closed by " + discord.UserMention(*t.ClosedBy)
+	}
+	if t.CloseReason != "" {
+		desc += "\n**Reason:** " + t.CloseReason
 	}
 	if t.Mode == store.ModeChannel {
 		desc += "\n\nThis channel will be deleted in a few seconds."
 	}
-	msg := discord.NewMessageCreate().
+	return discord.NewMessageCreate().
 		WithEmbeds(discord.NewEmbed().WithTitle("Ticket closed").WithDescription(desc).WithColor(colorMuted)).
 		WithAllowedMentions(&discord.AllowedMentions{})
-	return t, msg, nil
 }
 
 // finishClose notifies the opener and removes the ticket from view: channels
