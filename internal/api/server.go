@@ -145,10 +145,13 @@ type guildResponse struct {
 	Name       string       `json:"name"`
 	IconURL    *string      `json:"icon_url"`
 	BotPresent bool         `json:"bot_present"`
+	// CanManage is false for members who only have a dashboard role.
+	CanManage bool `json:"can_manage"`
 }
 
-// listGuilds returns the servers the user can manage, flagging which ones
-// already have the bot.
+// listGuilds returns the servers the user can use the dashboard for,
+// flagging which ones already have the bot. Servers without the bot are only
+// listed for managers, who can add it.
 func (s *Server) listGuilds(w http.ResponseWriter, r *http.Request) {
 	sess := auth.FromContext(r.Context())
 	guilds, err := s.auth.Guilds(r.Context(), sess)
@@ -158,34 +161,49 @@ func (s *Server) listGuilds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var manageable []discord.OAuth2Guild
-	var ids []snowflake.ID
-	for _, g := range guilds {
-		if canManage(g) {
-			manageable = append(manageable, g)
-			ids = append(ids, g.ID)
-		}
+	ids := make([]snowflake.ID, len(guilds))
+	for i, g := range guilds {
+		ids[i] = g.ID
 	}
 	active, err := s.store.ActiveGuilds(r.Context(), ids)
 	if err != nil {
-		s.log.Error("load active guilds", slog.Any("err", err))
-		writeError(w, http.StatusInternalServerError, "internal error")
+		s.writeFailure(w, err)
+		return
+	}
+	// Only servers with the bot can have dashboard roles.
+	var others []snowflake.ID
+	for _, g := range guilds {
+		if !canManage(g) && active[g.ID] {
+			others = append(others, g.ID)
+		}
+	}
+	dashboardRoles, err := s.store.DashboardRoles(r.Context(), others)
+	if err != nil {
+		s.writeFailure(w, err)
 		return
 	}
 
-	out := make([]guildResponse, 0, len(manageable))
-	for _, g := range manageable {
-		out = append(out, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: active[g.ID]})
+	out := []guildResponse{}
+	for _, g := range guilds {
+		allowed, manager, err := canAccess(g, dashboardRoles[g.ID], func() ([]snowflake.ID, error) {
+			return s.memberRoles(r.Context(), g.ID, sess.User.ID)
+		})
+		if err != nil {
+			// Leave the server out rather than failing the whole list.
+			s.log.Warn("check dashboard role", slog.String("guild_id", g.ID.String()), slog.Any("err", err))
+			continue
+		}
+		if allowed {
+			out = append(out, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: active[g.ID], CanManage: manager})
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
-type discordGuild = discord.OAuth2Guild
-
 type guildCtxKey struct{}
 
-// requireGuild ensures the user can manage the guild in the URL and that the
-// bot is in it.
+// requireGuild ensures the user can use the dashboard for the guild in the
+// URL and that the bot is in it.
 func (s *Server) requireGuild(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, err := snowflake.Parse(chi.URLParam(r, "guildID"))
@@ -193,44 +211,42 @@ func (s *Server) requireGuild(next http.Handler) http.Handler {
 			writeError(w, http.StatusBadRequest, "invalid server id")
 			return
 		}
-		guilds, err := s.auth.Guilds(r.Context(), auth.FromContext(r.Context()))
+		acc, allowed, err := s.access(r.Context(), auth.FromContext(r.Context()), id)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, "could not load your servers from Discord")
+			s.log.Warn("check guild access", slog.Any("err", err))
+			writeError(w, http.StatusBadGateway, "could not check your access to this server with Discord")
 			return
 		}
-		for _, g := range guilds {
-			if g.ID != id || !canManage(g) {
-				continue
-			}
-			active, err := s.store.ActiveGuilds(r.Context(), []snowflake.ID{id})
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "internal error")
-				return
-			}
-			if !active[id] {
-				writeError(w, http.StatusNotFound, "the bot is not in this server")
-				return
-			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), guildCtxKey{}, g)))
+		if !allowed {
+			writeError(w, http.StatusForbidden, "you do not have access to this server")
 			return
 		}
-		writeError(w, http.StatusForbidden, "you do not have access to this server")
+		active, err := s.store.ActiveGuilds(r.Context(), []snowflake.ID{id})
+		if err != nil {
+			s.writeFailure(w, err)
+			return
+		}
+		if !active[id] {
+			writeError(w, http.StatusNotFound, "the bot is not in this server")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), guildCtxKey{}, acc)))
 	})
 }
 
 func guildFrom(r *http.Request) discord.OAuth2Guild {
-	return r.Context().Value(guildCtxKey{}).(discord.OAuth2Guild)
+	return r.Context().Value(guildCtxKey{}).(guildAccess).guild
+}
+
+// isManager reports whether the user has Manage Server (or more) in the
+// request's guild, as opposed to only a dashboard role.
+func isManager(r *http.Request) bool {
+	return r.Context().Value(guildCtxKey{}).(guildAccess).manager
 }
 
 func (s *Server) getGuild(w http.ResponseWriter, r *http.Request) {
 	g := guildFrom(r)
-	writeJSON(w, http.StatusOK, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: true})
-}
-
-// canManage reports whether the user may configure the bot in a guild.
-// TODO: also allow members holding a configured dashboard role.
-func canManage(g discord.OAuth2Guild) bool {
-	return g.Owner || g.Permissions.Has(discord.PermissionAdministrator) || g.Permissions.Has(discord.PermissionManageGuild)
+	writeJSON(w, http.StatusOK, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: true, CanManage: isManager(r)})
 }
 
 // spaHandler serves the built frontend, falling back to index.html so

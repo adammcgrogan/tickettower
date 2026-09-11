@@ -12,6 +12,7 @@ import (
 // https://discord.com/developers/docs/topics/opcodes-and-status-codes#json
 const (
 	CodeUnknownChannel     = 10003
+	CodeUnknownMember      = 10007
 	CodeUnknownMessage     = 10008
 	CodeMaxChannels        = 30013
 	CodeMissingAccess      = 50001

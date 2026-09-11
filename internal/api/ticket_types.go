@@ -106,11 +106,7 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 		}
 	}
 
-	slices.Sort(in.SupportRoleIDs)
-	in.SupportRoleIDs = slices.Compact(in.SupportRoleIDs)
-	if in.SupportRoleIDs == nil {
-		in.SupportRoleIDs = []snowflake.ID{}
-	}
+	in.SupportRoleIDs = normaliseIDs(in.SupportRoleIDs)
 	if len(in.SupportRoleIDs) > maxSupportRoles {
 		return invalid("support_role_ids", fmt.Sprintf("Choose up to %d support roles.", maxSupportRoles))
 	}

@@ -21,7 +21,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | Table | Purpose |
 |---|---|
 | `guilds` | Servers the bot is or was in (`left_at` set when removed; data kept for re-adds) |
-| `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (unused yet) |
+| `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (extra roles allowed into the dashboard) |
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
 | `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit |
 | `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
@@ -65,15 +65,16 @@ Editing a ticket type re-renders every published panel that uses it.
 **Dashboard auth.**
 1. `/api/auth/login` goes to Discord OAuth (`identify guilds`).
 2. The callback stores the session in Redis and sets an HttpOnly cookie.
-3. Access to a guild needs Owner, Administrator or Manage Server (from the OAuth guild list), plus the bot being in the guild.
-4. Transcripts (`/api/transcripts/{id}`) are also visible to the ticket's opener and to that type's support roles (checked via bot-token `GetMember`). Anyone else gets a 404, so ticket IDs can't be probed.
+3. Access to a guild needs the bot in the guild, plus either Owner, Administrator or Manage Server (from the OAuth guild list), or one of the guild's `dashboard_role_ids` (checked via bot-token `GetMember`, cached 30s). `internal/api/access.go` has the logic.
+4. Dashboard-role members can do everything except change the dashboard roles themselves; `can_manage` on the guild response tells the frontend which kind of user it has.
+5. Transcripts (`/api/transcripts/{id}`) are visible to anyone with dashboard access, the ticket's opener, and that type's support roles. Anyone else gets a 404, so ticket IDs can't be probed.
 
 ## API surface (`internal/api/server.go`)
 
 Public: `/healthz`, `/api/config`, `/api/invite`, `/api/auth/{login,callback,logout}`
 
 Authenticated: `/api/me`, `/api/guilds`, `/api/transcripts/{ticketID}`, and under `/api/guilds/{guildID}`:
-- `channels`, `roles`, `stats`, `analytics?days=7|30|90`, `tickets?status=`, `settings` (GET/PATCH)
+- `channels`, `roles`, `stats`, `analytics?days=7|30|90`, `tickets?status=`, `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
 - `ticket-types` (GET/POST), `ticket-types/{id}` (PATCH/DELETE)
 - `panels` (GET/POST), `panels/{id}` (PATCH/DELETE), `panels/{id}/publish` (POST)
 

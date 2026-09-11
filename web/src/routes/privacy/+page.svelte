@@ -52,9 +52,10 @@
 			<section>
 				<h2>Who can see it</h2>
 				<p>
-					Server data is only visible in the dashboard to people who can manage that server. A
-					transcript is visible to the member who opened the ticket, the server's managers, and the
-					ticket type's support roles.
+					Server data is only visible in the dashboard to people who can manage that server, and to
+					members with a dashboard role the server's managers have chosen. A transcript is visible to
+					the member who opened the ticket, those same dashboard users, and the ticket type's support
+					roles.
 				</p>
 			</section>
 

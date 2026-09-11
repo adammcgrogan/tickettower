@@ -7,8 +7,9 @@
 		roles,
 		value = $bindable([]),
 		id,
-		max = 10
-	}: { roles: Role[]; value: string[]; id?: string; max?: number } = $props();
+		max = 10,
+		disabled = false
+	}: { roles: Role[]; value: string[]; id?: string; max?: number; disabled?: boolean } = $props();
 
 	const selected = $derived(
 		value.map((v) => roles.find((r) => r.id === v)).filter((r): r is Role => !!r)
@@ -27,20 +28,24 @@
 				>
 					<span class="size-2 rounded-full" style="background:{dot(role)}"></span>
 					{role.name}
-					<button
-						type="button"
-						onclick={() => (value = value.filter((v) => v !== role.id))}
-						class="rounded p-0.5 text-subtle transition-colors hover:bg-border hover:text-fg"
-						aria-label="Remove {role.name}"
-					>
-						<Icon name="x" size={12} />
-					</button>
+					{#if !disabled}
+						<button
+							type="button"
+							onclick={() => (value = value.filter((v) => v !== role.id))}
+							class="rounded p-0.5 text-subtle transition-colors hover:bg-border hover:text-fg"
+							aria-label="Remove {role.name}"
+						>
+							<Icon name="x" size={12} />
+						</button>
+					{:else}
+						<span class="w-1"></span>
+					{/if}
 				</li>
 			{/each}
 		</ul>
 	{/if}
 
-	{#if value.length < max}
+	{#if value.length < max && !disabled}
 		<select
 			{id}
 			class="input"

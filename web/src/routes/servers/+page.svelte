@@ -81,7 +81,7 @@
 			<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
 				{query
 					? 'Try a different name.'
-					: 'You need the Manage Server permission in a server to set it up.'}
+					: 'You need the Manage Server permission, or a dashboard role, in a server to manage it.'}
 			</p>
 		</div>
 	{:else}

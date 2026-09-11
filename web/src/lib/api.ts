@@ -10,6 +10,13 @@ export type Guild = {
 	name: string;
 	icon_url: string | null;
 	bot_present: boolean;
+	/** False for members who only have a dashboard role. */
+	can_manage: boolean;
+};
+
+export type GuildSettings = {
+	transcript_retention_days: number | null;
+	dashboard_role_ids: string[];
 };
 
 export type Channel = {
