@@ -1,4 +1,18 @@
+import type { Ticket } from './api';
+
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+/**
+ * Who a ticket is waiting on. Staff see whose turn it is; members (on their
+ * own transcript) just see open or closed.
+ */
+export function ticketState(t: Ticket, staff = true): { label: string; tone: 'waiting' | 'default' | 'closed' } {
+	if (t.status === 'closed') return { label: 'Closed', tone: 'closed' };
+	if (!staff) return { label: 'Open', tone: 'default' };
+	return t.waiting_on_staff
+		? { label: 'Waiting on your team', tone: 'waiting' }
+		: { label: 'Waiting on the member', tone: 'default' };
+}
 
 const units: [Intl.RelativeTimeFormatUnit, number][] = [
 	['year', 31536000],
@@ -8,6 +22,12 @@ const units: [Intl.RelativeTimeFormatUnit, number][] = [
 	['hour', 3600],
 	['minute', 60]
 ];
+
+/** Describes a number of hours, e.g. "12 hours", "2 days" or "1 week". */
+export function hoursLabel(hours: number): string {
+	const [n, unit] = hours % 168 === 0 ? [hours / 168, 'week'] : hours % 24 === 0 ? [hours / 24, 'day'] : [hours, 'hour'];
+	return `${n} ${unit}${n === 1 ? '' : 's'}`;
+}
 
 /** Formats a timestamp relative to now, e.g. "3 hours ago". */
 export function timeAgo(iso: string): string {

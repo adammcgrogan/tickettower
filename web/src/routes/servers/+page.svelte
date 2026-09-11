@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { api, type Guild } from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
+	import AppHeader from '$lib/components/AppHeader.svelte';
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 
@@ -33,11 +34,13 @@
 <!-- Refresh when returning from the Discord invite tab. -->
 <svelte:window onfocus={load} />
 
+<AppHeader />
+
 <main class="mx-auto max-w-6xl px-5 py-12">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 		<div>
-			<h1 class="text-2xl font-semibold tracking-tight">Your servers</h1>
-			<p class="mt-1 text-sm text-muted">
+			<h1 class="font-display text-4xl leading-none font-bold">Your servers</h1>
+			<p class="mt-2.5 text-sm text-muted">
 				Pick a server to manage, or add {APP_NAME} to one you run.
 			</p>
 		</div>
@@ -121,7 +124,7 @@
 								<div class="mt-0.5 text-xs text-subtle">Not set up</div>
 							</div>
 							<span
-								class="rounded-md border border-border-strong px-2.5 py-1 text-xs font-medium text-muted transition-colors group-hover:border-accent group-hover:bg-accent group-hover:text-white"
+								class="rounded-md border border-border-strong px-2.5 py-1 text-xs font-medium text-muted transition-colors group-hover:border-accent group-hover:bg-accent group-hover:text-on-accent"
 							>
 								Set up
 							</span>
