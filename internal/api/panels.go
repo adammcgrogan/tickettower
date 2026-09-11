@@ -37,7 +37,7 @@ func (in panelInput) apply(p *store.Panel) {
 func (s *Server) validatePanel(ctx context.Context, guildID snowflake.ID, in *panelInput) error {
 	in.Title = strings.TrimSpace(in.Title)
 	if n := utf8.RuneCountInString(in.Title); n == 0 || n > 256 {
-		return invalid("title", "Give the panel a title of up to 256 characters.")
+		return invalid("title", "Give the message a title of up to 256 characters.")
 	}
 	in.Description = strings.TrimSpace(in.Description)
 	if utf8.RuneCountInString(in.Description) > 4000 {
@@ -50,7 +50,7 @@ func (s *Server) validatePanel(ctx context.Context, guildID snowflake.ID, in *pa
 		in.Style = store.PanelButtons
 	}
 	if in.Style != store.PanelButtons && in.Style != store.PanelDropdown {
-		return invalid("style", "Choose buttons or a dropdown.")
+		return invalid("style", "Choose buttons or a dropdown menu.")
 	}
 
 	// De-duplicate while keeping the chosen order.
@@ -64,7 +64,7 @@ func (s *Server) validatePanel(ctx context.Context, guildID snowflake.ID, in *pa
 	}
 	in.TicketTypeIDs = ids
 	if len(ids) > panels.MaxTypesPerPanel {
-		return invalid("ticket_type_ids", fmt.Sprintf("A panel can show up to %d ticket types.", panels.MaxTypesPerPanel))
+		return invalid("ticket_type_ids", fmt.Sprintf("Each message can show up to %d ticket types.", panels.MaxTypesPerPanel))
 	}
 	types, err := s.store.ListTicketTypes(ctx, guildID)
 	if err != nil {
@@ -103,7 +103,7 @@ func (s *Server) createPanel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if max := s.limits(r.Context(), g.ID).MaxPanels; count >= max {
-		s.writeFailure(w, invalid("", fmt.Sprintf("You can have up to %d panels.", max)))
+		s.writeFailure(w, invalid("", fmt.Sprintf("You can have up to %d sets of ticket buttons.", max)))
 		return
 	}
 
@@ -120,12 +120,12 @@ func (s *Server) createPanel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) loadPanel(w http.ResponseWriter, r *http.Request) (store.Panel, bool) {
 	id, ok := pathID(r, "panelID")
 	if !ok {
-		writeError(w, http.StatusNotFound, "panel not found")
+		writeError(w, http.StatusNotFound, "ticket buttons not found")
 		return store.Panel{}, false
 	}
 	p, err := s.store.GetPanel(r.Context(), guildFrom(r).ID, id)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "panel not found")
+		writeError(w, http.StatusNotFound, "ticket buttons not found")
 		return p, false
 	} else if err != nil {
 		s.writeFailure(w, err)
@@ -209,7 +209,7 @@ func (s *Server) publishPanel(w http.ResponseWriter, r *http.Request) {
 	if !slices.ContainsFunc(channels, func(c channelResponse) bool {
 		return c.ID == in.ChannelID && (c.Kind == "text" || c.Kind == "announcement")
 	}) {
-		s.writeFailure(w, invalid("channel_id", "Choose a text channel to post the panel in."))
+		s.writeFailure(w, invalid("channel_id", "Choose a text channel to post the buttons in."))
 		return
 	}
 	types, err := s.store.ListTicketTypes(r.Context(), g.ID)
@@ -218,7 +218,7 @@ func (s *Server) publishPanel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(panels.Ordered(p, types)) == 0 {
-		s.writeFailure(w, invalid("ticket_type_ids", "Add at least one ticket type to the panel before publishing."))
+		s.writeFailure(w, invalid("ticket_type_ids", "Add at least one ticket type before publishing."))
 		return
 	}
 

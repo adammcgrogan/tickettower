@@ -149,7 +149,7 @@
 				<h2 class="font-medium">Dashboard access</h2>
 				<p class="hint mt-1">
 					People with Manage Server can always use this dashboard. Add roles to let other members,
-					such as your support leads, manage tickets and panels here too.
+					such as your support leads, manage tickets and ticket buttons here too.
 				</p>
 			</div>
 			<Field

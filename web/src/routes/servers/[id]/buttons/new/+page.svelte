@@ -24,9 +24,9 @@
 </script>
 
 <PageHeader
-	title="New panel"
-	description="Design the message members will use to open tickets. The preview updates as you type."
-	back={{ href: `/servers/${guildId}/panels`, label: 'Panels' }}
+	title="New ticket buttons"
+	description="Design the message members will click to open tickets. The preview updates as you type."
+	back={{ href: `/servers/${guildId}/buttons`, label: 'Ticket buttons' }}
 />
 
 <div class="mt-6">

@@ -73,7 +73,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 
 	tt, err := b.store.GetTicketType(ctx, guildID, typeID)
 	if errors.Is(err, store.ErrNotFound) {
-		return 0, userErr("This ticket type no longer exists. Ask a server admin to update the panel.")
+		return 0, userErr("This ticket type no longer exists. Ask a server admin to update the ticket buttons.")
 	} else if err != nil {
 		return 0, err
 	}

@@ -156,7 +156,7 @@ func (b *Bot) handleOpenSelect(e *handler.ComponentEvent) error {
 	var content string
 	switch {
 	case parseErr != nil:
-		content = "This panel is out of date."
+		content = "These buttons are out of date."
 	case formErr != nil:
 		content = b.describe(formErr)
 	default:

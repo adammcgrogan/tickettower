@@ -18,8 +18,8 @@
 
 	const features = [
 		{
-			title: 'A panel in minutes',
-			body: 'Answer three questions and your first ticket panel is live, with buttons or a dropdown.'
+			title: 'Live in minutes',
+			body: 'Answer three questions and your ticket buttons are posted, as buttons or a dropdown menu.'
 		},
 		{
 			title: 'Channels or private threads',
@@ -97,7 +97,7 @@
 				</div>
 			</div>
 
-			<div class="rounded-2xl border border-border bg-surface p-2" aria-label="Example ticket panel">
+			<div class="rounded-2xl border border-border bg-surface p-2" aria-label="Example ticket buttons">
 				<PanelPreview
 					title="Need a hand?"
 					description="Pick a topic below and we'll open a private ticket for you. Our team will be with you shortly."
