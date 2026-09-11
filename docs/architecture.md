@@ -63,7 +63,7 @@ The SQL rules live in `store/autoclose.go`; the dashboard hint repeats the lead 
 
 **Feedback.** The DM rating buttons (`/rate/{ticketID}/{n}`) save the rating and swap the buttons for "Add a comment" (a modal). Only the opener can rate.
 
-**Publishing a panel.** `POST /api/guilds/{id}/panels/{panelID}/publish`:
+**Publishing a panel** (shown as "ticket buttons" in the dashboard). `POST /api/guilds/{id}/panels/{panelID}/publish`:
 - If the panel is already in that channel, edit the message in place.
 - If it moved channels, post a new message and delete the old one.
 - If the old message is gone (unknown message), post a new one.

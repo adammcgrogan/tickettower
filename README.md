@@ -4,7 +4,7 @@ A modern, open-source Discord ticket bot with a clean web dashboard. Built in Go
 
 ## Features
 
-- **Panels**: messages with buttons or a dropdown, designed in the dashboard with a live preview
+- **Ticket buttons** (called panels in the code): messages with buttons or a dropdown menu, designed in the dashboard with a live preview
 - **Ticket types**: each opens a private channel *or* a private thread, with its own support roles, naming, welcome message and per-member limit
 - **Ticket actions**: claim, close with a reason, add/remove members, rename (buttons and slash commands)
 - **Transcripts**: every ticket message is saved and viewable in a Discord-style viewer, with configurable retention

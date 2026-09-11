@@ -97,16 +97,16 @@
 			href: `${base}/ticket-types/new`
 		},
 		{
-			title: 'Design a panel',
+			title: 'Design your ticket buttons',
 			body: 'The message members click to open a ticket.',
 			done: !!panels?.length,
-			href: `${base}/panels/new`
+			href: `${base}/buttons/new`
 		},
 		{
-			title: 'Publish the panel',
-			body: 'Post it in a channel and start taking tickets.',
+			title: 'Publish them',
+			body: 'Post the buttons in a channel and start taking tickets.',
 			done: live,
-			href: panels?.length ? `${base}/panels/${panels[0].id}` : `${base}/panels`
+			href: panels?.length ? `${base}/buttons/${panels[0].id}` : `${base}/buttons`
 		}
 	]);
 	const nextStep = $derived(steps.findIndex((s) => !s.done));
@@ -142,7 +142,7 @@
 			return;
 		}
 		if (!qs.panelChannel) {
-			qsErrors = { panel_channel: 'Choose where to post the panel.' };
+			qsErrors = { panel_channel: 'Choose where to post the buttons.' };
 			return;
 		}
 
@@ -208,10 +208,10 @@
 		<div class="grid lg:grid-cols-[minmax(0,1fr)_24rem]">
 			<form onsubmit={quickSetup} class="space-y-6 p-6 sm:p-8">
 				<div>
-					<h2 class="text-lg font-semibold">Get your first panel live</h2>
+					<h2 class="text-lg font-semibold">Get your ticket buttons live</h2>
 					<p class="mt-1 max-w-lg text-sm text-muted">
-						Answer three questions and {APP_NAME} will create a ticket type and post a panel for members
-						to use. You can add support roles, questions and more afterwards.
+						Answer three questions and {APP_NAME} will create a ticket type and post buttons members can
+						click to open a ticket. You can add support roles, questions and more afterwards.
 					</p>
 				</div>
 
@@ -255,7 +255,7 @@
 				</Field>
 
 				<Field
-					label="Where should the panel go?"
+					label="Where should the buttons go?"
 					for="qs-channel"
 					hint="Usually a public channel, like #support."
 					error={qsErrors.panel_channel}
@@ -299,7 +299,7 @@
 		<section class="mt-8 rounded-xl border border-border bg-surface">
 			<div class="border-b border-border px-5 py-4">
 				<h2 class="font-semibold">Finish setting up</h2>
-				<p class="mt-0.5 text-sm text-muted">Members can open tickets once a panel is published.</p>
+				<p class="mt-0.5 text-sm text-muted">Members can open tickets once your ticket buttons are published.</p>
 			</div>
 			<ol class="divide-y divide-border">
 				{#each steps as step, i (step.title)}

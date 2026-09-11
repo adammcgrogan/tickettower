@@ -41,7 +41,7 @@ internal/panels       renders panel messages (shared by API publish + bot intera
 internal/discordx     Discord error codes → friendly messages
 internal/entitlements per-tier limits (premium-ready; everything is free today)
 web/src/lib           api.ts (types + fetch wrapper), components/, format.ts, markdown.ts, toast.svelte.ts
-web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,panels,tickets,analytics,settings},
+web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,buttons,tickets,analytics,settings},
                       /transcripts/[ticketId], /privacy
 ```
 
@@ -56,6 +56,9 @@ web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,panels,
 - Handlers use `r.Context()`; bot handlers wrap `e.Ctx` in a timeout.
 - Race-prone updates are conditional SQL that reports whether it applied (`ClaimTicket`, `CloseTicket`). Keep it that way.
 - Tests: store tests run against real Postgres (`testStore(t)` truncates). The API tests use miniredis. Add tests with new store queries.
+
+**Naming**
+- What the code calls a **panel** (the message with buttons or a dropdown that members click to open a ticket) is called **ticket buttons** everywhere people read it: the dashboard, bot replies and API error messages. The code, API routes (`/api/guilds/{id}/panels`), store and tables keep `panel`; the dashboard URL is `/servers/[id]/buttons` (old `/panels` links redirect).
 
 **Frontend**
 - Design ("dispatch desk"): ink-navy surfaces and one signal-amber accent `#f2b544` (text on it uses `on-accent`). Amber means "needs action": primary buttons and tickets waiting on the team, nothing decorative. Instrument Sans for the UI; Big Shoulders Display (`font-display`) only for page titles, big figures and ticket numbers. The one loud element is `TicketStub` (a ticket number shaped like an admission stub); keep everything around it quiet: hairline dividers rather than stacks of cards, sentence-case labels, no all-caps eyebrows, no "A · B" meta strings.

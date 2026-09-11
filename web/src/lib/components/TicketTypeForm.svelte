@@ -179,7 +179,7 @@
 			label="Description"
 			for="description"
 			optional
-			hint="Shown under the option when a panel uses a dropdown."
+			hint="Shown under the option when ticket buttons are shown as a dropdown menu."
 			error={errors.description}
 		>
 			<input

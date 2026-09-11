@@ -30,13 +30,13 @@
 </script>
 
 <PageHeader
-	title="Panels"
-	description="Messages with buttons or a dropdown that members use to open tickets."
+	title="Ticket buttons"
+	description="The messages members click to open a ticket. Post them in any channel, as buttons or a dropdown menu."
 >
 	{#snippet actions()}
 		{#if typeCount > 0}
-			<a href="/servers/{guildId}/panels/new" class="btn btn-primary">
-				<Icon name="plus" size={15} /> New panel
+			<a href="/servers/{guildId}/buttons/new" class="btn btn-primary">
+				<Icon name="plus" size={15} /> New ticket buttons
 			</a>
 		{/if}
 	{/snippet}
@@ -59,18 +59,18 @@
 			{#if typeCount === 0}
 				<p class="mt-4 font-medium">Create a ticket type first</p>
 				<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
-					Panels show your ticket types as buttons, so you'll need at least one.
+					Each button opens one of your ticket types, so you'll need at least one.
 				</p>
 				<a href="/servers/{guildId}/ticket-types/new" class="btn btn-primary mt-5">
 					<Icon name="plus" size={15} /> Create ticket type
 				</a>
 			{:else}
-				<p class="mt-4 font-medium">No panels yet</p>
+				<p class="mt-4 font-medium">No ticket buttons yet</p>
 				<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
-					Design a panel and post it in a channel so members can open tickets.
+					Design a message with buttons and post it in a channel so members can open tickets.
 				</p>
-				<a href="/servers/{guildId}/panels/new" class="btn btn-primary mt-5">
-					<Icon name="plus" size={15} /> Create panel
+				<a href="/servers/{guildId}/buttons/new" class="btn btn-primary mt-5">
+					<Icon name="plus" size={15} /> Create ticket buttons
 				</a>
 			{/if}
 		</div>
@@ -79,7 +79,7 @@
 			{#each panels as p (p.id)}
 				<li>
 					<a
-						href="/servers/{guildId}/panels/{p.id}"
+						href="/servers/{guildId}/buttons/{p.id}"
 						class="group card block overflow-hidden transition-colors hover:border-border-strong"
 					>
 						<div class="h-1" style="background:{intToHex(p.color)}"></div>
@@ -104,7 +104,7 @@
 									</span>
 								{/if}
 								<span>{p.ticket_type_ids.length} ticket type{p.ticket_type_ids.length === 1 ? '' : 's'}</span>
-								<span class="capitalize">{p.style}</span>
+								<span>{p.style === 'dropdown' ? 'Dropdown menu' : 'Buttons'}</span>
 							</div>
 						</div>
 					</a>
