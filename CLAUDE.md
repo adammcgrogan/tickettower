@@ -58,12 +58,14 @@ web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,panels,
 - Tests: store tests run against real Postgres (`testStore(t)` truncates). The API tests use miniredis. Add tests with new store queries.
 
 **Frontend**
-- Design: dark-first, minimal (Linear/Vercel feel), one accent `#7c6cff`. Use the tokens in `app.css` (`bg`, `surface`, `elevated`, `border`, `fg`, `muted`, `subtle`, `accent`, `success`, `danger`) and the component classes `.input .btn .btn-primary|secondary|ghost|danger .card .label .hint`. Don't introduce new colours.
-- Reuse the components: `PageHeader`, `Field`, `Dialog`, `Segmented`, `ChannelSelect`, `RolePicker`, `Toaster` (`toast()`), `Icon` (add paths to its map).
+- Design ("dispatch desk"): ink-navy surfaces and one signal-amber accent `#f2b544` (text on it uses `on-accent`). Amber means "needs action": primary buttons and tickets waiting on the team, nothing decorative. Instrument Sans for the UI; Big Shoulders Display (`font-display`) only for page titles, big figures and ticket numbers. The one loud element is `TicketStub` (a ticket number shaped like an admission stub); keep everything around it quiet: hairline dividers rather than stacks of cards, sentence-case labels, no all-caps eyebrows, no "A · B" meta strings.
+- Use the tokens in `app.css` (`bg`, `surface`, `elevated`, `border`, `fg`, `muted`, `subtle`, `accent`, `on-accent`, `chart`, `success`, `danger`) and the component classes `.input .btn .btn-primary|secondary|ghost|danger .card .label .hint .stub`. Don't introduce new colours. The bot's embed colour (`colorAccent` in `ticketbot/tickets.go`) matches the accent.
+- Layout: `servers/[id]/+layout.svelte` is the app shell (sidebar with server switcher; Home, Tickets, Analytics, then a Setup group). Form pages stay within `max-w-3xl`; editors put the form left and a Discord-style preview right.
+- Reuse the components: `PageHeader`, `Field`, `Dialog`, `Segmented`, `ChannelSelect`, `RolePicker`, `Toaster` (`toast()`), `Icon` (add paths to its map), `TicketStub`, `TicketSummary`, `TranscriptView`, `PanelPreview`, `WelcomePreview`. `ticketState()` in `format.ts` decides the "waiting on your team / the member" wording.
 - Every page handles loading (skeleton), empty (dashed box + CTA) and error states. Copy is plain and friendly, with no jargon.
 - Call the API with `api<T>(path, send('POST', body))`. A 401 redirects to login automatically.
 - Use `{@html}` only with `renderMarkdown` output, which escapes everything first (it uses `\u0000` placeholders; keep them as escape text, never raw NUL bytes).
-- Charts: a single series in the accent colour, with no legend, hover and focus tooltips, and a "Show as table" view. Validate any new palette with the dataviz skill's validator before using it.
+- Charts: a single series in the `chart` colour (`#c28622`, the accent stepped into the dataviz validator's dark lightness band), with no legend, hover and focus tooltips, and a "Show as table" view. Validate any new palette with the dataviz skill's validator before using it.
 - Keep `npm run check` at **0 errors and 0 warnings**.
 
 ## Gotchas
