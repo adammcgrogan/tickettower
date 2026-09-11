@@ -1,4 +1,4 @@
-# Relay
+# Ticket Tower
 
 A modern, open-source Discord ticket bot with a clean web dashboard. Built in Go and SvelteKit.
 
@@ -49,10 +49,10 @@ Tests: `TEST_DATABASE_URL=postgres://localhost:5432/relay_test?sslmode=disable m
 
 Create one project with **Postgres** and **Redis**, then two services from this repo:
 
-| Service | Dockerfile        | Notes                                     |
-|---------|-------------------|-------------------------------------------|
-| `bot`   | `Dockerfile.bot`  | No public networking needed               |
-| `api`   | `Dockerfile.api`  | Generate a domain; set `PUBLIC_URL` to it |
+| Service | Dockerfile        | Notes                                                           |
+|---------|-------------------|-----------------------------------------------------------------|
+| `bot`   | `Dockerfile.bot`  | No public networking needed                                     |
+| `api`   | `Dockerfile.api`  | Add the custom domain `tickettower.net`; set `PUBLIC_URL` to it |
 
 Set on both: `DATABASE_URL` (Railway reference to Postgres), `DISCORD_TOKEN`,
 `DISCORD_CLIENT_ID`, `PUBLIC_URL`. On the API also: `REDIS_URL`,

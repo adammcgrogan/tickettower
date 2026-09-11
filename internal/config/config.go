@@ -38,7 +38,7 @@ type Config struct {
 	DevGuildID snowflake.ID
 
 	// PublicURL is the externally reachable base URL of the dashboard,
-	// e.g. https://relay.example.com (no trailing slash).
+	// e.g. https://tickettower.net (no trailing slash).
 	PublicURL string
 	Port      string
 	StaticDir string
@@ -60,7 +60,7 @@ func Load(required ...string) (Config, error) {
 	}
 
 	cfg := Config{
-		AppName:             get("APP_NAME", "Relay"),
+		AppName:             get("APP_NAME", "Ticket Tower"),
 		Env:                 get("APP_ENV", "development"),
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
 		RedisURL:            os.Getenv("REDIS_URL"),

@@ -38,7 +38,7 @@ func newTestEnv(t *testing.T) testEnv {
 	writeFile(t, filepath.Join(root, "secret.txt"), "secret")
 
 	cfg := config.Config{
-		AppName:         "Relay",
+		AppName:         "Ticket Tower",
 		DiscordClientID: 123456789,
 		PublicURL:       "http://localhost:5173",
 		StaticDir:       static,

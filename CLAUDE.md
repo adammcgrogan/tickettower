@@ -1,8 +1,8 @@
-# Relay: Discord ticket bot + web dashboard
+# Ticket Tower: Discord ticket bot + web dashboard
 
 Open-source Discord ticket bot (a simpler, better-looking alternative to Ticket Tool / tickets.bot). The owner hosts it on Railway so anyone can add it. The bar: **professional, easy to use, sleek and modern**. Fewer options done well beats many confusing ones.
 
-Working name "Relay", configurable via `APP_NAME` (Go) and `VITE_APP_NAME` (web).
+Named "Ticket Tower" (tickettower.net), configurable via `APP_NAME` (Go) and `VITE_APP_NAME` (web).
 
 More detail: `docs/architecture.md` (how it fits together) and `docs/roadmap.md` (what's done and what's next).
 
