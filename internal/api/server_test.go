@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -182,7 +183,8 @@ func TestCallbackWithUnknownStateFails(t *testing.T) {
 func TestInviteRedirect(t *testing.T) {
 	rec := newTestEnv(t).do("GET", "/api/invite?guild_id=987654321", nil)
 	loc := rec.Header().Get("Location")
-	for _, want := range []string{"client_id=123456789", "guild_id=987654321", "permissions=", "applications.commands"} {
+	perms := "permissions=" + strconv.FormatInt(int64(config.BotPermissions), 10)
+	for _, want := range []string{"client_id=123456789", "guild_id=987654321", perms, "applications.commands"} {
 		if !strings.Contains(loc, want) {
 			t.Errorf("invite URL %q missing %q", loc, want)
 		}
