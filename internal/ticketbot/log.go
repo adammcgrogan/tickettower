@@ -28,7 +28,7 @@ func (b *Bot) logEvent(guildID snowflake.ID, msg discord.MessageCreate) {
 	}
 	// Log entries mention people for context but never ping them.
 	msg = msg.WithAllowedMentions(&discord.AllowedMentions{})
-	if _, err := b.client.Rest.CreateMessage(*st.LogChannelID, msg, rest.WithCtx(ctx)); err != nil {
+	if _, err := b.rest.CreateMessage(*st.LogChannelID, msg, rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to post to log channel", slog.String("guild_id", guildID.String()), slog.Any("err", err))
 	}
 }

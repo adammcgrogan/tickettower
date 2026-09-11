@@ -190,6 +190,14 @@ func TestTicketLifecycle(t *testing.T) {
 		t.Errorf("closed ticket = %+v", got)
 	}
 
+	// Looking a ticket up by ID is scoped to its guild.
+	if got, err := s.GetGuildTicket(ctx, testGuild, tickets[1].ID); err != nil || got.ChannelID != 7002 {
+		t.Errorf("GetGuildTicket = %+v, %v", got, err)
+	}
+	if _, err := s.GetGuildTicket(ctx, 9999, tickets[1].ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("other guild's ticket: err = %v, want ErrNotFound", err)
+	}
+
 	stats, err := s.TicketStats(ctx, testGuild)
 	if err != nil {
 		t.Fatal(err)

@@ -139,6 +139,18 @@ export type Transcript = {
 	guild: { id: string; name: string; icon_url: string | null; can_manage: boolean };
 };
 
+/**
+ * Something in a server's setup that stops tickets working. `kind` says where
+ * it's fixed: a ticket type or ticket buttons (by `id`), a ticket type that
+ * isn't on any published ticket buttons ("unlisted"), or the log channel.
+ */
+export type SetupProblem = {
+	kind: 'ticket_type' | 'panel' | 'unlisted' | 'log_channel';
+	id?: number;
+	title: string;
+	detail: string;
+};
+
 export type Stats = {
 	tickets: { open: number; opened_week: number };
 	limits: { max_panels: number; max_ticket_types: number };
@@ -227,7 +239,9 @@ export async function api<T>(
 	});
 
 	if (res.status === 401 && redirectOnUnauthorized) {
-		window.location.href = loginURL;
+		// Come back here after logging in, e.g. to a transcript linked from a DM.
+		const next = window.location.pathname + window.location.search;
+		window.location.href = `${loginURL}?next=${encodeURIComponent(next)}`;
 	}
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));

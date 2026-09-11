@@ -8,6 +8,7 @@
 		MAX_QUESTIONS,
 		send,
 		type Channel,
+		type Panel,
 		type QuestionStyle,
 		type Role,
 		type TicketMode,
@@ -82,7 +83,22 @@
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 
+	// A new ticket type can go straight onto existing ticket buttons, so it
+	// isn't forgotten. With just one set, that's the obvious choice.
+	const MAX_PANEL_TYPES = 25;
+	let panels = $state<Panel[]>([]);
+	let addTo = $state<number[]>([]);
+	const isFull = (p: Panel) => p.ticket_type_ids.length >= MAX_PANEL_TYPES;
+
 	onMount(async () => {
+		if (!initial) {
+			api<Panel[]>(`/guilds/${guildId}/panels`)
+				.then((p) => {
+					panels = p;
+					if (p.length === 1 && !isFull(p[0])) addTo = [p[0].id];
+				})
+				.catch(() => {});
+		}
 		try {
 			[channels, roles] = await Promise.all([
 				api<Channel[]>(`/guilds/${guildId}/channels`),
@@ -92,6 +108,29 @@
 			toast(errorMessage(e), 'error');
 		}
 	});
+
+	/** Adds a new ticket type to the chosen ticket buttons, returning how many failed. */
+	async function addToPanels(type: TicketType): Promise<number> {
+		let failed = 0;
+		for (const p of panels.filter((p) => addTo.includes(p.id))) {
+			try {
+				const res = await api<{ warning: string }>(
+					`/guilds/${guildId}/panels/${p.id}`,
+					send('PATCH', {
+						title: p.title,
+						description: p.description,
+						color: p.color,
+						style: p.style,
+						ticket_type_ids: [...p.ticket_type_ids, type.id]
+					})
+				);
+				if (res.warning) toast(res.warning, 'info');
+			} catch {
+				failed++;
+			}
+		}
+		return failed;
+	}
 
 	const modes: { value: TicketMode; label: string; body: string; icon: IconName }[] = [
 		{
@@ -136,8 +175,13 @@
 				toast('Ticket type saved');
 				if (res.warning) toast(res.warning, 'info');
 			} else {
-				await api<TicketType>(`/guilds/${guildId}/ticket-types`, send('POST', form));
-				toast('Ticket type created');
+				const created = await api<TicketType>(`/guilds/${guildId}/ticket-types`, send('POST', form));
+				const failed = await addToPanels(created);
+				if (failed) {
+					toast("Ticket type created, but it couldn't be added to your ticket buttons. Add it from Ticket buttons.", 'error');
+				} else {
+					toast(addTo.length ? 'Ticket type created and added to your ticket buttons' : 'Ticket type created');
+				}
 			}
 			goto(`/servers/${guildId}/ticket-types`);
 		} catch (err) {
@@ -285,7 +329,14 @@
 					: ''}. People with Manage Server always can.
 			</p>
 		</div>
-		<Field label="Support roles" for="roles" error={errors.support_role_ids}>
+		<Field
+			label="Support roles"
+			for="roles"
+			hint={form.support_role_ids.length
+				? undefined
+				: 'With no support roles, only people with Manage Server can see these tickets.'}
+			error={errors.support_role_ids}
+		>
 			<RolePicker id="roles" {roles} bind:value={form.support_role_ids} />
 		</Field>
 	</section>
@@ -442,6 +493,41 @@
 			</select>
 		</Field>
 	</section>
+
+	{#if !initial && panels.length > 0}
+		<section class="card space-y-4 p-5">
+			<div>
+				<h2 class="font-medium">Ticket buttons</h2>
+				<p class="hint mt-1">
+					Members can only open this type once it's on your ticket buttons. Published buttons update
+					in Discord straight away.
+				</p>
+			</div>
+			<ul class="space-y-2">
+				{#each panels as p (p.id)}
+					{@const full = isFull(p)}
+					<li>
+						<label class="flex items-center gap-3 text-sm {full ? 'opacity-50' : 'cursor-pointer'}">
+							<input
+								type="checkbox"
+								class="size-4 accent-accent"
+								disabled={full}
+								checked={addTo.includes(p.id)}
+								onchange={(e) =>
+									(addTo = e.currentTarget.checked
+										? [...addTo, p.id]
+										: addTo.filter((id) => id !== p.id))}
+							/>
+							<span class="min-w-0 flex-1 truncate">Add to “{p.title}”</span>
+							<span class="shrink-0 text-xs text-subtle">
+								{#if full}Full{:else if p.message_id}Published{:else}Draft{/if}
+							</span>
+						</label>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 
 	<div
 		class="sticky bottom-4 flex items-center justify-end gap-2 rounded-xl border border-border bg-surface/90 p-3 shadow-2xl shadow-black/40 backdrop-blur"

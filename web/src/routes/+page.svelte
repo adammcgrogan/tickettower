@@ -19,7 +19,7 @@
 	const features = [
 		{
 			title: 'Live in minutes',
-			body: 'Answer three questions and your ticket buttons are posted, as buttons or a dropdown menu.'
+			body: 'Answer a few questions and your ticket buttons are posted, as buttons or a dropdown menu.'
 		},
 		{
 			title: 'Channels or private threads',

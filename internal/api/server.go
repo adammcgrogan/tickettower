@@ -18,6 +18,7 @@ import (
 	"github.com/adammcgrogan/tickettower/internal/auth"
 	"github.com/adammcgrogan/tickettower/internal/config"
 	"github.com/adammcgrogan/tickettower/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/ticketbot"
 )
 
 type Server struct {
@@ -25,12 +26,21 @@ type Server struct {
 	store   *store.Store
 	auth    *auth.Manager
 	discord rest.Rest // authenticated as the bot
+	closer  *ticketbot.Closer
 	cache   *ttlCache
 	log     *slog.Logger
 }
 
 func NewServer(cfg config.Config, st *store.Store, am *auth.Manager, discordRest rest.Rest, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, store: st, auth: am, discord: discordRest, cache: newTTLCache(), log: log}
+	return &Server{
+		cfg:     cfg,
+		store:   st,
+		auth:    am,
+		discord: discordRest,
+		closer:  ticketbot.NewCloser(cfg, st, discordRest, log),
+		cache:   newTTLCache(),
+		log:     log,
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -58,8 +68,10 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/channels", s.listChannels)
 				r.Get("/roles", s.listRoles)
 				r.Get("/stats", s.getStats)
+				r.Get("/setup-check", s.getSetupCheck)
 				r.Get("/analytics", s.getAnalytics)
 				r.Get("/tickets", s.listTickets)
+				r.Post("/tickets/{ticketID}/close", s.closeTicket)
 				r.Get("/settings", s.getSettings)
 				r.Patch("/settings", s.updateSettings)
 
@@ -96,8 +108,8 @@ func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
 // preselecting a guild.
 func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
 	values := discord.QueryValues{
-		"client_id":   s.cfg.DiscordClientID,
-		"scope":       "bot applications.commands",
+		"client_id": s.cfg.DiscordClientID,
+		"scope":     "bot applications.commands",
 		// Discord wants the bitfield as a number; Permissions' String() lists names.
 		"permissions": int64(config.BotPermissions),
 	}
@@ -111,8 +123,22 @@ func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, discord.AuthorizeURL(values), http.StatusFound)
 }
 
+// login starts a Discord login. ?next= is a dashboard path to return to
+// afterwards, such as the transcript someone was trying to open.
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, s.auth.LoginURL(), http.StatusFound)
+	next := r.URL.Query().Get("next")
+	if !isLocalPath(next) {
+		next = ""
+	}
+	http.Redirect(w, r, s.auth.LoginURL(r.Context(), next), http.StatusFound)
+}
+
+// isLocalPath reports whether p is a path on this site, so redirecting to it
+// can't send anyone elsewhere ("//host" and "/\host" are other sites to a
+// browser).
+func isLocalPath(p string) bool {
+	return strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.HasPrefix(p, "/api/") &&
+		!strings.ContainsAny(p, "\\\r\n")
 }
 
 func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
@@ -122,12 +148,16 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	next := s.auth.Next(r.Context(), q.Get("state"))
 	if _, err := s.auth.Complete(r.Context(), w, q.Get("code"), q.Get("state")); err != nil {
 		s.log.Warn("login failed", slog.Any("err", err))
 		http.Redirect(w, r, "/?error=login_failed", http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/servers", http.StatusFound)
+	if !isLocalPath(next) {
+		next = "/servers"
+	}
+	http.Redirect(w, r, next, http.StatusFound)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

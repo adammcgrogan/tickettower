@@ -24,6 +24,8 @@ const (
 	cookieName    = "session"
 	sessionTTL    = 30 * 24 * time.Hour
 	guildCacheTTL = 60 * time.Second
+	// stateTTL is how long someone has to finish logging in with Discord.
+	stateTTL = 10 * time.Minute
 )
 
 var ErrNoSession = errors.New("no session")
@@ -58,12 +60,26 @@ func NewManager(clientID snowflake.ID, clientSecret, publicURL string, rdb *redi
 }
 
 // LoginURL returns the Discord authorization URL to redirect the user to.
-func (m *Manager) LoginURL() string {
-	return m.oauth.GenerateAuthorizationURL(oauth2.AuthorizationURLParams{
+// next, if not empty, is the path to return to after logging in (see Next).
+func (m *Manager) LoginURL(ctx context.Context, next string) string {
+	url, state := m.oauth.GenerateAuthorizationURLState(oauth2.AuthorizationURLParams{
 		RedirectURI: m.redirectURI,
 		Scopes:      []discord.OAuth2Scope{discord.OAuth2ScopeIdentify, discord.OAuth2ScopeGuilds},
 	})
+	if next != "" {
+		m.rdb.Set(ctx, nextKey(state), next, stateTTL)
+	}
+	return url
 }
+
+// Next returns, once, the path a login with this state should return to, or
+// "" if it didn't ask for one.
+func (m *Manager) Next(ctx context.Context, state string) string {
+	next, _ := m.rdb.GetDel(ctx, nextKey(state)).Result()
+	return next
+}
+
+func nextKey(state string) string { return "oauth_next:" + state }
 
 // Complete exchanges an OAuth2 code for a session and sets the session cookie.
 func (m *Manager) Complete(ctx context.Context, w http.ResponseWriter, code, state string) (*Session, error) {
@@ -201,7 +217,7 @@ type stateController struct {
 
 func (s *stateController) NewState(redirectURI string) string {
 	state := randomToken()
-	s.rdb.Set(context.Background(), "oauth_state:"+state, redirectURI, 10*time.Minute)
+	s.rdb.Set(context.Background(), "oauth_state:"+state, redirectURI, stateTTL)
 	return state
 }
 

@@ -62,7 +62,7 @@ func (b *Bot) warnInactive(ctx context.Context, it store.InactiveTicket, now tim
 	if !ok {
 		return
 	}
-	if _, err := b.client.Rest.CreateMessage(it.ChannelID, inactivityWarning(it), rest.WithCtx(ctx)); err != nil {
+	if _, err := b.rest.CreateMessage(it.ChannelID, inactivityWarning(it), rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to warn inactive ticket", slog.Int64("ticket_id", it.ID), slog.Any("err", err))
 		// Try again next time rather than closing without a warning.
 		if err := b.store.ClearAutoCloseWarning(ctx, it.ID); err != nil {
@@ -100,7 +100,7 @@ func (b *Bot) autoClose(ctx context.Context, it store.InactiveTicket, now time.T
 		b.log.Error("failed to load auto-closed ticket", slog.Any("err", err))
 		return
 	}
-	_, err = b.client.Rest.CreateMessage(t.ChannelID, closedMessage(t), rest.WithCtx(ctx))
+	_, err = b.rest.CreateMessage(t.ChannelID, closedMessage(t), rest.WithCtx(ctx))
 	if err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
 		b.log.Warn("failed to post auto-close message", slog.Any("err", err))
 	}

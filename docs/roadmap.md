@@ -18,6 +18,14 @@
 - Auto-close: per ticket type, close tickets after 12h–1 week without messages, but only when the team is waiting on the member. The member gets a "Still need help?" warning first (a quarter of the window ahead, at most a day), and any message or the "I still need help" button keeps it open
 - Deeper analytics: 7 days to all time (weekly or monthly buckets past 90 days), a ticket type filter, comparison with the previous period, open-now and backlog trend, a busiest-times heatmap, first response by hour, one-reply resolution, messages per ticket, tickets closed without a reply, how tickets were closed (team, member, auto-close, channel deleted; `tickets.auto_closed`), top close reasons, rating distribution, per-type performance and a team table with replies
 
+- Setup friction pass:
+  - a setup check finds missing bot permissions, deleted channels, ticket types nobody can choose and broken ticket buttons, and Home and the ticket type pages show each problem with a link to its fix
+  - tickets can be closed from the dashboard
+  - quick setup asks who handles tickets
+  - a new ticket type can go straight onto existing ticket buttons
+  - logging in from a transcript link comes back to the transcript
+  - the bot posts a welcome with a dashboard link when it's added to a server
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.

@@ -33,13 +33,38 @@ type roleResponse struct {
 	Position int          `json:"position"`
 }
 
-// guildChannels returns the guild's text, announcement and category channels.
-func (s *Server) guildChannels(ctx context.Context, guildID snowflake.ID) ([]channelResponse, error) {
+// rawChannels returns all of the guild's channels, permission overwrites
+// included.
+func (s *Server) rawChannels(ctx context.Context, guildID snowflake.ID) ([]discord.GuildChannel, error) {
 	key := "channels:" + guildID.String()
 	if v, ok := s.cache.get(key); ok {
-		return v.([]channelResponse), nil
+		return v.([]discord.GuildChannel), nil
 	}
 	channels, err := s.discord.GetGuildChannels(guildID, rest.WithCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	s.cache.set(key, channels, discordCacheTTL)
+	return channels, nil
+}
+
+// rawRoles returns all of the guild's roles, permissions included.
+func (s *Server) rawRoles(ctx context.Context, guildID snowflake.ID) ([]discord.Role, error) {
+	key := "roles:" + guildID.String()
+	if v, ok := s.cache.get(key); ok {
+		return v.([]discord.Role), nil
+	}
+	roles, err := s.discord.GetRoles(guildID, rest.WithCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	s.cache.set(key, roles, discordCacheTTL)
+	return roles, nil
+}
+
+// guildChannels returns the guild's text, announcement and category channels.
+func (s *Server) guildChannels(ctx context.Context, guildID snowflake.ID) ([]channelResponse, error) {
+	channels, err := s.rawChannels(ctx, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -59,18 +84,13 @@ func (s *Server) guildChannels(ctx context.Context, guildID snowflake.ID) ([]cha
 		out = append(out, channelResponse{ID: c.ID(), Name: c.Name(), Kind: kind, ParentID: c.ParentID(), Position: c.Position()})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Position < out[j].Position })
-	s.cache.set(key, out, discordCacheTTL)
 	return out, nil
 }
 
 // guildRoles returns roles that can be assigned as support roles, highest
 // first. @everyone and integration-managed roles are excluded.
 func (s *Server) guildRoles(ctx context.Context, guildID snowflake.ID) ([]roleResponse, error) {
-	key := "roles:" + guildID.String()
-	if v, ok := s.cache.get(key); ok {
-		return v.([]roleResponse), nil
-	}
-	roles, err := s.discord.GetRoles(guildID, rest.WithCtx(ctx))
+	roles, err := s.rawRoles(ctx, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +102,6 @@ func (s *Server) guildRoles(ctx context.Context, guildID snowflake.ID) ([]roleRe
 		out = append(out, roleResponse{ID: r.ID, Name: r.Name, Color: r.Color, Position: r.Position})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Position > out[j].Position })
-	s.cache.set(key, out, discordCacheTTL)
 	return out, nil
 }
 

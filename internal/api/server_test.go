@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -163,6 +164,30 @@ func TestLoginRedirectStoresState(t *testing.T) {
 	}
 	if keys := env.redis.Keys(); len(keys) != 1 || !strings.HasPrefix(keys[0], "oauth_state:") {
 		t.Errorf("redis keys = %v, want one oauth_state key", keys)
+	}
+}
+
+func TestLoginRemembersWhereToReturn(t *testing.T) {
+	env := newTestEnv(t)
+	env.do("GET", "/api/auth/login?next=%2Ftranscripts%2F42", nil)
+	var next string
+	for _, k := range env.redis.Keys() {
+		if strings.HasPrefix(k, "oauth_next:") {
+			next, _ = env.redis.Get(k)
+		}
+	}
+	if next != "/transcripts/42" {
+		t.Errorf("stored next = %q, want /transcripts/42", next)
+	}
+}
+
+func TestLoginIgnoresOffsiteNext(t *testing.T) {
+	for _, next := range []string{"https://evil.test", "//evil.test", "/\\evil.test", "evil", "/api/auth/logout"} {
+		env := newTestEnv(t)
+		env.do("GET", "/api/auth/login?next="+url.QueryEscape(next), nil)
+		if keys := env.redis.Keys(); len(keys) != 1 {
+			t.Errorf("next=%q stored keys %v, want only the state", next, keys)
+		}
 	}
 }
 
