@@ -31,7 +31,8 @@
 	}: { guildId: string; initial?: Panel; types: TicketType[]; channels: Channel[] } = $props();
 
 	const MAX_TYPES = 25;
-	const swatches = [0x7c6cff, 0x5865f2, 0x3ecf8e, 0xf5c542, 0xf97316, 0xf0616d, 0xec4899, 0x5d5d66];
+	// Embed colours for the panel in Discord, starting with Relay's amber.
+	const swatches = [0xf2b544, 0x5865f2, 0x3ecf8e, 0x38bdf8, 0xf97316, 0xf0616d, 0xec4899, 0x66738a];
 	const styles: { value: PanelStyle; label: string }[] = [
 		{ value: 'buttons', label: 'Buttons' },
 		{ value: 'dropdown', label: 'Dropdown' }
@@ -54,7 +55,7 @@
 						title: 'Need a hand?',
 						description:
 							"Pick a topic below and we'll open a private ticket for you. Our team will be with you shortly.",
-						color: 0x7c6cff,
+						color: 0xf2b544,
 						style: 'buttons',
 						ticket_type_ids: types.slice(0, MAX_TYPES).map((t) => t.id)
 					}
@@ -319,8 +320,8 @@
 		</div>
 	</form>
 
-	<aside class="lg:sticky lg:top-20 lg:self-start">
-		<div class="mb-2 text-xs font-medium tracking-wide text-subtle uppercase">Preview</div>
+	<aside class="lg:sticky lg:top-6 lg:self-start">
+		<p class="mb-3 text-sm text-muted">What members will see</p>
 		<PanelPreview
 			title={form.title}
 			description={form.description}
