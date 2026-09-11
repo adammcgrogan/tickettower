@@ -1,4 +1,4 @@
-module github.com/adammcgrogan/ticketsbot
+module github.com/adammcgrogan/tickettower
 
 go 1.26.0
 

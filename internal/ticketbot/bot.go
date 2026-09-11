@@ -17,9 +17,9 @@ import (
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/disgoorg/snowflake/v2"
 
-	"github.com/adammcgrogan/ticketsbot/internal/config"
-	"github.com/adammcgrogan/ticketsbot/internal/panels"
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/config"
+	"github.com/adammcgrogan/tickettower/internal/panels"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 type Bot struct {

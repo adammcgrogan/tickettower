@@ -13,11 +13,11 @@ import (
 	"github.com/disgoorg/disgo/rest"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/adammcgrogan/ticketsbot/internal/api"
-	"github.com/adammcgrogan/ticketsbot/internal/auth"
-	"github.com/adammcgrogan/ticketsbot/internal/config"
-	"github.com/adammcgrogan/ticketsbot/internal/logging"
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/api"
+	"github.com/adammcgrogan/tickettower/internal/auth"
+	"github.com/adammcgrogan/tickettower/internal/config"
+	"github.com/adammcgrogan/tickettower/internal/logging"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 // logEvent posts a ticket event to the guild's log channel, if it has one.

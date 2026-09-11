@@ -13,7 +13,7 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/adammcgrogan/ticketsbot/internal/discordx"
+	"github.com/adammcgrogan/tickettower/internal/discordx"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

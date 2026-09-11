@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/adammcgrogan/ticketsbot/internal/config"
+	"github.com/adammcgrogan/tickettower/internal/config"
 )
 
 // New returns a text logger in development and a JSON logger in production,

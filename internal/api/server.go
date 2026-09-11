@@ -15,9 +15,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/adammcgrogan/ticketsbot/internal/auth"
-	"github.com/adammcgrogan/ticketsbot/internal/config"
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/auth"
+	"github.com/adammcgrogan/tickettower/internal/config"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 type Server struct {

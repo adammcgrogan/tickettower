@@ -8,7 +8,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 var retentionOptions = []int{7, 30, 90, 180, 365}

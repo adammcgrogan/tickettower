@@ -2,7 +2,7 @@
 	import { APP_NAME } from '$lib/brand';
 	import Logo from '$lib/components/Logo.svelte';
 
-	const GITHUB_URL = 'https://github.com/adammcgrogan/ticketsbot';
+	const GITHUB_URL = 'https://github.com/adammcgrogan/tickettower';
 </script>
 
 <svelte:head><title>Privacy · {APP_NAME}</title></svelte:head>

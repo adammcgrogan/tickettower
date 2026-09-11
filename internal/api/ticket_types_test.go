@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adammcgrogan/ticketsbot/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 func TestValidateQuestions(t *testing.T) {
