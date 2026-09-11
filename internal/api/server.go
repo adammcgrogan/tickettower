@@ -98,7 +98,8 @@ func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
 	values := discord.QueryValues{
 		"client_id":   s.cfg.DiscordClientID,
 		"scope":       "bot applications.commands",
-		"permissions": config.BotPermissions,
+		// Discord wants the bitfield as a number; Permissions' String() lists names.
+		"permissions": int64(config.BotPermissions),
 	}
 	if id, err := snowflake.Parse(r.URL.Query().Get("guild_id")); err == nil {
 		values["guild_id"] = id
