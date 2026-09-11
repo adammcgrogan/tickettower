@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
@@ -66,7 +67,8 @@ func (b *Bot) lockMember(guildID, userID snowflake.ID) func() {
 }
 
 // openTicket creates a ticket channel or thread for user and returns its ID.
-func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord.User, typeID int64) (snowflake.ID, error) {
+// form holds the member's answers if the type has questions.
+func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord.User, typeID int64, form *formSubmission) (snowflake.ID, error) {
 	defer b.lockMember(guildID, user.ID)()
 
 	tt, err := b.store.GetTicketType(ctx, guildID, typeID)
@@ -80,11 +82,15 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	if err != nil {
 		return 0, err
 	}
-	if len(open) >= tt.MaxOpenPerUser {
-		return 0, userErr("You already have an open %s ticket: %s", tt.Name, discord.ChannelMention(open[len(open)-1]))
+	if err := limitErr(tt, open); err != nil {
+		return 0, err
 	}
 	if tt.Mode == store.ModeThread && tt.ParentID == nil {
 		return 0, userErr("This ticket type isn't set up yet. Ask a server admin to choose a channel for it.")
+	}
+	answers, err := formAnswers(tt, form)
+	if err != nil {
+		return 0, err
 	}
 
 	number, err := b.store.NextTicketNumber(ctx, guildID)
@@ -144,13 +150,22 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	// captured in the transcript.
 	b.tickets.put(store.TicketRef{ID: ticket.ID, ChannelID: channelID, OpenerID: user.ID})
 
-	if _, err := b.client.Rest.CreateMessage(channelID, welcomeMessage(ticket, tt), rest.WithCtx(ctx)); err != nil {
+	if _, err := b.client.Rest.CreateMessage(channelID, welcomeMessage(ticket, tt, answers), rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to send welcome message", slog.Any("err", err))
 	}
 	go b.logEvent(guildID, openedLog(ticket))
 	b.log.Info("ticket opened",
 		slog.String("guild_id", guildID.String()), slog.Int("number", number), slog.String("mode", string(tt.Mode)))
 	return channelID, nil
+}
+
+// limitErr reports whether a member already has as many open tickets of a
+// type as they're allowed.
+func limitErr(tt store.TicketType, open []snowflake.ID) error {
+	if len(open) >= tt.MaxOpenPerUser {
+		return userErr("You already have an open %s ticket: %s", tt.Name, discord.ChannelMention(open[len(open)-1]))
+	}
+	return nil
 }
 
 func channelOverwrites(guildID, botID, openerID snowflake.ID, supportRoles []snowflake.ID) []discord.PermissionOverwrite {
@@ -183,7 +198,10 @@ func channelName(format string, number int, user discord.User) string {
 	return name
 }
 
-func welcomeMessage(t store.Ticket, tt store.TicketType) discord.MessageCreate {
+// embedLimit is Discord's cap on the total text in a message's embeds.
+const embedLimit = 6000
+
+func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer) discord.MessageCreate {
 	text := tt.WelcomeMessage
 	if strings.TrimSpace(text) == "" {
 		text = defaultWelcome
@@ -196,11 +214,24 @@ func welcomeMessage(t store.Ticket, tt store.TicketType) discord.MessageCreate {
 		mentions = append(mentions, discord.RoleMention(id))
 	}
 
+	title := fmt.Sprintf("%s · #%d", tt.Name, t.Number)
+	const footer = "Staff can claim this ticket. Either side can close it when you're done."
 	embed := discord.NewEmbed().
-		WithTitle(fmt.Sprintf("%s · #%d", tt.Name, t.Number)).
-		WithDescription(text).
+		WithTitle(title).
 		WithColor(colorAccent).
-		WithFooterText("Staff can claim this ticket. Either side can close it when you're done.")
+		WithFooterText(footer)
+
+	budget := embedLimit - utf8.RuneCountInString(title) - utf8.RuneCountInString(footer)
+	for _, a := range answers {
+		value := a.answer
+		if strings.TrimSpace(value) == "" {
+			value = "*No answer*"
+		}
+		embed = embed.AddField(a.question, value, false)
+		budget -= utf8.RuneCountInString(a.question) + utf8.RuneCountInString(value)
+	}
+	// Long answers win over a long welcome message if both can't fit.
+	embed = embed.WithDescription(truncate(text, budget))
 
 	return discord.NewMessageCreate().
 		WithContent(strings.Join(mentions, " ")).

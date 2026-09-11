@@ -44,14 +44,35 @@ func TestTicketTypeCRUD(t *testing.T) {
 	if got.Name != "Billing" || got.Mode != ModeChannel || *got.ParentID != 555 || !slices.Equal(got.SupportRoleIDs, []snowflake.ID{10, 20}) {
 		t.Errorf("round trip mismatch: %+v", got)
 	}
+	if got.Questions == nil || len(got.Questions) != 0 {
+		t.Errorf("questions default = %#v, want empty", got.Questions)
+	}
 
-	got.Name, got.Mode, got.ParentID, got.SupportRoleIDs = "Payments", ModeThread, nil, nil
+	questions := []Question{
+		{Label: "Order number", Placeholder: "#1234", Style: QuestionShort, Required: true},
+		{Label: "What happened?", Style: QuestionParagraph},
+	}
+	got.Name, got.Mode, got.ParentID, got.SupportRoleIDs, got.Questions = "Payments", ModeThread, nil, nil, questions
 	if err := s.UpdateTicketType(ctx, got); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.GetTicketType(ctx, testGuild, tt.ID)
 	if got.Name != "Payments" || got.Mode != ModeThread || got.ParentID != nil || len(got.SupportRoleIDs) != 0 {
 		t.Errorf("update mismatch: %+v", got)
+	}
+	if !slices.Equal(got.Questions, questions) {
+		t.Errorf("questions = %+v, want %+v", got.Questions, questions)
+	}
+
+	// Clearing the questions stores an empty list, not JSON null.
+	got.Questions = nil
+	if err := s.UpdateTicketType(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	s.pool.QueryRow(ctx, `SELECT questions::text FROM ticket_types WHERE id = $1`, tt.ID).Scan(&raw)
+	if raw != "[]" {
+		t.Errorf("stored questions = %s, want []", raw)
 	}
 
 	// Another guild can't see or delete it.

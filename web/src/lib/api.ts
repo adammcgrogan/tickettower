@@ -37,6 +37,18 @@ export type Role = {
 
 export type TicketMode = 'channel' | 'thread';
 
+export type QuestionStyle = 'short' | 'paragraph';
+
+/** A question asked when a member opens a ticket. */
+export type Question = {
+	label: string;
+	placeholder: string;
+	style: QuestionStyle;
+	required: boolean;
+};
+
+export const MAX_QUESTIONS = 5;
+
 export type TicketType = {
 	id: number;
 	guild_id: string;
@@ -49,6 +61,7 @@ export type TicketType = {
 	name_format: string;
 	welcome_message: string;
 	max_open_per_user: number;
+	questions: Question[];
 	created_at: string;
 };
 

@@ -33,7 +33,8 @@ cd web && npm run check && npm run build
 internal/config       env config, BotPermissions
 internal/store        all SQL. One file per area (guilds, settings, ticket_types, panels, tickets, transcripts, analytics)
 internal/ticketbot    bot: bot.go (wiring/events), tickets.go (ticket logic), commands.go (slash/buttons),
-                      transcripts.go (message capture, retention), feedback.go (ratings), log.go (log channel)
+                      transcripts.go (message capture, retention), feedback.go (ratings), log.go (log channel),
+                      forms.go (pre-ticket question modals)
 internal/api          HTTP handlers; server.go has all routes, access.go decides who can use a guild's dashboard
 internal/auth         Discord OAuth2 + Redis sessions
 internal/panels       renders panel messages (shared by API publish + bot interaction IDs)
@@ -73,4 +74,5 @@ web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,panels,
 - **Single shard assumed**: `onGuildsReady` reconciliation, the in-memory `ticketCache` and the `openLocks` all assume one bot process.
 - **Slash commands:** with `DEV_GUILD_ID` set they register to that guild instantly; without it they register globally.
 - The API calls Discord with the bot token (publishing panels, listing channels/roles, `GetMember`), so both services need `DISCORD_TOKEN`.
-- Discord's own limits: 25 buttons per message (5×5), 25 select options, 500 channels per server, 2 channel renames per 10 minutes.
+- Discord's own limits: 25 buttons per message (5×5), 25 select options, 500 channels per server, 2 channel renames per 10 minutes, 5 inputs per modal (45-character labels), 6,000 characters across a message's embeds. Form limits live in `store` (`MaxQuestions` etc.) and are sized so five answers plus the welcome message fit one embed.
+- A modal must be the first response to an interaction, within 3 seconds, so the form lookup in `formFor` runs before anything is deferred.

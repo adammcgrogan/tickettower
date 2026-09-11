@@ -25,7 +25,7 @@
 				<ul class="space-y-1">
 					<li><strong class="text-fg">Servers:</strong> the ID, name and icon of servers the bot is in, plus the settings you configure in the dashboard.</li>
 					<li><strong class="text-fg">Tickets:</strong> who opened, claimed and closed each ticket, when, its type, and any close reason.</li>
-					<li><strong class="text-fg">Transcripts:</strong> messages sent inside ticket channels and threads, including author names, avatars and attachment links. Messages outside tickets are never stored.</li>
+					<li><strong class="text-fg">Transcripts:</strong> messages sent inside ticket channels and threads, including author names, avatars and attachment links, and answers to any questions asked when the ticket was opened. Messages outside tickets are never stored.</li>
 					<li><strong class="text-fg">Feedback:</strong> ratings and comments members choose to leave after a ticket closes.</li>
 					<li><strong class="text-fg">Dashboard logins:</strong> your Discord user ID, name and avatar, and a session token, for as long as you stay logged in.</li>
 				</ul>

@@ -8,10 +8,17 @@ import (
 )
 
 type Embed struct {
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
-	Color       int    `json:"color,omitempty"`
-	Footer      string `json:"footer,omitempty"`
+	Title       string       `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Color       int          `json:"color,omitempty"`
+	Footer      string       `json:"footer,omitempty"`
+	Fields      []EmbedField `json:"fields,omitempty"`
+}
+
+// EmbedField holds, for example, a form answer in a ticket's welcome message.
+type EmbedField struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type Attachment struct {

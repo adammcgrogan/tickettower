@@ -30,6 +30,7 @@ type ticketTypeInput struct {
 	NameFormat     string           `json:"name_format"`
 	WelcomeMessage string           `json:"welcome_message"`
 	MaxOpenPerUser int              `json:"max_open_per_user"`
+	Questions      []store.Question `json:"questions"`
 }
 
 func (in ticketTypeInput) apply(t *store.TicketType) {
@@ -42,6 +43,33 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.NameFormat = in.NameFormat
 	t.WelcomeMessage = in.WelcomeMessage
 	t.MaxOpenPerUser = in.MaxOpenPerUser
+	t.Questions = in.Questions
+}
+
+// validateQuestions normalises a ticket type's form questions.
+func validateQuestions(qs []store.Question) ([]store.Question, error) {
+	if len(qs) > store.MaxQuestions {
+		return nil, invalid("questions", fmt.Sprintf("Add up to %d questions.", store.MaxQuestions))
+	}
+	out := make([]store.Question, len(qs))
+	for i, q := range qs {
+		q.Label = strings.TrimSpace(q.Label)
+		if n := utf8.RuneCountInString(q.Label); n == 0 || n > store.MaxQuestionLabel {
+			return nil, invalid("questions", fmt.Sprintf("Question %d needs a question of up to %d characters.", i+1, store.MaxQuestionLabel))
+		}
+		q.Placeholder = strings.TrimSpace(q.Placeholder)
+		if utf8.RuneCountInString(q.Placeholder) > store.MaxQuestionHint {
+			return nil, invalid("questions", fmt.Sprintf("Keep the placeholder for question %d to %d characters or fewer.", i+1, store.MaxQuestionHint))
+		}
+		if q.Style == "" {
+			q.Style = store.QuestionShort
+		}
+		if q.Style != store.QuestionShort && q.Style != store.QuestionParagraph {
+			return nil, invalid("questions", fmt.Sprintf("Choose a short answer or a paragraph for question %d.", i+1))
+		}
+		out[i] = q
+	}
+	return out, nil
 }
 
 // validateTicketType normalises the input and checks it against the guild's
@@ -79,6 +107,11 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	if in.MaxOpenPerUser < 1 || in.MaxOpenPerUser > 10 {
 		return invalid("max_open_per_user", "Set a limit between 1 and 10.")
 	}
+	questions, err := validateQuestions(in.Questions)
+	if err != nil {
+		return err
+	}
+	in.Questions = questions
 
 	if in.ParentID != nil && *in.ParentID == 0 {
 		in.ParentID = nil
