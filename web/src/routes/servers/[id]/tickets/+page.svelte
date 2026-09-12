@@ -182,6 +182,15 @@
 
 	// --- Closing from the dashboard ---
 
+	/** Updates the list for a ticket that just closed. */
+	function showClosed(updated: Ticket) {
+		if (!tickets) return;
+		tickets =
+			filter === 'open'
+				? tickets.filter((x) => x.id !== updated.id)
+				: tickets.map((x) => (x.id === updated.id ? updated : x));
+	}
+
 	let closeOpen = $state(false);
 	let closeReason = $state('');
 	let closeError = $state('');
@@ -205,12 +214,7 @@
 			);
 			detail = { ...detail, ticket: updated };
 			closedCache.set(t.id, detail);
-			if (tickets) {
-				tickets =
-					filter === 'open'
-						? tickets.filter((x) => x.id !== t.id)
-						: tickets.map((x) => (x.id === t.id ? updated : x));
-			}
+			showClosed(updated);
 			closeOpen = false;
 			toast(`Ticket #${t.number} closed`);
 		} catch (e) {
@@ -254,10 +258,26 @@
 			if (tickets) tickets = tickets.map((x) => (x.id === t.id ? res.ticket : x));
 			reply = '';
 		} catch (err) {
-			if (err instanceof ApiError && err.field) replyError = err.message;
+			if (err instanceof ApiError && err.status === 409) {
+				// The channel was deleted in Discord, and the ticket closed.
+				toast(err.message, 'info');
+				await refreshClosed(t.id);
+			} else if (err instanceof ApiError && err.field) replyError = err.message;
 			else toast(errorMessage(err), 'error');
 		} finally {
 			sending = false;
+		}
+	}
+
+	async function refreshClosed(id: number) {
+		try {
+			const d = await api<Transcript>(`/transcripts/${id}`);
+			closedCache.set(id, d);
+			if (detail?.ticket.id === id) detail = d;
+			showClosed(d.ticket);
+			reply = '';
+		} catch {
+			// The toast has already explained; the list catches up on reload.
 		}
 	}
 

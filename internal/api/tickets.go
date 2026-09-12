@@ -10,6 +10,7 @@ import (
 
 	"github.com/adammcgrogan/tickettower/internal/auth"
 	"github.com/adammcgrogan/tickettower/internal/store"
+	"github.com/adammcgrogan/tickettower/internal/ticketbot"
 )
 
 // maxReply is Discord's limit on the text of a message.
@@ -113,7 +114,10 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request) {
 		name, avatar = m.EffectiveName(), m.EffectiveAvatarURL()
 	}
 	msg, err := s.dashboard.Reply(r.Context(), t, user.ID, name, avatar, in.Content)
-	if err != nil {
+	if errors.Is(err, ticketbot.ErrChannelDeleted) {
+		writeError(w, http.StatusConflict, "This ticket's channel was deleted in Discord, so the ticket has been closed.")
+		return
+	} else if err != nil {
 		s.writeFailure(w, err)
 		return
 	}
