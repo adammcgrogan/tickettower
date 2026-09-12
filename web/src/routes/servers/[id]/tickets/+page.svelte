@@ -228,6 +228,54 @@
 		}
 	}
 
+	// --- Moving to another ticket type ---
+
+	let moveOpen = $state(false);
+	let moveTo = $state('');
+	let moveError = $state('');
+	let moving = $state(false);
+
+	// Tickets can only move between types that open the same way.
+	const moveTargets = $derived.by(() => {
+		const t = detail?.ticket;
+		return t ? types.filter((tt) => tt.mode === t.mode && tt.id !== t.ticket_type_id) : [];
+	});
+
+	function openMove() {
+		moveTo = moveTargets.length === 1 ? String(moveTargets[0].id) : '';
+		moveError = '';
+		moveOpen = true;
+	}
+
+	async function moveTicket() {
+		if (!detail || !moveTo) return;
+		const t = detail.ticket;
+		moving = true;
+		moveError = '';
+		try {
+			const updated = await api<Ticket>(
+				`/guilds/${guild.id}/tickets/${t.id}/move`,
+				send('POST', { type_id: Number(moveTo) })
+			);
+			if (detail?.ticket.id === t.id) detail = { ...detail, ticket: updated };
+			if (tickets) tickets = tickets.map((x) => (x.id === t.id ? updated : x));
+			moveOpen = false;
+			toast(`Ticket #${t.number} moved to ${updated.type_name}`);
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				moveOpen = false;
+				toast(err.message, 'info');
+				await refreshClosed(t.id);
+			} else if (err instanceof ApiError && err.field) moveError = err.message;
+			else {
+				moveOpen = false;
+				toast(errorMessage(err), 'error');
+			}
+		} finally {
+			moving = false;
+		}
+	}
+
 	// --- Replying from the dashboard ---
 
 	let reply = $state('');
@@ -423,6 +471,11 @@
 							>
 								Open in Discord <Icon name="external" size={13} />
 							</a>
+							{#if moveTargets.length > 0}
+								<button class="btn btn-secondary h-8 px-3" onclick={openMove}>
+									<Icon name="arrow-right" size={13} /> Move
+								</button>
+							{/if}
 							<button class="btn btn-secondary h-8 px-3" onclick={openClose}>
 								<Icon name="lock" size={13} /> Close ticket
 							</button>
@@ -470,6 +523,34 @@
 		{/if}
 	</div>
 </div>
+
+<Dialog
+	bind:open={moveOpen}
+	title="Move ticket #{detail?.ticket.number ?? ''}"
+	description="It moves to the new type's support team{detail?.ticket.mode === 'channel'
+		? ' and category'
+		: ''}, and a note in the ticket lets everyone know."
+>
+	<Field
+		label="Ticket type"
+		for="move-to"
+		hint="Tickets can only move to types that also open as {detail?.ticket.mode === 'thread'
+			? 'private threads'
+			: 'private channels'}."
+		error={moveError}
+	>
+		<select id="move-to" class="input" bind:value={moveTo} aria-invalid={!!moveError}>
+			<option value="" disabled>Choose a ticket type</option>
+			{#each moveTargets as tt (tt.id)}<option value={String(tt.id)}>{tt.name}</option>{/each}
+		</select>
+	</Field>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (moveOpen = false)}>Cancel</button>
+		<button class="btn btn-primary" onclick={moveTicket} disabled={moving || !moveTo}>
+			{moving ? 'Moving…' : 'Move ticket'}
+		</button>
+	{/snippet}
+</Dialog>
 
 <Dialog
 	bind:open={closeOpen}

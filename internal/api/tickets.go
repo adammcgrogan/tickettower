@@ -78,6 +78,35 @@ func (s *Server) closeTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
+type moveTicketInput struct {
+	TypeID int64 `json:"type_id"`
+}
+
+// moveTicket moves a ticket to another ticket type, as /ticket move does.
+func (s *Server) moveTicket(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.guildTicket(w, r)
+	if !ok {
+		return
+	}
+	var in moveTicketInput
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	user := auth.FromContext(r.Context()).User
+	t, err := s.dashboard.Move(r.Context(), t, in.TypeID, user.ID)
+	if errors.Is(err, ticketbot.ErrChannelDeleted) {
+		writeError(w, http.StatusConflict, "This ticket's channel was deleted in Discord, so the ticket has been closed.")
+		return
+	} else if msg, ok := ticketbot.UserMessage(err); ok {
+		s.writeFailure(w, invalid("type_id", msg))
+		return
+	} else if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
 type replyInput struct {
 	Content string `json:"content"`
 }

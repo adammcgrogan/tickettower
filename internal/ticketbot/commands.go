@@ -62,6 +62,18 @@ var commands = []discord.ApplicationCommandCreate{
 				},
 			},
 			discord.ApplicationCommandOptionSubCommand{
+				Name:        "move",
+				Description: "Move this ticket to another ticket type",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionString{
+						Name:         "type",
+						Description:  "The ticket type to move it to",
+						Required:     true,
+						Autocomplete: true,
+					},
+				},
+			},
+			discord.ApplicationCommandOptionSubCommand{
 				Name:        "rename",
 				Description: "Rename this ticket",
 				Options: []discord.ApplicationCommandOption{
