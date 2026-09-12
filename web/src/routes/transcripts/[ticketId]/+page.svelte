@@ -63,7 +63,13 @@
 			{/snippet}
 		</TicketSummary>
 		<div class="mt-4">
-			<TranscriptView messages={data.messages} openerId={t.opener_id} openerName={t.opener_name} />
+			<TranscriptView
+				messages={data.messages}
+				openerId={t.opener_id}
+				openerName={t.opener_name}
+				roles={data.roles}
+				channels={data.channels}
+			/>
 		</div>
 		<p class="mt-3 text-center text-xs text-subtle">
 			Attachment links are hosted by Discord and may stop working after a while.

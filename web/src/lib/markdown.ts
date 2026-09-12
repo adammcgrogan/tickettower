@@ -24,7 +24,8 @@ const link = (url: string, text: string) =>
 export function renderMarkdown(
 	src: string,
 	users: Map<string, string> = new Map(),
-	roles: Map<string, string> = new Map()
+	roles: Map<string, string> = new Map(),
+	channels: Map<string, string> = new Map()
 ): string {
 	const stash: string[] = [];
 	const keep = (html: string) => `\u0000${stash.push(html) - 1}\u0000`;
@@ -41,9 +42,11 @@ export function renderMarkdown(
 			keep(`<span class="md-mention">@${escapeHTML(users.get(id) ?? 'unknown-user')}</span>`)
 		)
 		.replace(/&lt;@&amp;(\d+)&gt;/g, (_, id: string) =>
-			keep(`<span class="md-mention">@${escapeHTML(roles.get(id) ?? 'role')}</span>`)
+			keep(`<span class="md-mention">@${escapeHTML(roles.get(id) ?? 'deleted-role')}</span>`)
 		)
-		.replace(/&lt;#\d+&gt;/g, () => keep('<span class="md-mention">#channel</span>'))
+		.replace(/&lt;#(\d+)&gt;/g, (_, id: string) =>
+			keep(`<span class="md-mention">#${escapeHTML(channels.get(id) ?? 'deleted-channel')}</span>`)
+		)
 		.replace(/&lt;a?:(\w+):\d+&gt;/g, ':$1:')
 		.replace(/&lt;t:(\d+)(?::[a-zA-Z])?&gt;/g, (_, ts: string) =>
 			keep(`<span class="md-code">${escapeHTML(new Date(Number(ts) * 1000).toLocaleString())}</span>`)

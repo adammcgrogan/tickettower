@@ -22,3 +22,25 @@ func TestCapturedMessageTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthorNameUsesServerNickname(t *testing.T) {
+	global := "Adam"
+	user := discord.User{Username: "adam", GlobalName: &global}
+	nick := "Adam (Support)"
+	blank := "  "
+	tests := []struct {
+		name   string
+		member *discord.Member
+		want   string
+	}{
+		{"nickname", &discord.Member{Nick: &nick}, "Adam (Support)"},
+		{"no nickname", &discord.Member{}, "Adam"},
+		{"blank nickname", &discord.Member{Nick: &blank}, "Adam"},
+		{"no member (a DM or webhook)", nil, "Adam"},
+	}
+	for _, tt := range tests {
+		if got := authorName(discord.Message{Author: user, Member: tt.member}); got != tt.want {
+			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

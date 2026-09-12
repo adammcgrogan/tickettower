@@ -3,6 +3,7 @@ package ticketbot
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -146,7 +147,7 @@ func toTicketMessage(ticketID int64, m discord.Message) store.TicketMessage {
 		ID:           m.ID,
 		TicketID:     ticketID,
 		AuthorID:     m.Author.ID,
-		AuthorName:   m.Author.EffectiveName(),
+		AuthorName:   authorName(m),
 		AuthorAvatar: m.Author.EffectiveAvatarURL(),
 		AuthorBot:    m.Author.Bot,
 		Content:      m.Content,
@@ -161,6 +162,16 @@ func toTicketMessage(ticketID int64, m discord.Message) store.TicketMessage {
 		out.Attachments = append(out.Attachments, att)
 	}
 	return out
+}
+
+// authorName is the name people saw in the server: the author's nickname
+// there if they have one, otherwise their display name. Gateway messages
+// carry a partial member (no user), so the nickname is read directly.
+func authorName(m discord.Message) string {
+	if m.Member != nil && m.Member.Nick != nil && strings.TrimSpace(*m.Member.Nick) != "" {
+		return *m.Member.Nick
+	}
+	return m.Author.EffectiveName()
 }
 
 func toEmbeds(in []discord.Embed) []store.Embed {

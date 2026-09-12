@@ -152,6 +152,9 @@ export type Transcript = {
 	messages: TranscriptMessage[];
 	/** can_manage means the viewer has dashboard access to the server. */
 	guild: { id: string; name: string; icon_url: string | null; can_manage: boolean };
+	/** Current role and channel names by ID, for showing mentions. */
+	roles: Record<string, string>;
+	channels: Record<string, string>;
 };
 
 /**

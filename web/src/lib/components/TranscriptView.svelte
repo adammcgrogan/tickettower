@@ -8,14 +8,26 @@
 	let {
 		messages,
 		openerId,
-		openerName
-	}: { messages: TranscriptMessage[]; openerId: string; openerName: string } = $props();
+		openerName,
+		roles = {},
+		channels = {}
+	}: {
+		messages: TranscriptMessage[];
+		openerId: string;
+		openerName: string;
+		/** Role and channel names by ID, so mentions read as they did in Discord. */
+		roles?: Record<string, string>;
+		channels?: Record<string, string>;
+	} = $props();
 
 	const users = $derived.by(() => {
 		const m = new Map<string, string>([[openerId, openerName]]);
 		for (const msg of messages) m.set(msg.author_id, msg.author_name);
 		return m;
 	});
+	const roleNames = $derived(new Map(Object.entries(roles)));
+	const channelNames = $derived(new Map(Object.entries(channels)));
+	const md = (text: string) => renderMarkdown(text, users, roleNames, channelNames);
 
 	// Group consecutive messages from the same author, as Discord does.
 	const groups = $derived.by(() => {
@@ -76,7 +88,7 @@
 						{#if msg.content}
 							<div class="break-words whitespace-pre-wrap {msg.deleted_at ? 'line-through' : ''}">
 								<!-- Safe: renderMarkdown escapes all input before formatting. -->
-								{@html renderMarkdown(msg.content, users)}
+								{@html md(msg.content)}
 								{#if msg.edited_at}<span class="text-[10px] text-[#949ba4]"> (edited)</span>{/if}
 							</div>
 						{/if}
@@ -100,14 +112,14 @@
 								{#if embed.title}<div class="font-semibold text-white">{embed.title}</div>{/if}
 								{#if embed.description}
 									<div class="mt-1 text-sm break-words whitespace-pre-wrap">
-										{@html renderMarkdown(embed.description, users)}
+										{@html md(embed.description)}
 									</div>
 								{/if}
 								{#each embed.fields ?? [] as field, k (k)}
 									<div class="mt-2 text-sm">
 										<div class="font-semibold text-white">{field.name}</div>
 										<div class="break-words whitespace-pre-wrap">
-											{@html renderMarkdown(field.value, users)}
+											{@html md(field.value)}
 										</div>
 									</div>
 								{/each}
