@@ -417,7 +417,8 @@ func (b *Bot) closeTicket(ctx context.Context, channelID snowflake.ID, m *discor
 }
 
 // closedMessage is posted in a ticket as it closes. Tickets without a closer
-// were closed automatically.
+// were closed automatically. Thread tickets get a Reopen button, since the
+// thread is only archived.
 func closedMessage(t store.Ticket) discord.MessageCreate {
 	desc := "Closed automatically"
 	if t.ClosedBy != nil {
@@ -429,8 +430,77 @@ func closedMessage(t store.Ticket) discord.MessageCreate {
 	if t.Mode == store.ModeChannel {
 		desc += "\n\nThis channel will be deleted in a few seconds."
 	}
-	return discord.NewMessageCreate().
+	msg := discord.NewMessageCreate().
 		WithEmbeds(discord.NewEmbed().WithTitle("Ticket closed").WithDescription(desc).WithColor(colorMuted)).
+		WithAllowedMentions(&discord.AllowedMentions{})
+	if t.Mode == store.ModeThread {
+		msg = msg.AddActionRow(reopenButton(t.ID))
+	}
+	return msg
+}
+
+// reopenButton reopens a closed thread ticket. It's on the close message and
+// in the opener's DM.
+func reopenButton(ticketID int64) discord.ButtonComponent {
+	return discord.NewSecondaryButton("Reopen", fmt.Sprintf("%s%d", reopenButtonPrefix, ticketID)).
+		WithEmoji(discord.ComponentEmoji{Name: "🔓"})
+}
+
+// reopenTicket reopens a closed thread ticket: the thread is unarchived and
+// unlocked, and the ticket tracked again. permitted decides, given the
+// ticket's type (nil if deleted), whether the person may; dashboard users
+// have already been checked. It returns the reopened ticket.
+func (b *Bot) reopenTicket(ctx context.Context, t store.Ticket, byID snowflake.ID, permitted func(*store.TicketType) bool) (store.Ticket, error) {
+	if t.Mode != store.ModeThread {
+		return t, userErr("This ticket's channel was deleted when it closed, so it can't be reopened. Open a new ticket instead.")
+	}
+	if t.Status == store.StatusOpen {
+		return t, userErr("This ticket is already open.")
+	}
+	var tt *store.TicketType
+	if t.TicketTypeID != nil {
+		if v, err := b.store.GetTicketType(ctx, t.GuildID, *t.TicketTypeID); err == nil {
+			tt = &v
+		}
+	}
+	if permitted != nil && !permitted(tt) {
+		return t, userErr("Only the person who opened this ticket or support staff can reopen it.")
+	}
+	archived, locked := false, false
+	_, err := b.rest.UpdateChannel(t.ChannelID, discord.GuildThreadUpdate{Archived: &archived, Locked: &locked}, rest.WithCtx(ctx))
+	if discordx.IsCode(err, discordx.CodeUnknownChannel) {
+		return t, userErr("This ticket's thread was deleted, so it can't be reopened. Open a new ticket instead.")
+	} else if err != nil {
+		return t, err
+	}
+	ok, err := b.store.ReopenTicket(ctx, t.ID, time.Now())
+	if err != nil {
+		return t, err
+	}
+	if !ok {
+		return t, userErr("This ticket is already open.")
+	}
+	t, err = b.store.GetTicket(ctx, t.ID)
+	if err != nil {
+		return t, err
+	}
+	b.tickets.put(store.TicketRef{ID: t.ID, ChannelID: t.ChannelID, OpenerID: t.OpenerID, HasFirstResponse: t.FirstResponseAt != nil})
+	go b.logEvent(t.GuildID, reopenedLog(t, byID))
+	b.log.Info("ticket reopened", slog.String("guild_id", t.GuildID.String()), slog.Int("number", t.Number))
+	return t, nil
+}
+
+// reopenedMessage is posted in the thread when a ticket reopens.
+func reopenedMessage(byID snowflake.ID) discord.MessageCreate {
+	return discord.NewMessageCreate().
+		WithEmbeds(discord.NewEmbed().
+			WithTitle("Ticket reopened").
+			WithDescription("Reopened by "+discord.UserMention(byID)+". Pick up where you left off.").
+			WithColor(colorAccent)).
+		AddActionRow(
+			discord.NewSecondaryButton("Claim", claimButtonID).WithEmoji(discord.ComponentEmoji{Name: "🙋"}),
+			discord.NewDangerButton("Close", closeButtonID).WithEmoji(discord.ComponentEmoji{Name: "🔒"}),
+		).
 		WithAllowedMentions(&discord.AllowedMentions{})
 }
 
@@ -510,6 +580,9 @@ func (b *Bot) notifyOpener(ctx context.Context, t store.Ticket) {
 		msg = msg.WithComponents(b.feedbackComponents(t.ID)...)
 	} else {
 		msg = msg.WithComponents(b.transcriptRow(t.ID)...)
+	}
+	if t.Mode == store.ModeThread {
+		msg = msg.AddActionRow(reopenButton(t.ID))
 	}
 	_, err = b.rest.CreateMessage(dm.ID(), msg, rest.WithCtx(ctx))
 	if err != nil && !discordx.IsCode(err, discordx.CodeCannotDMUser) {

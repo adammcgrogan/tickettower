@@ -193,7 +193,10 @@
 					<ul>
 						<li>Every ticket gets its own channel, in a category you choose (or at the top of the list).</li>
 						<li>Only the member, your support roles and {APP_NAME} can see it.</li>
-						<li>When the ticket closes, the channel is deleted after a few seconds. The transcript is kept.</li>
+						<li>
+							When the ticket closes, the channel is deleted after a few seconds. The transcript is kept,
+							but the ticket can't be reopened.
+						</li>
 						<li>
 							Discord allows 500 channels per server and 50 per category, so very busy servers can run
 							out of room.
@@ -232,7 +235,15 @@
 					<h2>What staff can do</h2>
 					<ul>
 						<li><strong>Claim</strong> a ticket to show they're handling it (click again to unclaim).</li>
-						<li><strong>Close</strong> it, with an optional reason. The member can close their own ticket too.</li>
+						<li>
+							<strong>Close</strong> it, with an optional reason. The member can close their own ticket
+							too; if they type <code>/close</code> without a reason, they're asked to confirm first.
+						</li>
+						<li>
+							<strong>Reopen</strong> a closed thread ticket with the button on its close message, from
+							the member's closing DM, or from the Tickets page. Channel tickets can't be reopened, since
+							the channel is deleted when they close.
+						</li>
 						<li><strong>Add or remove</strong> people, and <strong>rename</strong> the ticket.</li>
 					</ul>
 					<p>The same actions are available as slash commands inside a ticket:</p>

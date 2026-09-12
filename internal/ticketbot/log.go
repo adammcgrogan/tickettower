@@ -58,6 +58,17 @@ func claimedLog(t store.Ticket, claimer snowflake.ID) discord.MessageCreate {
 	return discord.NewMessageCreate().WithEmbeds(embed)
 }
 
+func reopenedLog(t store.Ticket, by snowflake.ID) discord.MessageCreate {
+	embed := discord.NewEmbed().
+		WithTitle(ticketTitle(t, "reopened")).
+		WithColor(colorAccent).
+		AddField("Reopened by", discord.UserMention(by), true).
+		AddField("Opened by", discord.UserMention(t.OpenerID), true).
+		AddField("Ticket", discord.ChannelMention(t.ChannelID), true).
+		WithTimestamp(time.Now())
+	return discord.NewMessageCreate().WithEmbeds(embed)
+}
+
 // ratedLog tells the team about a rating as it arrives, and again with the
 // comment if the member adds one.
 func ratedLog(t store.Ticket, rating int, comment string) discord.MessageCreate {
