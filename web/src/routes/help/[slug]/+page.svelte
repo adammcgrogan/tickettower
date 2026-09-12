@@ -204,6 +204,10 @@
 						<li><code>/ticket close</code> or <code>/close</code>: close it, with an optional reason</li>
 						<li><code>/ticket add</code> and <code>/ticket remove</code>: give someone access, or take it away</li>
 						<li><code>/ticket rename</code>: rename it (Discord allows two renames every 10 minutes)</li>
+					<li>
+						<code>/ticket move</code>: move it to another ticket type, which hands it to that type's
+						support team (and category, for channels). You can also move tickets from the Tickets page.
+					</li>
 					</ul>
 
 					<h2>If your team can't see tickets</h2>

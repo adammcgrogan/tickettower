@@ -32,6 +32,8 @@
 
 - Placeholders: welcome messages take `{user}`, `{username}`, `{number}`, `{type}`, `{server}`, `{support}` and `{answer1}`–`{answer5}`; channel and thread names take `{number}`, `{username}`, `{type}` and the answers (slugged). The editor lists them as clickable chips and fills them in the previews
 
+- Moving tickets: `/ticket move` (with autocomplete) and a Move action on the Tickets page change a ticket's type. Channels move to the new category and swap support role access; threads ping the new roles in. Moving between channel and thread types isn't supported
+
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
 
 ## Not yet verified by hand

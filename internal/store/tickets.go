@@ -164,6 +164,15 @@ func (s *Store) CloseTicketByChannel(ctx context.Context, channelID snowflake.ID
 	return tag.RowsAffected() == 1, err
 }
 
+// MoveTicket moves an open ticket to another ticket type. It reports false if
+// the ticket has closed.
+func (s *Store) MoveTicket(ctx context.Context, guildID snowflake.ID, id, typeID int64, typeName string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE tickets SET ticket_type_id = $3, type_name = $4
+		WHERE guild_id = $1 AND id = $2 AND status = 'open'`, int64(guildID), id, typeID, typeName)
+	return tag.RowsAffected() == 1, err
+}
+
 // TicketQuery picks which of a guild's tickets ListTickets returns.
 type TicketQuery struct {
 	Status TicketStatus // "" for any

@@ -53,6 +53,29 @@ func (d *Dashboard) Close(ctx context.Context, t store.Ticket, byID snowflake.ID
 	return true, nil
 }
 
+// Move moves an open ticket to another ticket type for a dashboard user, as
+// /ticket move does, and returns the updated ticket.
+func (d *Dashboard) Move(ctx context.Context, t store.Ticket, typeID int64, byID snowflake.ID) (store.Ticket, error) {
+	to, err := d.b.store.GetTicketType(ctx, t.GuildID, typeID)
+	if errors.Is(err, store.ErrNotFound) {
+		return t, userErr("That ticket type no longer exists.")
+	} else if err != nil {
+		return t, err
+	}
+	var from *store.TicketType
+	if t.TicketTypeID != nil {
+		if v, err := d.b.store.GetTicketType(ctx, t.GuildID, *t.TicketTypeID); err == nil {
+			from = &v
+		}
+	}
+	moved, err := d.b.moveTicket(ctx, t, from, to, byID)
+	if discordx.IsCode(err, discordx.CodeUnknownChannel) {
+		d.b.closeDeletedChannel(t.ChannelID)
+		return t, ErrChannelDeleted
+	}
+	return moved, err
+}
+
 // Reply posts a dashboard user's message in an open ticket and returns it as
 // saved in the transcript. byName and avatarURL are how the member knows the
 // staff member, ideally their server nickname and avatar.

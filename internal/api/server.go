@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/tickets", s.listTickets)
 				r.Post("/tickets/{ticketID}/close", s.closeTicket)
 				r.Post("/tickets/{ticketID}/reply", s.replyTicket)
+				r.Post("/tickets/{ticketID}/move", s.moveTicket)
 				r.Get("/settings", s.getSettings)
 				r.Patch("/settings", s.updateSettings)
 
