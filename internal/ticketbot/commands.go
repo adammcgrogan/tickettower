@@ -88,6 +88,19 @@ var commands = []discord.ApplicationCommandCreate{
 		Contexts:    guildOnly,
 		Options:     []discord.ApplicationCommandOption{reasonOption},
 	},
+	discord.SlashCommandCreate{
+		Name:        "reply",
+		Description: "Send one of your saved replies in this ticket",
+		Contexts:    guildOnly,
+		Options: []discord.ApplicationCommandOption{
+			discord.ApplicationCommandOptionString{
+				Name:         "name",
+				Description:  "The saved reply to send",
+				Required:     true,
+				Autocomplete: true,
+			},
+		},
+	},
 }
 
 // responder is satisfied by every interaction event that can reply.

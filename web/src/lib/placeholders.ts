@@ -1,7 +1,8 @@
 /**
- * Placeholders in ticket type names and welcome messages. The bot fills them
- * in (`channelName` and `welcomeText` in ticketbot/tickets.go); these helpers
- * mirror it for the editor's previews.
+ * Placeholders in ticket type names, welcome messages and staff replies. The
+ * bot fills them in (`channelName` and `welcomeText` in ticketbot/tickets.go,
+ * `replyText` in ticketbot/replies.go); these helpers mirror it for the
+ * editor's previews.
  */
 
 import type { Question } from './api';
@@ -37,4 +38,13 @@ export const welcomePlaceholders: Placeholder[] = [
 	{ token: '{type}', label: 'Ticket type' },
 	{ token: '{server}', label: 'Server name' },
 	{ token: '{support}', label: 'Mention support roles' }
+];
+
+export const replyPlaceholders: Placeholder[] = [
+	{ token: '{user}', label: 'Mention the member' },
+	{ token: '{username}', label: "Member's name" },
+	{ token: '{number}', label: 'Ticket number' },
+	{ token: '{type}', label: 'Ticket type' },
+	{ token: '{server}', label: 'Server name' },
+	{ token: '{staff}', label: 'Your name' }
 ];

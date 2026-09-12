@@ -31,10 +31,12 @@ cd web && npm run check && npm run build
 
 ```
 internal/config       env config, BotPermissions
-internal/store        all SQL. One file per area (guilds, settings, ticket_types, panels, tickets, transcripts, analytics)
+internal/store        all SQL. One file per area (guilds, settings, ticket_types, panels, tickets, transcripts, analytics,
+                      saved_replies)
 internal/ticketbot    bot: bot.go (wiring/events), tickets.go (ticket logic), commands.go (slash/buttons),
                       transcripts.go (message capture, retention), feedback.go (ratings), log.go (log channel),
-                      forms.go (pre-ticket question modals), autoclose.go (inactivity warnings and closing)
+                      forms.go (pre-ticket question modals), autoclose.go (inactivity warnings and closing),
+                      replies.go (/reply, staff reply placeholders), dashboard.go (closing/replying from the API)
 internal/api          HTTP handlers; server.go has all routes, access.go decides who can use a guild's dashboard
 internal/auth         Discord OAuth2 + Redis sessions
 internal/panels       renders panel messages (shared by API publish + bot interaction IDs)
@@ -42,7 +44,7 @@ internal/discordx     Discord error codes → friendly messages
 internal/entitlements per-tier limits (premium-ready; everything is free today)
 web/src/lib           api.ts (types + fetch wrapper), components/, format.ts, markdown.ts, toast.svelte.ts,
                       help.ts (the help guide list; link to one with Field's help="slug")
-web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,buttons,tickets,analytics,settings},
+web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,buttons,replies,tickets,analytics,settings},
                       /transcripts/[ticketId], /privacy, /help and /help/[slug] (public guides)
 ```
 

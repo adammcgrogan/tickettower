@@ -25,6 +25,12 @@ export const guides = [
 		section: 'Running tickets'
 	},
 	{
+		slug: 'saved-replies',
+		title: 'Saved replies',
+		summary: 'Write common answers once and send them from the dashboard or Discord.',
+		section: 'Running tickets'
+	},
+	{
 		slug: 'forms',
 		title: 'Questions before a ticket opens',
 		summary: 'Ask members for details up front.',

@@ -63,6 +63,8 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 		r.Command("/rename", b.handleRenameCommand)
 	})
 	r.Command("/close", b.handleCloseCommand)
+	r.Command("/reply", b.handleReplyCommand)
+	r.Autocomplete("/reply", b.handleReplyAutocomplete)
 	r.Component(panels.OpenButtonPrefix+"{typeID}", b.handleOpenButton)
 	r.Component(panels.OpenSelectID, b.handleOpenSelect)
 	r.Modal(formModalPrefix+"{source}/{typeID}/{version}", b.handleFormModal)

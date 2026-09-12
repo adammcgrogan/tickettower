@@ -88,6 +88,11 @@ func (s *Server) Handler() http.Handler {
 				r.Patch("/panels/{panelID}", s.updatePanel)
 				r.Delete("/panels/{panelID}", s.deletePanel)
 				r.Post("/panels/{panelID}/publish", s.publishPanel)
+
+				r.Get("/saved-replies", s.listSavedReplies)
+				r.Post("/saved-replies", s.createSavedReply)
+				r.Patch("/saved-replies/{replyID}", s.updateSavedReply)
+				r.Delete("/saved-replies/{replyID}", s.deleteSavedReply)
 			})
 		})
 

@@ -86,6 +86,19 @@ export type Panel = {
 
 export type PanelInput = Pick<Panel, 'title' | 'description' | 'color' | 'style' | 'ticket_type_ids'>;
 
+/** An answer the team sends often, from the reply box or with /reply. */
+export type SavedReply = {
+	id: number;
+	name: string;
+	content: string;
+	updated_at: string;
+};
+
+export type SavedReplyInput = Pick<SavedReply, 'name' | 'content'>;
+
+export const MAX_SAVED_REPLY_NAME = 100;
+export const MAX_SAVED_REPLY_CONTENT = 2000;
+
 export type Ticket = {
 	id: number;
 	number: number;
@@ -155,7 +168,7 @@ export type SetupProblem = {
 
 export type Stats = {
 	tickets: { open: number; opened_week: number };
-	limits: { max_panels: number; max_ticket_types: number };
+	limits: { max_panels: number; max_ticket_types: number; max_saved_replies: number };
 };
 
 export type AnalyticsSummary = {

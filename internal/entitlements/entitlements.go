@@ -9,15 +9,16 @@ const (
 )
 
 type Limits struct {
-	MaxPanels      int `json:"max_panels"`
-	MaxTicketTypes int `json:"max_ticket_types"`
+	MaxPanels       int `json:"max_panels"`
+	MaxTicketTypes  int `json:"max_ticket_types"`
+	MaxSavedReplies int `json:"max_saved_replies"`
 }
 
 func ForTier(tier string) Limits {
 	switch tier {
 	case TierPremium:
-		return Limits{MaxPanels: 50, MaxTicketTypes: 100}
+		return Limits{MaxPanels: 50, MaxTicketTypes: 100, MaxSavedReplies: 200}
 	default:
-		return Limits{MaxPanels: 10, MaxTicketTypes: 25}
+		return Limits{MaxPanels: 10, MaxTicketTypes: 25, MaxSavedReplies: 50}
 	}
 }

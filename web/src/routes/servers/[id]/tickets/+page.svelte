@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
+	import { getContext, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
@@ -8,6 +8,7 @@
 		errorMessage,
 		send,
 		type Guild,
+		type SavedReply,
 		type Ticket,
 		type TicketType,
 		type Transcript
@@ -59,6 +60,7 @@
 	let query = $state('');
 	let typeFilter = $state('');
 	let types = $state<TicketType[]>([]);
+	let savedReplies = $state<SavedReply[]>([]);
 	// Whether older tickets are left to load.
 	let more = $state(false);
 	let loadingMore = $state(false);
@@ -82,10 +84,16 @@
 		let stale = false;
 		tickets = null;
 		types = [];
+		savedReplies = [];
 		typeFilter = '';
 		api<TicketType[]>(`/guilds/${id}/ticket-types`)
 			.then((t) => {
 				if (!stale) types = t;
+			})
+			.catch(() => {});
+		api<SavedReply[]>(`/guilds/${id}/saved-replies`)
+			.then((r) => {
+				if (!stale) savedReplies = r;
 			})
 			.catch(() => {});
 		return () => {
@@ -281,6 +289,23 @@
 	let reply = $state('');
 	let replyError = $state('');
 	let sending = $state(false);
+	let replyBox = $state<HTMLTextAreaElement>();
+
+	// The bot fills these in when the reply is sent (replyText in ticketbot).
+	const hasPlaceholders = $derived(/\{(user|username|number|type|server|staff)\}/.test(reply));
+
+	// A saved reply goes in at the cursor, so it can be edited before sending.
+	async function insertSaved(id: number) {
+		const saved = savedReplies.find((r) => r.id === id);
+		if (!saved) return;
+		const start = replyBox?.selectionStart ?? reply.length;
+		const end = replyBox?.selectionEnd ?? reply.length;
+		reply = reply.slice(0, start) + saved.content + reply.slice(end);
+		await tick();
+		const cursor = start + saved.content.length;
+		replyBox?.focus();
+		replyBox?.setSelectionRange(cursor, cursor);
+	}
 
 	// A draft belongs to the ticket it was written for.
 	$effect(() => {
@@ -500,6 +525,7 @@
 							id="reply"
 							rows="3"
 							maxlength="2000"
+							bind:this={replyBox}
 							bind:value={reply}
 							placeholder="Reply to {t.opener_name}…"
 							aria-invalid={!!replyError}
@@ -510,12 +536,30 @@
 						></textarea>
 						<div class="mt-2 flex items-center justify-between gap-3">
 							<p class="text-xs {replyError ? 'text-danger' : 'text-subtle'}">
-								{replyError || `${APP_NAME} posts it in the ticket under your name. ⌘ or Ctrl + Enter sends.`}
+								{replyError ||
+									(hasPlaceholders
+										? "Placeholders are filled in when it's sent. ⌘ or Ctrl + Enter sends."
+										: `${APP_NAME} posts it in the ticket under your name. ⌘ or Ctrl + Enter sends.`)}
 							</p>
-							<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={sending || !reply.trim()}>
-								<Icon name="send" size={13} />
-								{sending ? 'Sending…' : 'Send'}
-							</button>
+							<div class="flex shrink-0 items-center gap-2">
+								{#if savedReplies.length > 0}
+									<select
+										class="input h-8 w-auto max-w-44 py-0 text-sm"
+										aria-label="Insert a saved reply"
+										onchange={(e) => {
+											insertSaved(Number(e.currentTarget.value));
+											e.currentTarget.value = '';
+										}}
+									>
+										<option value="" selected disabled>Saved replies</option>
+										{#each savedReplies as r (r.id)}<option value={String(r.id)}>{r.name}</option>{/each}
+									</select>
+								{/if}
+								<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={sending || !reply.trim()}>
+									<Icon name="send" size={13} />
+									{sending ? 'Sending…' : 'Send'}
+								</button>
+							</div>
 						</div>
 					</form>
 				{/if}

@@ -34,4 +34,9 @@ func TestReplyMessage(t *testing.T) {
 	if f := replyMessage("Ticket Tower", "Adam", "", "Acme", "", "Hi").Embeds[0].Footer; f == nil || f.Text != footer || f.IconURL != "" {
 		t.Errorf("footer without icon = %+v", f)
 	}
+
+	// Replies sent with /reply don't mention the dashboard.
+	if f := replyMessage("", "Adam", "", "Acme", "", "Hi").Embeds[0].Footer; f == nil || f.Text != "Sent by Acme staff" {
+		t.Errorf("footer from Discord = %+v", f)
+	}
 }

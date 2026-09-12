@@ -38,6 +38,8 @@
 
 - Starter templates: quick setup (`QuickSetup.svelte`, on Home for a new server and on an empty ticket types page) offers Community or gaming, Store or business and Creator templates from `lib/templates.ts`, each creating three ticket types with questions, welcome messages and auto-close, plus ticket buttons for them. "Start simple" keeps the single named type
 
+- Saved replies: a Saved replies page under Setup (name and message, up to 50 per server, `MaxSavedReplies`), a picker on the Tickets page reply box that inserts one to edit before sending, and `/reply` (with autocomplete, support staff only) that posts one as a staff reply embed. Staff replies take `{user}`, `{username}`, `{number}`, `{type}`, `{server}` and `{staff}` (`replyText`), and `/reply` counts as the team's response like dashboard replies
+
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
 
 ## Not yet verified by hand
@@ -48,10 +50,9 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 
 1. **Deploy to Railway**: set up the services and env vars, set a real `PUBLIC_URL` (which enables transcript links in DMs), unset `DEV_GUILD_ID`, and add the production OAuth redirect. Reset the bot token/secret first (they were shared in a chat).
 2. **Reopen**: reopen threads within a grace window (channels are deleted, so reopening them would need a delay or archiving instead).
-3. **Canned responses / tags**: `/tag` for common replies, managed in the dashboard.
-4. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
-5. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile. The auto-close job is already safe to run in several processes.
-6. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.
+3. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
+4. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile. The auto-close job is already safe to run in several processes.
+5. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.
 
 ## Nice to have
 
