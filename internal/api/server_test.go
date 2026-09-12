@@ -215,3 +215,32 @@ func TestInviteRedirect(t *testing.T) {
 		}
 	}
 }
+
+func TestSecurityHeaders(t *testing.T) {
+	env := newTestEnv(t)
+	want := map[string]string{
+		"Content-Security-Policy": "frame-ancestors 'none'",
+		"X-Frame-Options":         "DENY",
+		"X-Content-Type-Options":  "nosniff",
+		"Referrer-Policy":         "strict-origin-when-cross-origin",
+	}
+	for _, path := range []string{"/servers/123", "/api/me", "/api/nope", "/_app/immutable/app.js"} {
+		rec := env.do("GET", path, nil)
+		for name, value := range want {
+			if got := rec.Header().Get(name); got != value {
+				t.Errorf("%s: %s = %q, want %q", path, name, got, value)
+			}
+		}
+		if hsts := rec.Header().Get("Strict-Transport-Security"); hsts != "" {
+			t.Errorf("%s: HSTS %q set on a plain http request", path, hsts)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/me", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	env.handler.ServeHTTP(rec, req)
+	if hsts := rec.Header().Get("Strict-Transport-Security"); !strings.Contains(hsts, "max-age=") {
+		t.Errorf("HSTS behind an https proxy = %q", hsts)
+	}
+}

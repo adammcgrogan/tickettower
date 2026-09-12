@@ -15,7 +15,26 @@ export default defineConfig({
 
 			// Build a static SPA; the Go API serves it and falls back to
 			// index.html for client-side routes.
-			adapter: adapter({ fallback: 'index.html' })
+			adapter: adapter({ fallback: 'index.html' }),
+
+			// Written into index.html as a <meta> tag, with a hash for the
+			// bootstrap script. Fonts are bundled; images come from Discord's
+			// CDN and from embeds, which can link anywhere. The API adds the
+			// headers a <meta> tag can't carry (frame-ancestors and friends).
+			csp: {
+				mode: 'hash',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self'],
+					'style-src': ['self', 'unsafe-inline'],
+					'img-src': ['self', 'data:', 'https:'],
+					'font-src': ['self'],
+					'connect-src': ['self'],
+					'object-src': ['none'],
+					'base-uri': ['self'],
+					'form-action': ['self']
+				}
+			}
 		})
 	],
 	server: {

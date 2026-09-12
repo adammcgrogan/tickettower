@@ -46,7 +46,7 @@ func NewServer(cfg config.Config, st *store.Store, am *auth.Manager, discordRest
 
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP, middleware.Recoverer)
+	r.Use(middleware.RealIP, middleware.Recoverer, securityHeaders)
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
@@ -286,6 +286,26 @@ func isManager(r *http.Request) bool {
 func (s *Server) getGuild(w http.ResponseWriter, r *http.Request) {
 	g := guildFrom(r)
 	writeJSON(w, http.StatusOK, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: true, CanManage: isManager(r)})
+}
+
+// securityHeaders stops the dashboard being framed by another site (its
+// actions are one click), sniffed or leaking URLs. The SPA's own
+// Content-Security-Policy is a <meta> tag written at build time (see
+// web/vite.config.ts), since it needs the bootstrap script's hash;
+// frame-ancestors only works as a header, so it's set here.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", "frame-ancestors 'none'")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // spaHandler serves the built frontend, falling back to index.html so

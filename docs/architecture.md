@@ -86,6 +86,8 @@ The SQL rules live in `store/autoclose.go`; the dashboard hint repeats the lead 
 
 Editing a ticket type re-renders every published panel that uses it.
 
+**Security headers.** Every API response carries `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy` and a `Permissions-Policy` (`securityHeaders` in `api/server.go`), plus HSTS when the request arrived over https. The SPA's full Content-Security-Policy is a `<meta>` tag that SvelteKit writes at build time with the hash of its bootstrap script (`csp` in `web/vite.config.ts`): scripts, styles, fonts and API calls are same-origin only; images may come from any https host because Discord embeds can link anywhere.
+
 **Dashboard auth.**
 1. `/api/auth/login` goes to Discord OAuth (`identify guilds`). `?next=` (a local path) is kept in Redis next to the OAuth state, so someone opening a transcript link from a DM lands back on it after logging in. The frontend adds it on any 401.
 2. The callback stores the session in Redis, sets an HttpOnly cookie and redirects to `next`, or to `/servers` if there isn't one.
