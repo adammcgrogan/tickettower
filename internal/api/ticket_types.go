@@ -49,7 +49,18 @@ type ticketTypeInput struct {
 	RatingPrompt string            `json:"rating_prompt"`
 	ButtonStyle  store.ButtonStyle `json:"button_style"`
 	ButtonLabel  string            `json:"button_label"`
+
+	ClaimLock              store.ClaimLock     `json:"claim_lock"`
+	ClaimLockExemptRoleIDs []snowflake.ID      `json:"claim_lock_exempt_role_ids"`
+	ReplyTargetMinutes     *int                `json:"reply_target_minutes"`
+	ReminderMinutes        *int                `json:"reminder_minutes"`
+	ReminderRepeat         bool                `json:"reminder_repeat"`
+	ReminderWhere          store.ReminderWhere `json:"reminder_where"`
+	ReminderPing           store.ReminderPing  `json:"reminder_ping"`
 }
+
+// minuteOptions are the waits offered for reply targets and reminders.
+var minuteOptions = []int{15, 30, 60, 120, 240, 480, 720, 1440, 2880}
 
 func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.Name = in.Name
@@ -70,6 +81,13 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.RatingPrompt = in.RatingPrompt
 	t.ButtonStyle = in.ButtonStyle
 	t.ButtonLabel = in.ButtonLabel
+	t.ClaimLock = in.ClaimLock
+	t.ClaimLockExemptRoleIDs = in.ClaimLockExemptRoleIDs
+	t.ReplyTargetMinutes = in.ReplyTargetMinutes
+	t.ReminderMinutes = in.ReminderMinutes
+	t.ReminderRepeat = in.ReminderRepeat
+	t.ReminderWhere = in.ReminderWhere
+	t.ReminderPing = in.ReminderPing
 }
 
 // validateQuestions normalises a ticket type's form questions.
@@ -166,6 +184,33 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	if utf8.RuneCountInString(in.ButtonLabel) > store.MaxButtonLabel {
 		return invalid("button_label", fmt.Sprintf("Keep the button label to %d characters or fewer.", store.MaxButtonLabel))
 	}
+	if in.ClaimLock == "" {
+		in.ClaimLock = store.ClaimLockOff
+	}
+	if !in.ClaimLock.Valid() {
+		return invalid("claim_lock", "Choose what claiming does for the rest of the team.")
+	}
+	if in.ClaimLock != store.ClaimLockOff && in.Mode == store.ModeThread {
+		return invalid("claim_lock", "Private threads can't limit a role's access, so claim locks only work for channel tickets.")
+	}
+	if m := in.ReplyTargetMinutes; m != nil && !slices.Contains(minuteOptions, *m) {
+		return invalid("reply_target_minutes", "Choose one of the listed reply targets.")
+	}
+	if m := in.ReminderMinutes; m != nil && !slices.Contains(minuteOptions, *m) {
+		return invalid("reminder_minutes", "Choose one of the listed reminder times.")
+	}
+	if in.ReminderWhere == "" {
+		in.ReminderWhere = store.RemindInTicket
+	}
+	if !in.ReminderWhere.Valid() {
+		return invalid("reminder_where", "Choose where reminders are posted.")
+	}
+	if in.ReminderPing == "" {
+		in.ReminderPing = store.PingClaimer
+	}
+	if !in.ReminderPing.Valid() {
+		return invalid("reminder_ping", "Choose who reminders mention.")
+	}
 	in.RatingPrompt = strings.TrimSpace(in.RatingPrompt)
 	if utf8.RuneCountInString(in.RatingPrompt) > store.MaxRatingPrompt {
 		return invalid("rating_prompt", fmt.Sprintf("Keep the rating request to %d characters or fewer.", store.MaxRatingPrompt))
@@ -200,6 +245,10 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	in.SupportRoleIDs = normaliseIDs(in.SupportRoleIDs)
 	in.RequiredRoleIDs = normaliseIDs(in.RequiredRoleIDs)
 	in.BlockedRoleIDs = normaliseIDs(in.BlockedRoleIDs)
+	// Only support roles can be exempt from a claim lock.
+	in.ClaimLockExemptRoleIDs = slices.DeleteFunc(normaliseIDs(in.ClaimLockExemptRoleIDs), func(id snowflake.ID) bool {
+		return !slices.Contains(in.SupportRoleIDs, id)
+	})
 	roleFields := []struct {
 		field string
 		ids   []snowflake.ID

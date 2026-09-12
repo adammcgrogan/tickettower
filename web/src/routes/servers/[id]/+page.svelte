@@ -4,6 +4,7 @@
 		api,
 		atLeast,
 		errorMessage,
+		overdueAt,
 		type Analytics,
 		type Channel,
 		type Guild,
@@ -69,21 +70,37 @@
 		return () => clearInterval(timer);
 	});
 
-	// Longest wait first.
+	// Longest wait first. Tickets on hold aren't waiting on the team.
 	const waiting = $derived(
 		(open ?? [])
-			.filter((t) => t.waiting_on_staff)
-			.sort((a, b) => a.last_activity_at.localeCompare(b.last_activity_at))
+			.filter((t) => t.waiting_on_staff && !t.on_hold)
+			.sort((a, b) => (a.waiting_since ?? a.last_activity_at).localeCompare(b.waiting_since ?? b.last_activity_at))
 	);
-	const waitedFor = (t: Ticket) => formatDuration((now - new Date(t.last_activity_at).getTime()) / 1000);
+	const waitedFor = (t: Ticket) => formatDuration((now - new Date(t.waiting_since ?? t.last_activity_at).getTime()) / 1000);
+	const isOverdue = (t: Ticket) => {
+		const at = overdueAt(t, types ?? []);
+		return at !== null && at <= now;
+	};
+	const overdue = $derived(waiting.filter(isOverdue).length);
+	const onHold = $derived((open ?? []).filter((t) => t.on_hold).length);
+	const hasTargets = $derived(!!types?.some((t) => t.reply_target_minutes));
 
 	const loaded = $derived(open !== null && types !== null && panels !== null);
 	const fresh = $derived(types?.length === 0 && panels?.length === 0);
 	const live = $derived(!!panels?.some((p) => p.message_id));
 
 	const figures = $derived([
-		{ label: 'Waiting on your team', value: open && String(waiting.length), loud: waiting.length > 0 },
-		{ label: 'Open tickets', value: open && (open.length >= 200 ? '200+' : String(open.length)) },
+		{
+			label: 'Waiting on your team',
+			value: open && String(waiting.length),
+			loud: waiting.length > 0,
+			hint: hasTargets ? (overdue ? `${overdue} past the reply target` : 'None past the reply target') : undefined
+		},
+		{
+			label: 'Open tickets',
+			value: open && (open.length >= 200 ? '200+' : String(open.length)),
+			hint: onHold ? `${onHold} on hold` : undefined
+		},
 		{
 			label: 'First response',
 			value: week && formatDuration(week.summary.first_response_median_seconds),
@@ -247,8 +264,8 @@
 								{t.claimed_by_name ? `Claimed by ${t.claimed_by_name}` : 'Unclaimed'}
 							</div>
 							<div
-								class="flex w-24 items-center justify-end gap-1.5 text-sm text-accent tabular-nums"
-								title="Last message {new Date(t.last_activity_at).toLocaleString()}"
+								class="flex w-24 items-center justify-end gap-1.5 text-sm tabular-nums {isOverdue(t) ? 'text-danger' : 'text-accent'}"
+								title="{isOverdue(t) ? 'Past the reply target. ' : ''}Waiting since {new Date(t.waiting_since ?? t.last_activity_at).toLocaleString()}"
 							>
 								<Icon name="clock" size={14} />
 								{waitedFor(t)}

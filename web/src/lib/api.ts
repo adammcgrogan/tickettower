@@ -91,8 +91,39 @@ export type TicketType = {
 	button_style: ButtonStyle;
 	/** Replaces the type's name on the button when set. */
 	button_label: string;
+	/** What claiming does to the rest of the support team (channel tickets only). */
+	claim_lock: ClaimLock;
+	/** Support roles that keep full access despite the lock. */
+	claim_lock_exempt_role_ids: string[];
+	/** How quickly the team aims to reply, in minutes; null for no target. */
+	reply_target_minutes: number | null;
+	/** Minutes a ticket may wait on the team before staff are reminded; null for never. */
+	reminder_minutes: number | null;
+	reminder_repeat: boolean;
+	reminder_where: 'ticket' | 'log' | 'both';
+	reminder_ping: 'claimer' | 'roles' | 'none';
 	created_at: string;
 };
+
+export type ClaimLock = 'off' | 'read_only' | 'hidden';
+
+/** The waits offered for reply targets and reminders, matching the API. */
+export const MINUTE_OPTIONS = [15, 30, 60, 120, 240, 480, 720, 1440, 2880];
+
+/** Describes a number of minutes, e.g. "30 minutes", "2 hours", "1 day". */
+export function minutesLabel(m: number): string {
+	if (m % 1440 === 0) return `${m / 1440} day${m === 1440 ? '' : 's'}`;
+	if (m % 60 === 0) return `${m / 60} hour${m === 60 ? '' : 's'}`;
+	return `${m} minutes`;
+}
+
+/** When a waiting ticket passes its type's reply target, or null if it has none. */
+export function overdueAt(t: Ticket, types: TicketType[]): number | null {
+	if (t.status !== 'open' || !t.waiting_on_staff || t.on_hold || !t.waiting_since) return null;
+	const target = types.find((x) => x.id === t.ticket_type_id)?.reply_target_minutes;
+	if (!target) return null;
+	return new Date(t.waiting_since).getTime() + target * 60_000;
+}
 
 export type ButtonStyle = 'primary' | 'secondary' | 'success' | 'danger';
 export const MAX_BUTTON_LABEL = 80;
@@ -175,6 +206,11 @@ export type Ticket = {
 	last_activity_at: string;
 	/** True when the member sent the last message, so the team owes a reply. */
 	waiting_on_staff: boolean;
+	/** When the team started owing a reply; null while it's the member's turn. */
+	waiting_since: string | null;
+	/** Waiting on something else: out of the queue, reminders and auto-close. */
+	on_hold: boolean;
+	hold_reason: string;
 	/** The message that matched a search, when the search matched what was said. */
 	match?: { author_name: string; snippet: string };
 };
@@ -263,6 +299,9 @@ export type AnalyticsSummary = {
 	rating_avg: number | null;
 	rating_count: number;
 	closed_unanswered: number;
+	/** Tickets whose type has a reply target, and how many met it. */
+	target_measured: number;
+	target_met: number;
 	transcripts: number;
 	team_messages: number;
 	member_messages: number;
@@ -278,6 +317,9 @@ export type Analytics = {
 	previous: AnalyticsSummary | null;
 	open_now: number;
 	waiting_now: number;
+	on_hold_now: number;
+	/** Waiting longer than the type's reply target. */
+	overdue_now: number;
 	series: { date: string; opened: number; closed: number; backlog: number }[];
 	/** [weekday, Sunday first][hour], UTC. */
 	heatmap: number[][];
@@ -299,6 +341,8 @@ export type Analytics = {
 		rating_count: number;
 		/** False for types that don't ask for ratings. */
 		asks_rating: boolean;
+		target_measured: number;
+		target_met: number;
 	}[];
 	staff: {
 		user_id: string;

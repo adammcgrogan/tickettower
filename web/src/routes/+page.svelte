@@ -93,6 +93,7 @@
 		{ name: '/ticket remove', body: 'Take away their access again' },
 		{ name: '/ticket move', body: 'Change the ticket type' },
 		{ name: '/ticket rename', body: 'Give the channel a clearer name' },
+		{ name: '/ticket hold', body: 'Park a ticket waiting on something else' },
 		{ name: '/reply', body: 'Send one of your saved replies' },
 		{ name: '/ticket block', body: 'Stop someone opening tickets' },
 		{ name: '/close', body: 'Close the ticket, with an optional reason' }

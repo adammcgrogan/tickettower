@@ -14,7 +14,7 @@ const autoCloseLead = `LEAST(make_interval(hours => tt.auto_close_hours) / 4, in
 
 // autoCloseEligible matches open tickets whose type auto-closes and where the
 // team is waiting on the member, not the other way round.
-const autoCloseEligible = `t.status = 'open' AND NOT t.waiting_on_staff AND tt.auto_close_hours IS NOT NULL`
+const autoCloseEligible = `t.status = 'open' AND NOT t.waiting_on_staff AND NOT t.on_hold AND tt.auto_close_hours IS NOT NULL`
 
 // autoCloseWarnDue matches tickets entering the warning period ($1 is now).
 const autoCloseWarnDue = `t.auto_close_warned_at IS NULL
@@ -93,11 +93,19 @@ func (s *Store) ClearAutoCloseWarning(ctx context.Context, ticketID int64) error
 
 // RecordActivity notes a message (or "keep open" click) in a ticket. It
 // restarts the auto-close clock and cancels any pending warning. byOpener
-// marks the ticket as waiting on staff, which pauses auto-close entirely.
+// marks the ticket as waiting on staff, which pauses auto-close entirely,
+// starts the wait clock if it isn't running, and takes the ticket off hold
+// (the member has news). A staff message ends the wait and clears any
+// reminder.
 func (s *Store) RecordActivity(ctx context.Context, ticketID int64, at time.Time, byOpener bool) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE tickets
-		SET last_activity_at = GREATEST(last_activity_at, $2), waiting_on_staff = $3, auto_close_warned_at = NULL
+		SET last_activity_at = GREATEST(last_activity_at, $2), waiting_on_staff = $3, auto_close_warned_at = NULL,
+		    waiting_since = CASE WHEN $3 THEN COALESCE(waiting_since, $2) END,
+		    staff_reminded_at = CASE WHEN $3 THEN staff_reminded_at END,
+		    reminders_sent = CASE WHEN $3 THEN reminders_sent ELSE 0 END,
+		    on_hold = on_hold AND NOT $3,
+		    hold_reason = CASE WHEN $3 THEN '' ELSE hold_reason END
 		WHERE id = $1 AND status = 'open'`, ticketID, at, byOpener)
 	return err
 }

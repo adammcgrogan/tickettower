@@ -125,6 +125,55 @@ func (s *Server) reopenTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
+type holdInput struct {
+	Reason string `json:"reason"`
+}
+
+// holdTicket puts a ticket on hold from the dashboard.
+func (s *Server) holdTicket(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.guildTicket(w, r)
+	if !ok {
+		return
+	}
+	var in holdInput
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	in.Reason = strings.TrimSpace(in.Reason)
+	if utf8.RuneCountInString(in.Reason) > ticketbot.MaxHoldReason {
+		s.writeFailure(w, invalid("reason", "Keep the reason to 200 characters or fewer."))
+		return
+	}
+	user := auth.FromContext(r.Context()).User
+	t, err := s.dashboard.Hold(r.Context(), t, user.ID, in.Reason)
+	s.writeTicketAction(w, t, err)
+}
+
+// resumeTicket takes a ticket off hold from the dashboard.
+func (s *Server) resumeTicket(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.guildTicket(w, r)
+	if !ok {
+		return
+	}
+	user := auth.FromContext(r.Context()).User
+	t, err := s.dashboard.Resume(r.Context(), t, user.ID)
+	s.writeTicketAction(w, t, err)
+}
+
+// writeTicketAction writes the result of a dashboard action on a ticket:
+// the bot's user-facing reasons become 422s, and on success the ticket is
+// re-read so the response is complete.
+func (s *Server) writeTicketAction(w http.ResponseWriter, t store.Ticket, err error) {
+	if msg, ok := ticketbot.UserMessage(err); ok {
+		s.writeFailure(w, invalid("", msg))
+		return
+	} else if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
 type replyInput struct {
 	Content string `json:"content"`
 }

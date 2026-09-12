@@ -9,6 +9,7 @@ const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 export function ticketState(t: Ticket, staff = true): { label: string; tone: 'waiting' | 'default' | 'closed' } {
 	if (t.status === 'closed') return { label: 'Closed', tone: 'closed' };
 	if (!staff) return { label: 'Open', tone: 'default' };
+	if (t.on_hold) return { label: t.hold_reason ? `On hold: ${t.hold_reason}` : 'On hold', tone: 'default' };
 	return t.waiting_on_staff
 		? { label: 'Waiting on your team', tone: 'waiting' }
 		: { label: 'Waiting on the member', tone: 'default' };

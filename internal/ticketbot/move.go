@@ -112,6 +112,10 @@ func (b *Bot) moveTicket(ctx context.Context, t store.Ticket, from *store.Ticket
 	}
 	fromName := t.TypeName
 	t.TicketTypeID, t.TypeName = &to.ID, to.Name
+	// A claimed ticket keeps its lock, now against the new type's team.
+	if t.ClaimedBy != nil {
+		b.applyClaimLock(ctx, t, &to, *t.ClaimedBy)
+	}
 
 	if _, err := b.rest.CreateMessage(t.ChannelID, movedMessage(fromName, to.Name, by, added), rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to post move message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))

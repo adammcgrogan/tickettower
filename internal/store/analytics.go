@@ -55,6 +55,10 @@ type Summary struct {
 	ResolutionMedianSec    *float64 `json:"resolution_median_seconds"`
 	RatingAvg              *float64 `json:"rating_avg"`
 	RatingCount            int      `json:"rating_count"`
+	// TargetMeasured counts tickets opened in the window whose type has a
+	// reply target; TargetMet is how many got their first reply in time.
+	TargetMeasured int `json:"target_measured"`
+	TargetMet      int `json:"target_met"`
 	// Closed before anyone other than the opener replied.
 	ClosedUnanswered int `json:"closed_unanswered"`
 	// Message stats only cover closed tickets whose transcript is still kept.
@@ -83,6 +87,10 @@ type TypeStat struct {
 	// AsksRating is false for types that don't ask for ratings, so a blank
 	// rating can be explained. Deleted types count as asking.
 	AsksRating bool `json:"asks_rating"`
+	// TargetMeasured and TargetMet: tickets with a reply target, and how
+	// many were answered within it.
+	TargetMeasured int `json:"target_measured"`
+	TargetMet      int `json:"target_met"`
 }
 
 type StaffStat struct {
@@ -116,7 +124,9 @@ type Analytics struct {
 	Previous *Summary `json:"previous"` // the window before; nil for all time
 
 	OpenNow    int `json:"open_now"`
-	WaitingNow int `json:"waiting_now"` // open and waiting on the team
+	WaitingNow int `json:"waiting_now"` // open, waiting on the team and not on hold
+	OnHoldNow  int `json:"on_hold_now"`
+	OverdueNow int `json:"overdue_now"` // waiting longer than the type's reply target
 
 	Series         []SeriesPoint `json:"series"`
 	Heatmap        [][]int       `json:"heatmap"`          // [weekday, Sunday first][hour], UTC
@@ -191,9 +201,15 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 	}
 
 	err = s.pool.QueryRow(ctx, `
-		SELECT count(*) FILTER (WHERE status = 'open'), count(*) FILTER (WHERE status = 'open' AND waiting_on_staff)
-		FROM tickets t WHERE t.guild_id = $1 AND ($2::bigint IS NULL OR t.ticket_type_id = $2)`,
-		gid, q.TypeID).Scan(&a.OpenNow, &a.WaitingNow)
+		SELECT count(*) FILTER (WHERE t.status = 'open'),
+		       count(*) FILTER (WHERE t.status = 'open' AND t.waiting_on_staff AND NOT t.on_hold),
+		       count(*) FILTER (WHERE t.status = 'open' AND t.on_hold),
+		       count(*) FILTER (WHERE t.status = 'open' AND t.waiting_on_staff AND NOT t.on_hold
+		                          AND tt.reply_target_minutes IS NOT NULL
+		                          AND t.waiting_since + make_interval(mins => tt.reply_target_minutes) <= $3)
+		FROM tickets t LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id
+		WHERE t.guild_id = $1 AND ($2::bigint IS NULL OR t.ticket_type_id = $2)`,
+		gid, q.TypeID, now).Scan(&a.OpenNow, &a.WaitingNow, &a.OnHoldNow, &a.OverdueNow)
 	if err != nil {
 		return a, err
 	}
@@ -293,7 +309,10 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 		           FILTER (WHERE t.first_response_at IS NOT NULL),
 		       percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.closed_at - t.opened_at))
 		           FILTER (WHERE t.closed_at IS NOT NULL),
-		       avg(f.rating)::float8, count(f.rating), COALESCE(bool_or(tt.ask_rating), true)
+		       avg(f.rating)::float8, count(f.rating), COALESCE(bool_or(tt.ask_rating), true),
+		       count(*) FILTER (WHERE tt.reply_target_minutes IS NOT NULL),
+		       count(*) FILTER (WHERE tt.reply_target_minutes IS NOT NULL AND t.first_response_at IS NOT NULL
+		                          AND t.first_response_at - t.opened_at <= make_interval(mins => tt.reply_target_minutes))
 		FROM tickets t
 		LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id
 		LEFT JOIN ticket_feedback f ON f.ticket_id = t.id
@@ -303,7 +322,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 	err = eachRow(rows, err, func() error {
 		var ts TypeStat
 		err := rows.Scan(&ts.TypeID, &ts.Name, &ts.Emoji, &ts.Opened, &ts.FirstResponseMedianSec,
-			&ts.ResolutionMedianSec, &ts.RatingAvg, &ts.RatingCount, &ts.AsksRating)
+			&ts.ResolutionMedianSec, &ts.RatingAvg, &ts.RatingCount, &ts.AsksRating, &ts.TargetMeasured, &ts.TargetMet)
 		a.ByType = append(a.ByType, ts)
 		return err
 	})
@@ -358,9 +377,14 @@ func (s *Store) summary(ctx context.Context, args []any) (Summary, []int, error)
 		           FILTER (WHERE t.opened_at >= $2 AND t.opened_at < $3 AND t.first_response_at IS NOT NULL),
 		       percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.closed_at - t.opened_at))
 		           FILTER (WHERE t.closed_at >= $2 AND t.closed_at < $3),
-		       count(*) FILTER (WHERE t.closed_at >= $2 AND t.closed_at < $3 AND t.first_response_at IS NULL)
-		FROM tickets t WHERE `+inScope, args...).
-		Scan(&sm.Opened, &sm.Closed, &sm.FirstResponseMedianSec, &sm.ResolutionMedianSec, &sm.ClosedUnanswered)
+		       count(*) FILTER (WHERE t.closed_at >= $2 AND t.closed_at < $3 AND t.first_response_at IS NULL),
+		       count(*) FILTER (WHERE t.opened_at >= $2 AND t.opened_at < $3 AND tt.reply_target_minutes IS NOT NULL),
+		       count(*) FILTER (WHERE t.opened_at >= $2 AND t.opened_at < $3 AND tt.reply_target_minutes IS NOT NULL
+		                          AND t.first_response_at IS NOT NULL
+		                          AND t.first_response_at - t.opened_at <= make_interval(mins => tt.reply_target_minutes))
+		FROM tickets t LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id WHERE `+inScope, args...).
+		Scan(&sm.Opened, &sm.Closed, &sm.FirstResponseMedianSec, &sm.ResolutionMedianSec, &sm.ClosedUnanswered,
+			&sm.TargetMeasured, &sm.TargetMet)
 	if err != nil {
 		return sm, ratings, err
 	}

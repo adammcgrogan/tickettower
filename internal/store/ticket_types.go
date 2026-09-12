@@ -84,8 +84,58 @@ type TicketType struct {
 	// ButtonLabel replaces the type's name on the button when set.
 	ButtonStyle ButtonStyle `json:"button_style"`
 	ButtonLabel string      `json:"button_label"`
-	CreatedAt   time.Time   `json:"created_at"`
+	// ClaimLock is what claiming does to the rest of the support team in a
+	// channel ticket; roles in ClaimLockExemptRoleIDs keep full access.
+	ClaimLock              ClaimLock      `json:"claim_lock"`
+	ClaimLockExemptRoleIDs []snowflake.ID `json:"claim_lock_exempt_role_ids"`
+	// ReplyTargetMinutes is how quickly the team aims to answer a waiting
+	// ticket; nil means no target. ReminderMinutes is how long a ticket may
+	// wait on the team before staff are reminded (nil: never), repeating
+	// every ReminderMinutes if ReminderRepeat. ReminderWhere says where the
+	// reminder goes and ReminderPing who it mentions.
+	ReplyTargetMinutes *int          `json:"reply_target_minutes"`
+	ReminderMinutes    *int          `json:"reminder_minutes"`
+	ReminderRepeat     bool          `json:"reminder_repeat"`
+	ReminderWhere      ReminderWhere `json:"reminder_where"`
+	ReminderPing       ReminderPing  `json:"reminder_ping"`
+	CreatedAt          time.Time     `json:"created_at"`
 }
+
+// ClaimLock is what claiming a channel ticket does to other support staff.
+type ClaimLock string
+
+const (
+	ClaimLockOff      ClaimLock = "off"       // nothing changes
+	ClaimLockReadOnly ClaimLock = "read_only" // others can read but not send
+	ClaimLockHidden   ClaimLock = "hidden"    // others can't see the ticket
+)
+
+// ReminderWhere is where staff reminders are posted.
+type ReminderWhere string
+
+const (
+	RemindInTicket ReminderWhere = "ticket"
+	RemindInLog    ReminderWhere = "log"
+	RemindInBoth   ReminderWhere = "both"
+)
+
+// ReminderPing is who a reminder in the ticket mentions.
+type ReminderPing string
+
+const (
+	PingClaimer ReminderPing = "claimer" // the claimer, or the support roles if unclaimed
+	PingRoles   ReminderPing = "roles"   // always the support roles
+	PingNobody  ReminderPing = "none"
+)
+
+// Valid reports whether the value is one the dashboard offers.
+func (c ClaimLock) Valid() bool {
+	return c == ClaimLockOff || c == ClaimLockReadOnly || c == ClaimLockHidden
+}
+func (w ReminderWhere) Valid() bool {
+	return w == RemindInTicket || w == RemindInLog || w == RemindInBoth
+}
+func (p ReminderPing) Valid() bool { return p == PingClaimer || p == PingRoles || p == PingNobody }
 
 // Label is what this type's button says.
 func (t TicketType) Label() string {
@@ -117,7 +167,8 @@ const MaxButtonLabel = 80
 const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_id, support_role_ids,
 	name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
 	required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt, button_style, button_label,
-	created_at`
+	claim_lock, claim_lock_exempt_role_ids, reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where,
+	reminder_ping, created_at`
 
 func scanTicketType(row pgx.Row) (TicketType, error) {
 	var (
@@ -129,13 +180,20 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 		roles    []int64
 		required []int64
 		blocked  []int64
+		exempt   []int64
+		lock     string
+		where    string
+		ping     string
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Name, &t.Emoji, &t.Description, &mode, &parentID, &roles,
 		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours,
-		&required, &blocked, &t.CooldownMinutes, &t.AskRating, &t.RatingPrompt, &style, &t.ButtonLabel, &t.CreatedAt)
+		&required, &blocked, &t.CooldownMinutes, &t.AskRating, &t.RatingPrompt, &style, &t.ButtonLabel,
+		&lock, &exempt, &t.ReplyTargetMinutes, &t.ReminderMinutes, &t.ReminderRepeat, &where, &ping, &t.CreatedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
+	t.ClaimLock, t.ReminderWhere, t.ReminderPing = ClaimLock(lock), ReminderWhere(where), ReminderPing(ping)
+	t.ClaimLockExemptRoleIDs = fromInt64s(exempt)
 	t.GuildID = snowflake.ID(guildID)
 	t.Mode = TicketMode(mode)
 	t.ButtonStyle = ButtonStyle(style)
@@ -185,41 +243,60 @@ func (s *Store) CountTicketTypes(ctx context.Context, guildID snowflake.ID) (int
 	return n, err
 }
 
-// CreateTicketType inserts t and sets its ID and CreatedAt.
-func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
+// defaults fills in the zero values of enum-like fields, so callers that
+// don't set them (tests, templates) get the dashboard's defaults.
+func (t *TicketType) defaults() {
 	t.Questions = questionsOrEmpty(t.Questions)
 	if t.ButtonStyle == "" {
 		t.ButtonStyle = ButtonPrimary
 	}
+	if t.ClaimLock == "" {
+		t.ClaimLock = ClaimLockOff
+	}
+	if t.ReminderWhere == "" {
+		t.ReminderWhere = RemindInTicket
+	}
+	if t.ReminderPing == "" {
+		t.ReminderPing = PingClaimer
+	}
+}
+
+// CreateTicketType inserts t and sets its ID and CreatedAt.
+func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
+	t.defaults()
 	return s.pool.QueryRow(ctx, `
 		INSERT INTO ticket_types (guild_id, name, emoji, description, mode, parent_id, support_role_ids,
 		                          name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
 		                          required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt,
-		                          button_style, button_label)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		                          button_style, button_label, claim_lock, claim_lock_exempt_role_ids,
+		                          reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where, reminder_ping)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+		        $20, $21, $22, $23, $24, $25, $26)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.AutoCloseHours,
 		toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating, t.RatingPrompt,
-		string(t.ButtonStyle), t.ButtonLabel,
+		string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
+		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
 func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
-	if t.ButtonStyle == "" {
-		t.ButtonStyle = ButtonPrimary
-	}
+	t.defaults()
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE ticket_types
 		SET name = $3, emoji = $4, description = $5, mode = $6, parent_id = $7, support_role_ids = $8,
 		    name_format = $9, welcome_message = $10, max_open_per_user = $11, questions = $12, auto_close_hours = $13,
 		    required_role_ids = $14, blocked_role_ids = $15, cooldown_minutes = $16, ask_rating = $17,
-		    rating_prompt = $18, button_style = $19, button_label = $20, updated_at = now()
+		    rating_prompt = $18, button_style = $19, button_label = $20, claim_lock = $21,
+		    claim_lock_exempt_role_ids = $22, reply_target_minutes = $23, reminder_minutes = $24,
+		    reminder_repeat = $25, reminder_where = $26, reminder_ping = $27, updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
-		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, questionsOrEmpty(t.Questions),
+		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions,
 		t.AutoCloseHours, toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating,
-		t.RatingPrompt, string(t.ButtonStyle), t.ButtonLabel)
+		t.RatingPrompt, string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
+		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing))
 	if err != nil {
 		return err
 	}

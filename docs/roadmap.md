@@ -52,6 +52,10 @@
 
 - Ticket buttons that match the server: per ticket type, a button colour (blurple, grey, green, red) and a label that can differ from the name; per set of buttons, a banner image, a thumbnail and the dropdown's prompt. All shown in the editors' previews
 
+- Claim lock: per ticket type, claiming a channel ticket can make it read only for the rest of the team or hide it from them, with roles that keep full access
+- On hold: `/ticket hold`, `/ticket resume` and the Tickets page park tickets waiting on something else; they leave the queue, reminders and auto-close until the member writes or staff resume
+- Reply targets and staff reminders: per ticket type, a reply target measured in Analytics (overall and per type) with overdue tickets marked on Home and the Tickets page, and reminders to the team after a wait, in the ticket or the log channel, mentioning the claimer or the roles, once or repeating
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.

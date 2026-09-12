@@ -85,6 +85,21 @@ var commands = []discord.ApplicationCommandCreate{
 				},
 			},
 			discord.ApplicationCommandOptionSubCommand{
+				Name:        "hold",
+				Description: "Put this ticket on hold while you wait on something else",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionString{
+						Name:        "reason",
+						Description: "What you're waiting on",
+						MaxLength:   ptr(MaxHoldReason),
+					},
+				},
+			},
+			discord.ApplicationCommandOptionSubCommand{
+				Name:        "resume",
+				Description: "Take this ticket off hold",
+			},
+			discord.ApplicationCommandOptionSubCommand{
 				Name:        "block",
 				Description: "Stop someone opening tickets in this server",
 				Options: []discord.ApplicationCommandOption{

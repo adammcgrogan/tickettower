@@ -33,7 +33,7 @@
 		// The Tickets badge counts tickets waiting on the team.
 		const refresh = () =>
 			api<Ticket[]>(`/guilds/${id}/tickets?status=open`)
-				.then((t) => (waiting = t.filter((x) => x.waiting_on_staff).length))
+				.then((t) => (waiting = t.filter((x) => x.waiting_on_staff && !x.on_hold).length))
 				.catch(() => {});
 		refresh();
 		const timer = setInterval(refresh, 60_000);
