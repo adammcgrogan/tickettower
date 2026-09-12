@@ -26,6 +26,16 @@ const MaxTypesPerPanel = 25
 
 var customEmoji = regexp.MustCompile(`^<(a?):([A-Za-z0-9_]{2,32}):(\d{15,21})>$`)
 
+// CustomEmojiID returns the ID of a custom emoji (<:name:id>), or 0 for a
+// unicode emoji or an empty string.
+func CustomEmojiID(s string) snowflake.ID {
+	if m := customEmoji.FindStringSubmatch(strings.TrimSpace(s)); m != nil {
+		id, _ := snowflake.Parse(m[3])
+		return id
+	}
+	return 0
+}
+
 // ParseEmoji converts a unicode emoji or a custom emoji (<:name:id>) into a
 // component emoji. It returns nil for an empty string.
 func ParseEmoji(s string) *discord.ComponentEmoji {

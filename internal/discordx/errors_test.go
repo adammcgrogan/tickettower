@@ -28,3 +28,14 @@ func TestIsCategoryFull(t *testing.T) {
 		t.Errorf("unexpected friendly message for a bad name: %q", msg)
 	}
 }
+
+func TestIsInvalidEmoji(t *testing.T) {
+	bad := &rest.Error{Code: CodeInvalidFormBody, Message: "Invalid Form Body",
+		Errors: json.RawMessage(`{"components":{"0":{"components":{"1":{"emoji":{"id":{"_errors":[{"code":"BUTTON_COMPONENT_INVALID_EMOJI","message":"Invalid emoji"}]}}}}}}}`)}
+	if !IsInvalidEmoji(fmt.Errorf("publish: %w", bad)) || Friendly(bad) == "" {
+		t.Error("invalid emoji error not recognised")
+	}
+	if IsInvalidEmoji(&rest.Error{Code: CodeInvalidFormBody}) || IsInvalidEmoji(errors.New("x")) {
+		t.Error("other errors treated as an invalid emoji")
+	}
+}

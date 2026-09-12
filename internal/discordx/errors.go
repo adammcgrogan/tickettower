@@ -53,9 +53,20 @@ func IsCategoryFull(err error) bool {
 		bytes.Contains(re.Errors, []byte("CHANNEL_PARENT_MAX_CHANNELS"))
 }
 
+// IsInvalidEmoji reports whether Discord rejected a message because a button
+// or select option uses an emoji the bot can't use (one from a server it
+// isn't in, or a deleted one).
+func IsInvalidEmoji(err error) bool {
+	var re *rest.Error
+	return errors.As(err, &re) && int(re.Code) == CodeInvalidFormBody && bytes.Contains(re.Errors, []byte("INVALID_EMOJI"))
+}
+
 // Friendly returns a user-facing explanation for common Discord errors, or
 // "" if the error isn't one we recognise.
 func Friendly(err error) string {
+	if IsInvalidEmoji(err) {
+		return "Discord rejected one of the emoji: the bot can only use emoji from this server or standard ones. Check the emoji on each ticket type and try again."
+	}
 	if IsCategoryFull(err) {
 		return "The category these tickets open in is full: Discord allows 50 channels per category. " +
 			"The team needs to close some tickets, pick another category, or switch this ticket type to private threads."

@@ -64,6 +64,20 @@ func (s *Server) rawRoles(ctx context.Context, guildID snowflake.ID) ([]discord.
 	return roles, nil
 }
 
+// guildEmojis returns the guild's custom emoji.
+func (s *Server) guildEmojis(ctx context.Context, guildID snowflake.ID) ([]discord.Emoji, error) {
+	key := "emojis:" + guildID.String()
+	if v, ok := s.cache.get(key); ok {
+		return v.([]discord.Emoji), nil
+	}
+	emojis, err := s.discord.GetEmojis(guildID, rest.WithCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	s.cache.set(key, emojis, discordCacheTTL)
+	return emojis, nil
+}
+
 // guildChannels returns the guild's text, announcement and category channels.
 func (s *Server) guildChannels(ctx context.Context, guildID snowflake.ID) ([]channelResponse, error) {
 	channels, err := s.rawChannels(ctx, guildID)

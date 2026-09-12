@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
@@ -87,6 +88,18 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	in.Emoji = strings.TrimSpace(in.Emoji)
 	if !panels.IsValidEmoji(in.Emoji) {
 		return invalid("emoji", "Use a single emoji, or a custom emoji like <:name:id>.")
+	}
+	// Discord only lets the bot put a custom emoji on a button if the emoji
+	// is from a server it's in, so check it's one of this server's rather
+	// than failing at publish time.
+	if id := panels.CustomEmojiID(in.Emoji); id != 0 {
+		emojis, err := s.guildEmojis(ctx, guildID)
+		if err != nil {
+			return err
+		}
+		if !hasEmoji(emojis, id) {
+			return invalid("emoji", "That custom emoji isn't from this server, so the bot can't put it on a button. Use one of this server's emoji, or a standard one.")
+		}
 	}
 	in.Description = strings.TrimSpace(in.Description)
 	if utf8.RuneCountInString(in.Description) > 100 {
@@ -321,4 +334,9 @@ func openTicketsMessage(n int) string {
 		return "This ticket type still has 1 open ticket. Close it first, or move it to another type, then delete the type."
 	}
 	return fmt.Sprintf("This ticket type still has %d open tickets. Close them first, or move them to another type, then delete the type.", n)
+}
+
+// hasEmoji reports whether a custom emoji is one of the guild's.
+func hasEmoji(emojis []discord.Emoji, id snowflake.ID) bool {
+	return slices.ContainsFunc(emojis, func(e discord.Emoji) bool { return e.ID == id })
 }
