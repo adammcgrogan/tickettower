@@ -3,11 +3,13 @@
 	import {
 		api,
 		ApiError,
+		atLeast,
 		errorMessage,
 		MAX_BLOCK_REASON,
 		send,
 		type Block,
 		type Channel,
+		type DashboardRole,
 		type Guild,
 		type GuildSettings,
 		type Role
@@ -21,6 +23,13 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import RolePicker from '$lib/components/RolePicker.svelte';
+
+	type RoleLevel = DashboardRole['level'];
+	const levels: { value: RoleLevel; label: string; body: string }[] = [
+		{ value: 'viewer', label: 'Viewer', body: 'Read tickets, transcripts and analytics.' },
+		{ value: 'support', label: 'Support', body: 'Viewer, plus reply to, close, reopen, move and hold tickets, and block members.' },
+		{ value: 'admin', label: 'Admin', body: 'Support, plus change ticket types, buttons, saved replies and settings.' }
+	];
 
 	const getGuild = getContext<() => Guild>('guild');
 	const guild = $derived(getGuild());
@@ -39,25 +48,34 @@
 	let channels = $state<Channel[]>([]);
 	let loadError = $state('');
 	let retentionValue = $state('');
-	let dashboardRoles = $state<string[]>([]);
+	let dashboardRoles = $state<DashboardRole[]>([]);
+	let addRole = $state('');
+
+	const sameRoles = (a: DashboardRole[], b: DashboardRole[]) =>
+		a.length === b.length && a.every((r) => b.some((o) => o.role_id === r.role_id && o.level === r.level));
+	const unusedRoles = $derived(roles.filter((r) => !dashboardRoles.some((d) => d.role_id === r.id)));
+	const roleName = (id: string) => roles.find((r) => r.id === id)?.name ?? 'Deleted role';
+
+	function addDashboardRole() {
+		if (!addRole) return;
+		dashboardRoles = [...dashboardRoles, { role_id: addRole, level: 'support' }];
+		addRole = '';
+	}
 	let logChannel = $state<string | null>(null);
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 
-	const sameSet = (a: string[], b: string[]) =>
-		a.length === b.length && a.every((v) => b.includes(v));
-
 	const dirty = $derived(
 		settings !== null &&
 			(retentionValue !== (settings.transcript_retention_days?.toString() ?? '') ||
-				!sameSet(dashboardRoles, settings.dashboard_role_ids) ||
+				!sameRoles(dashboardRoles, settings.dashboard_roles) ||
 				logChannel !== settings.log_channel_id)
 	);
 
 	function reset(s: GuildSettings) {
 		settings = s;
 		retentionValue = s.transcript_retention_days?.toString() ?? '';
-		dashboardRoles = [...s.dashboard_role_ids];
+		dashboardRoles = s.dashboard_roles.map((r) => ({ ...r }));
 		logChannel = s.log_channel_id;
 	}
 
@@ -137,7 +155,7 @@
 				transcript_retention_days: retentionValue ? Number(retentionValue) : null,
 				log_channel_id: logChannel
 			};
-			if (guild.can_manage) body.dashboard_role_ids = dashboardRoles;
+			if (guild.can_manage) body.dashboard_roles = dashboardRoles;
 			reset(await api<GuildSettings>(`/guilds/${guild.id}/settings`, send('PATCH', body)));
 			toast('Settings saved');
 		} catch (err) {
@@ -203,32 +221,65 @@
 			<div>
 				<h2 class="font-medium">Dashboard access</h2>
 				<p class="hint mt-1">
-					People with Manage Server can always use this dashboard. Add roles to let other members,
-					such as your support leads, manage tickets and ticket buttons here too.
+					People with Manage Server can always use everything here. Give other roles access at the
+					level they need.
+					<a href="/help/support-team" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
+						Learn more
+					</a>
 				</p>
 			</div>
-			<Field
-				label="Dashboard roles"
-				for="dashboard_roles"
-				optional
-				hint={guild.can_manage
-					? 'Members with these roles can use everything except this setting.'
-					: 'Only people with Manage Server can change who has access.'}
-				help="support-team"
-				error={errors.dashboard_role_ids}
-			>
-				<div class="sm:max-w-sm">
-					<RolePicker
-						id="dashboard_roles"
-						{roles}
-						bind:value={dashboardRoles}
-						disabled={!guild.can_manage}
-					/>
+			{#if dashboardRoles.length === 0}
+				<p class="text-sm text-muted">No roles have dashboard access yet.</p>
+			{:else}
+				<ul class="divide-y divide-border rounded-xl border border-border">
+					{#each dashboardRoles as r, i (r.role_id)}
+						<li class="flex flex-wrap items-center gap-3 px-4 py-3">
+							<span class="min-w-0 flex-1 truncate text-sm font-medium">{roleName(r.role_id)}</span>
+							<select
+								class="input w-auto"
+								aria-label="Access level for {roleName(r.role_id)}"
+								bind:value={r.level}
+								disabled={!guild.can_manage}
+							>
+								{#each levels as l (l.value)}<option value={l.value}>{l.label}</option>{/each}
+							</select>
+							{#if guild.can_manage}
+								<button
+									type="button"
+									class="btn btn-ghost size-8 p-0"
+									onclick={() => dashboardRoles.splice(i, 1)}
+									aria-label="Remove {roleName(r.role_id)}"
+								>
+									<Icon name="x" size={14} />
+								</button>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if guild.can_manage && unusedRoles.length > 0 && dashboardRoles.length < 10}
+				<div class="flex flex-wrap items-center gap-2">
+					<select class="input w-auto" aria-label="Role to add" bind:value={addRole}>
+						<option value="">Add a role…</option>
+						{#each unusedRoles as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
+					</select>
+					<button type="button" class="btn btn-secondary h-9" onclick={addDashboardRole} disabled={!addRole}>
+						<Icon name="plus" size={14} /> Add
+					</button>
 				</div>
-				{#if !guild.can_manage && dashboardRoles.length === 0}
-					<p class="text-sm text-muted">No roles yet.</p>
-				{/if}
-			</Field>
+			{/if}
+			<dl class="grid gap-2 text-xs text-muted sm:grid-cols-3">
+				{#each levels as l (l.value)}
+					<div>
+						<dt class="font-medium text-fg">{l.label}</dt>
+						<dd class="mt-0.5">{l.body}</dd>
+					</div>
+				{/each}
+			</dl>
+			{#if !guild.can_manage}
+				<p class="text-xs text-subtle">Only people with Manage Server can change who has access.</p>
+			{/if}
+			{#if errors.dashboard_roles}<p class="text-xs text-danger">{errors.dashboard_roles}</p>{/if}
 		</section>
 
 		<section class="card space-y-5 p-5">
@@ -255,7 +306,7 @@
 		</section>
 
 		<div class="flex justify-end">
-			<button type="submit" class="btn btn-primary" disabled={!dirty || saving}>
+			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || !atLeast(guild.level, 'admin')}>
 				{saving ? 'Saving…' : 'Save settings'}
 			</button>
 		</div>

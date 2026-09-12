@@ -281,9 +281,22 @@
 
 					<h2>Dashboard access</h2>
 					<p>
-						People with Manage Server can always use the dashboard. To let others in, such as support
-						leads, add their roles under <strong>Settings → Dashboard roles</strong>. They can do
-						everything except change who has dashboard access.
+						People with Manage Server can always use the dashboard. To let others in, add their roles
+						under <strong>Settings → Dashboard access</strong>, each at one of three levels:
+					</p>
+					<ul>
+						<li><strong>Viewer</strong>: read tickets, transcripts and analytics.</li>
+						<li>
+							<strong>Support</strong>: also reply to, close, reopen, move and hold tickets from the
+							dashboard, and block members.
+						</li>
+						<li>
+							<strong>Admin</strong>: also change ticket types, ticket buttons, saved replies and settings.
+						</li>
+					</ul>
+					<p>
+						Only people with Manage Server can change who has access. A member with several roles gets
+						the highest level among them.
 					</p>
 				{:else if guide.slug === 'saved-replies'}
 					<p>

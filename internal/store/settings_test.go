@@ -14,14 +14,15 @@ func TestGuildSettings(t *testing.T) {
 
 	// Unknown guilds get defaults rather than an error.
 	st, err := s.GetGuildSettings(ctx, 9999)
-	if err != nil || st.TranscriptRetentionDays != nil || st.DashboardRoleIDs == nil || len(st.DashboardRoleIDs) != 0 || st.LogChannelID != nil {
+	if err != nil || st.TranscriptRetentionDays != nil || st.DashboardRoles == nil || len(st.DashboardRoles) != 0 || st.LogChannelID != nil {
 		t.Fatalf("defaults = %+v, err = %v", st, err)
 	}
 
 	seedGuild(t, s, testGuild)
 	seedGuild(t, s, 3001)
 	days, logChannel := 30, snowflake.ID(4242)
-	want := GuildSettings{TranscriptRetentionDays: &days, DashboardRoleIDs: []snowflake.ID{10, 20}, LogChannelID: &logChannel}
+	roles := []DashboardRole{{RoleID: 10, Level: LevelAdmin}, {RoleID: 20, Level: LevelViewer}}
+	want := GuildSettings{TranscriptRetentionDays: &days, DashboardRoles: roles, LogChannelID: &logChannel}
 	if err := s.UpdateGuildSettings(ctx, testGuild, want); err != nil {
 		t.Fatal(err)
 	}
@@ -29,28 +30,50 @@ func TestGuildSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *got.TranscriptRetentionDays != 30 || !slices.Equal(got.DashboardRoleIDs, want.DashboardRoleIDs) ||
+	if *got.TranscriptRetentionDays != 30 || !slices.Equal(got.DashboardRoles, roles) ||
 		got.LogChannelID == nil || *got.LogChannelID != logChannel {
 		t.Errorf("round trip = %+v", got)
 	}
 
 	// Only guilds with dashboard roles are returned.
-	roles, err := s.DashboardRoles(ctx, []snowflake.ID{testGuild, 3001, 9999})
+	byGuild, err := s.DashboardRoles(ctx, []snowflake.ID{testGuild, 3001, 9999})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(roles) != 1 || !slices.Equal(roles[testGuild], want.DashboardRoleIDs) {
-		t.Errorf("dashboard roles = %v", roles)
+	if len(byGuild) != 1 || !slices.Equal(byGuild[testGuild], roles) {
+		t.Errorf("dashboard roles = %v", byGuild)
 	}
 
 	// Clearing the roles removes the guild from the lookup.
-	if err := s.UpdateGuildSettings(ctx, testGuild, GuildSettings{DashboardRoleIDs: nil}); err != nil {
+	if err := s.UpdateGuildSettings(ctx, testGuild, GuildSettings{DashboardRoles: nil}); err != nil {
 		t.Fatal(err)
 	}
-	if roles, _ := s.DashboardRoles(ctx, []snowflake.ID{testGuild}); len(roles) != 0 {
-		t.Errorf("after clearing = %v", roles)
+	if byGuild, _ := s.DashboardRoles(ctx, []snowflake.ID{testGuild}); len(byGuild) != 0 {
+		t.Errorf("after clearing = %v", byGuild)
 	}
 	if got, _ := s.GetGuildSettings(ctx, testGuild); got.LogChannelID != nil || got.TranscriptRetentionDays != nil {
 		t.Errorf("after clearing = %+v", got)
+	}
+}
+
+func TestHighestLevel(t *testing.T) {
+	roles := []DashboardRole{{RoleID: 1, Level: LevelViewer}, {RoleID: 2, Level: LevelAdmin}, {RoleID: 3, Level: LevelSupport}}
+	cases := []struct {
+		member []snowflake.ID
+		want   AccessLevel
+	}{
+		{nil, ""},
+		{[]snowflake.ID{9}, ""},
+		{[]snowflake.ID{1}, LevelViewer},
+		{[]snowflake.ID{1, 3}, LevelSupport},
+		{[]snowflake.ID{3, 2, 1}, LevelAdmin},
+	}
+	for _, c := range cases {
+		if got := HighestLevel(roles, c.member); got != c.want {
+			t.Errorf("HighestLevel(%v) = %q, want %q", c.member, got, c.want)
+		}
+	}
+	if !LevelOwner.AtLeast(LevelAdmin) || LevelSupport.AtLeast(LevelAdmin) || !LevelSupport.AtLeast(LevelViewer) {
+		t.Error("AtLeast ordering is wrong")
 	}
 }

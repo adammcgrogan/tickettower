@@ -21,7 +21,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | Table | Purpose |
 |---|---|
 | `guilds` | Servers the bot is or was in (`left_at` set when removed; data kept for re-adds) |
-| `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (extra roles allowed into the dashboard), `log_channel_id` |
+| `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_roles` (JSONB list of `{role_id, level}` granting dashboard access), `log_channel_id` |
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
 | `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5), `auto_close_hours`, who can open it (`required_role_ids`, `blocked_role_ids`, `cooldown_minutes`), `ask_rating` and `rating_prompt` |
 | `ticket_blocks` | Members who can't open any ticket in a guild, with the reason (shown to them) and who blocked them |
@@ -100,8 +100,8 @@ Editing a ticket type re-renders every published panel that uses it. A custom em
 **Dashboard auth.**
 1. `/api/auth/login` goes to Discord OAuth (`identify guilds`). `?next=` (a local path) is kept in Redis next to the OAuth state, so someone opening a transcript link from a DM lands back on it after logging in. The frontend adds it on any 401.
 2. The callback stores the session in Redis, sets an HttpOnly cookie and redirects to `next`, or to `/servers` if there isn't one.
-3. Access to a guild needs the bot in the guild, plus either Owner, Administrator or Manage Server (from the OAuth guild list), or one of the guild's `dashboard_role_ids` (checked via bot-token `GetMember`, cached 30s). `internal/api/access.go` has the logic.
-4. Dashboard-role members can do everything except change the dashboard roles themselves; `can_manage` on the guild response tells the frontend which kind of user it has.
+3. Access to a guild needs the bot in the guild, plus either Owner, Administrator or Manage Server (from the OAuth guild list), or one of the guild's `dashboard_roles` (checked via bot-token `GetMember`, cached 30s). `internal/api/access.go` has the logic.
+4. Every user has a level: managers are `owner`; a dashboard role grants `viewer` (read everything), `support` (also act on tickets: reply, close, reopen, move, hold, block members) or `admin` (also change ticket types, buttons, saved replies and settings). The highest of a member's roles wins. `requireLevel` in `api/server.go` enforces the minimum per route group; only owners can change the dashboard roles (`validateSettings`). The guild response carries `level` (and `can_manage` for owners) so the frontend hides what the user can't do.
 5. Transcripts (`/api/transcripts/{id}`) are visible to anyone with dashboard access, the ticket's opener, and that type's support roles. Anyone else gets a 404, so ticket IDs can't be probed.
 
 ## API surface (`internal/api/server.go`)

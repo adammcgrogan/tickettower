@@ -12,11 +12,24 @@ export type Guild = {
 	bot_present: boolean;
 	/** False for members who only have a dashboard role. */
 	can_manage: boolean;
+	/** What the user may do here. Owners are server managers. */
+	level: AccessLevel;
 };
+
+export type AccessLevel = 'viewer' | 'support' | 'admin' | 'owner';
+
+const levelRank: Record<AccessLevel, number> = { viewer: 1, support: 2, admin: 3, owner: 4 };
+
+/** Whether a user at `level` may do what `min` allows. */
+export const atLeast = (level: AccessLevel | undefined, min: AccessLevel) =>
+	!!level && levelRank[level] >= levelRank[min];
+
+/** A role that grants dashboard access at a level. */
+export type DashboardRole = { role_id: string; level: Exclude<AccessLevel, 'owner'> };
 
 export type GuildSettings = {
 	transcript_retention_days: number | null;
-	dashboard_role_ids: string[];
+	dashboard_roles: DashboardRole[];
 	log_channel_id: string | null;
 };
 
