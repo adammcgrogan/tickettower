@@ -1,6 +1,7 @@
 package ticketbot
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/disgoorg/disgo/discord"
@@ -52,5 +53,29 @@ func TestWelcomeText(t *testing.T) {
 	tt.SupportRoleIDs, tt.WelcomeMessage = nil, "{support} will reply. {answer2}"
 	if got := welcomeText(ticket, tt, answers, ""); got != "the team will reply. {user}" {
 		t.Errorf("without roles = %q", got)
+	}
+}
+
+func TestKeepsAccess(t *testing.T) {
+	tt := &store.TicketType{SupportRoleIDs: []snowflake.ID{10, 20}}
+	member := func(perms discord.Permissions, roles ...snowflake.ID) *discord.ResolvedMember {
+		return &discord.ResolvedMember{Member: discord.Member{RoleIDs: roles}, Permissions: perms}
+	}
+	if err := keepsAccess(1, member(discord.PermissionViewChannel, 30), tt); err != nil {
+		t.Errorf("plain member: %v", err)
+	}
+	if err := keepsAccess(1, nil, tt); err != nil {
+		t.Errorf("member who left: %v", err)
+	}
+	if err := keepsAccess(1, member(discord.PermissionViewChannel, 30), nil); err != nil {
+		t.Errorf("deleted type: %v", err)
+	}
+	err := keepsAccess(1, member(discord.PermissionAdministrator), tt)
+	if err == nil || !strings.Contains(err.Error(), "administrator") {
+		t.Errorf("admin: %v", err)
+	}
+	err = keepsAccess(1, member(discord.PermissionViewChannel, 30, 20), tt)
+	if err == nil || !strings.Contains(err.Error(), discord.RoleMention(20)) {
+		t.Errorf("support role: %v", err)
 	}
 }

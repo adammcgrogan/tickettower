@@ -548,8 +548,13 @@ func (b *Bot) addToTicket(ctx context.Context, channelID snowflake.ID, m *discor
 		discord.MemberPermissionOverwriteUpdate{Allow: &allow}, rest.WithCtx(ctx))
 }
 
-// removeFromTicket revokes a user's access to the ticket.
-func (b *Bot) removeFromTicket(ctx context.Context, channelID snowflake.ID, m *discord.ResolvedMember, target discord.User) error {
+// removeFromTicket revokes a user's access to the ticket. It only reports
+// success when access actually changed: someone who can see the ticket
+// through a support role or Administrator keeps it, and someone who was
+// never added has nothing to remove. targetMember is nil if the person has
+// left the server.
+func (b *Bot) removeFromTicket(ctx context.Context, channelID snowflake.ID, m *discord.ResolvedMember,
+	target discord.User, targetMember *discord.ResolvedMember) error {
 	t, tt, err := b.loadTicket(ctx, channelID)
 	if err != nil {
 		return err
@@ -561,9 +566,45 @@ func (b *Bot) removeFromTicket(ctx context.Context, channelID snowflake.ID, m *d
 		return userErr("You can't remove the person who opened the ticket.")
 	}
 	if t.Mode == store.ModeThread {
+		if _, err := b.rest.GetThreadMember(t.ChannelID, target.ID, false, rest.WithCtx(ctx)); discordx.IsCode(err, discordx.CodeUnknownMember) {
+			return userErr("%s isn't in this ticket.", discord.UserMention(target.ID))
+		}
 		return b.rest.RemoveThreadMember(t.ChannelID, target.ID, rest.WithCtx(ctx))
 	}
+	if err := keepsAccess(target.ID, targetMember, tt); err != nil {
+		return err
+	}
+	ch, err := b.rest.GetChannel(t.ChannelID, rest.WithCtx(ctx))
+	if err != nil {
+		return err
+	}
+	if gc, ok := ch.(discord.GuildChannel); ok {
+		if _, added := gc.PermissionOverwrites().Member(target.ID); !added {
+			return userErr("%s isn't in this ticket.", discord.UserMention(target.ID))
+		}
+	}
 	return b.rest.DeletePermissionOverwrite(t.ChannelID, target.ID, rest.WithCtx(ctx))
+}
+
+// keepsAccess explains why removing a member's overwrite from a ticket
+// channel wouldn't stop them seeing it, or returns nil if it would.
+func keepsAccess(targetID snowflake.ID, target *discord.ResolvedMember, tt *store.TicketType) error {
+	if target == nil {
+		return nil
+	}
+	if target.Permissions.Has(discord.PermissionAdministrator) {
+		return userErr("%s is an administrator, so they can see every channel. Removing them from the ticket wouldn't change that.",
+			discord.UserMention(targetID))
+	}
+	if tt != nil {
+		for _, id := range target.RoleIDs {
+			if slices.Contains(tt.SupportRoleIDs, id) {
+				return userErr("%s can see this ticket through the %s support role, so removing them wouldn't change that. Take the role away if you need to.",
+					discord.UserMention(targetID), discord.RoleMention(id))
+			}
+		}
+	}
+	return nil
 }
 
 // renameTicket renames the ticket's channel or thread.

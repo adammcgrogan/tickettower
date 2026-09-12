@@ -311,10 +311,15 @@ func (b *Bot) handleAddCommand(e *handler.CommandEvent) error {
 }
 
 func (b *Bot) handleRemoveCommand(e *handler.CommandEvent) error {
-	target := e.SlashCommandInteractionData().User("user")
+	data := e.SlashCommandInteractionData()
+	target := data.User("user")
+	var targetMember *discord.ResolvedMember
+	if rm, ok := data.OptMember("user"); ok {
+		targetMember = &rm
+	}
 	ctx, cancel := timeout(e.Ctx)
 	defer cancel()
-	if err := b.removeFromTicket(ctx, e.Channel().ID(), e.Member(), target); err != nil {
+	if err := b.removeFromTicket(ctx, e.Channel().ID(), e.Member(), target, targetMember); err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
 	}
 	return e.CreateMessage(public(discord.UserMention(e.User().ID) + " removed " + discord.UserMention(target.ID) + " from this ticket."))
