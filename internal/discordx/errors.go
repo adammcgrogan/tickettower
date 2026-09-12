@@ -3,6 +3,7 @@
 package discordx
 
 import (
+	"bytes"
 	"errors"
 
 	"github.com/disgoorg/disgo/rest"
@@ -15,6 +16,7 @@ const (
 	CodeUnknownMember      = 10007
 	CodeUnknownMessage     = 10008
 	CodeMaxChannels        = 30013
+	CodeInvalidFormBody    = 50035
 	CodeMissingAccess      = 50001
 	CodeCannotDMUser       = 50007
 	CodeMissingPermissions = 50013
@@ -39,9 +41,25 @@ func IsCode(err error, codes ...int) bool {
 	return false
 }
 
+// MaxChannelsPerCategory is Discord's limit on channels in one category.
+const MaxChannelsPerCategory = 50
+
+// IsCategoryFull reports whether Discord refused to create a channel because
+// its category already holds MaxChannelsPerCategory channels. Discord reports
+// this as an invalid form body whose parent_id error is CHANNEL_PARENT_MAX_CHANNELS.
+func IsCategoryFull(err error) bool {
+	var re *rest.Error
+	return errors.As(err, &re) && int(re.Code) == CodeInvalidFormBody &&
+		bytes.Contains(re.Errors, []byte("CHANNEL_PARENT_MAX_CHANNELS"))
+}
+
 // Friendly returns a user-facing explanation for common Discord errors, or
 // "" if the error isn't one we recognise.
 func Friendly(err error) string {
+	if IsCategoryFull(err) {
+		return "The category these tickets open in is full: Discord allows 50 channels per category. " +
+			"The team needs to close some tickets, pick another category, or switch this ticket type to private threads."
+	}
 	switch Code(err) {
 	case CodeMissingPermissions:
 		return "I don't have permission to do that. Make sure my role has Manage Channels and Manage Roles, and can see the channel or category being used."
