@@ -10,6 +10,28 @@ import (
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
+// maxReply is Discord's limit on the text of a message.
+const maxReply = 2000
+
+// guildTicket loads the ticket in the URL, writing a 404 if the guild has no
+// such ticket.
+func (s *Server) guildTicket(w http.ResponseWriter, r *http.Request) (store.Ticket, bool) {
+	id, ok := pathID(r, "ticketID")
+	if !ok {
+		writeError(w, http.StatusNotFound, "ticket not found")
+		return store.Ticket{}, false
+	}
+	t, err := s.store.GetGuildTicket(r.Context(), guildFrom(r).ID, id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "ticket not found")
+		return t, false
+	} else if err != nil {
+		s.writeFailure(w, err)
+		return t, false
+	}
+	return t, true
+}
+
 type closeTicketInput struct {
 	Reason string `json:"reason"`
 }
@@ -17,21 +39,10 @@ type closeTicketInput struct {
 // closeTicket closes a ticket from the dashboard, just as the Close button
 // in Discord does.
 func (s *Server) closeTicket(w http.ResponseWriter, r *http.Request) {
-	g := guildFrom(r)
-	id, ok := pathID(r, "ticketID")
+	t, ok := s.guildTicket(w, r)
 	if !ok {
-		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
-	t, err := s.store.GetGuildTicket(r.Context(), g.ID, id)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "ticket not found")
-		return
-	} else if err != nil {
-		s.writeFailure(w, err)
-		return
-	}
-
 	var in closeTicketInput
 	if !decodeJSON(w, r, &in) {
 		return
@@ -45,7 +56,8 @@ func (s *Server) closeTicket(w http.ResponseWriter, r *http.Request) {
 	user := auth.FromContext(r.Context()).User
 	closed := false
 	if t.Status == store.StatusOpen {
-		if closed, err = s.closer.Close(r.Context(), t, user.ID, user.DisplayName, in.Reason); err != nil {
+		var err error
+		if closed, err = s.dashboard.Close(r.Context(), t, user.ID, user.DisplayName, in.Reason); err != nil {
 			s.writeFailure(w, err)
 			return
 		}
@@ -55,9 +67,51 @@ func (s *Server) closeTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if t, err = s.store.GetGuildTicket(r.Context(), g.ID, id); err != nil {
+	t, err := s.store.GetGuildTicket(r.Context(), t.GuildID, t.ID)
+	if err != nil {
 		s.writeFailure(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
+}
+
+type replyInput struct {
+	Content string `json:"content"`
+}
+
+// replyTicket posts a message in a ticket from the dashboard. It returns the
+// message as saved in the transcript, and the updated ticket.
+func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.guildTicket(w, r)
+	if !ok {
+		return
+	}
+	var in replyInput
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	in.Content = strings.TrimSpace(in.Content)
+	switch {
+	case in.Content == "":
+		s.writeFailure(w, invalid("content", "Write a message first."))
+		return
+	case utf8.RuneCountInString(in.Content) > maxReply:
+		s.writeFailure(w, invalid("content", "Keep replies to 2,000 characters or fewer."))
+		return
+	case t.Status != store.StatusOpen:
+		s.writeFailure(w, invalid("", "This ticket is closed, so it can't take replies."))
+		return
+	}
+
+	user := auth.FromContext(r.Context()).User
+	msg, err := s.dashboard.Reply(r.Context(), t, user.ID, user.DisplayName, user.AvatarURL, in.Content)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	if t, err = s.store.GetGuildTicket(r.Context(), t.GuildID, t.ID); err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"message": msg, "ticket": t})
 }

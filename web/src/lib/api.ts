@@ -109,6 +109,8 @@ export type Ticket = {
 };
 
 export type Embed = {
+	/** Who wrote it, e.g. the staff member behind a dashboard reply. */
+	author?: { name: string; icon_url?: string };
 	title?: string;
 	description?: string;
 	color?: number;

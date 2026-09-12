@@ -26,20 +26,21 @@ type Server struct {
 	store   *store.Store
 	auth    *auth.Manager
 	discord rest.Rest // authenticated as the bot
-	closer  *ticketbot.Closer
-	cache   *ttlCache
-	log     *slog.Logger
+	// dashboard closes and replies to tickets as the bot does in Discord.
+	dashboard *ticketbot.Dashboard
+	cache     *ttlCache
+	log       *slog.Logger
 }
 
 func NewServer(cfg config.Config, st *store.Store, am *auth.Manager, discordRest rest.Rest, log *slog.Logger) *Server {
 	return &Server{
-		cfg:     cfg,
-		store:   st,
-		auth:    am,
-		discord: discordRest,
-		closer:  ticketbot.NewCloser(cfg, st, discordRest, log),
-		cache:   newTTLCache(),
-		log:     log,
+		cfg:       cfg,
+		store:     st,
+		auth:      am,
+		discord:   discordRest,
+		dashboard: ticketbot.NewDashboard(cfg, st, discordRest, log),
+		cache:     newTTLCache(),
+		log:       log,
 	}
 }
 
@@ -72,6 +73,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/analytics", s.getAnalytics)
 				r.Get("/tickets", s.listTickets)
 				r.Post("/tickets/{ticketID}/close", s.closeTicket)
+				r.Post("/tickets/{ticketID}/reply", s.replyTicket)
 				r.Get("/settings", s.getSettings)
 				r.Patch("/settings", s.updateSettings)
 

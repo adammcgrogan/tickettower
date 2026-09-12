@@ -53,7 +53,7 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 
 Deleting a ticket channel by hand also closes the ticket.
 
-Tickets can also be closed from the dashboard (`POST …/tickets/{id}/close`). The API uses `ticketbot.Closer`, which is the bot's close logic with a plain REST client in place of the gateway (`Bot.rest`), so the close message, log entry, DM and cleanup match a close in Discord. The bot drops a deleted channel from its `ticketCache` as usual. An archived thread stays cached until the bot restarts, which only matters if someone posts in the locked thread.
+Tickets can also be closed from the dashboard (`POST …/tickets/{id}/close`). The API uses `ticketbot.Dashboard`, which is the bot's close logic with a plain REST client in place of the gateway (`Bot.rest`), so the close message, log entry, DM and cleanup match a close in Discord. `Dashboard.Reply` (`POST …/tickets/{id}/reply`) posts a staff reply the same way: the bot sends an embed with the staff member's name and avatar as its author (so no extra permissions are needed), saves it to the transcript straight away, and records the first response and activity itself, since the bot's message capture ignores bot messages. The bot drops a deleted channel from its `ticketCache` as usual. An archived thread stays cached until the bot restarts, which only matters if someone posts in the locked thread.
 
 **Setup check.** `GET …/setup-check` (`api/checks.go`) looks for problems that would stop tickets working, before a member hits them:
 - permissions the bot lacks where a ticket type opens tickets, worked out from its roles and the channel's overwrites (`discordx.Permissions`)
@@ -95,7 +95,7 @@ Editing a ticket type re-renders every published panel that uses it.
 Public: `/healthz`, `/api/config`, `/api/invite`, `/api/auth/{login,callback,logout}`
 
 Authenticated: `/api/me`, `/api/guilds`, `/api/transcripts/{ticketID}`, and under `/api/guilds/{guildID}`:
-- `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=open|closed&type={ticketTypeID}&q={search}&before={ticketID}&limit=` (newest first, at most 200 per page; `before` pages past a ticket), `tickets/{id}/close` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
+- `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=open|closed&type={ticketTypeID}&q={search}&before={ticketID}&limit=` (newest first, at most 200 per page; `before` pages past a ticket), `tickets/{id}/close` (POST), `tickets/{id}/reply` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
 - `ticket-types` (GET/POST), `ticket-types/{id}` (PATCH/DELETE)
 - `panels` (GET/POST), `panels/{id}` (PATCH/DELETE), `panels/{id}/publish` (POST)
 

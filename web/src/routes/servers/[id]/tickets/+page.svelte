@@ -224,6 +224,43 @@
 		}
 	}
 
+	// --- Replying from the dashboard ---
+
+	let reply = $state('');
+	let replyError = $state('');
+	let sending = $state(false);
+
+	// A draft belongs to the ticket it was written for.
+	$effect(() => {
+		void selectedId;
+		reply = '';
+		replyError = '';
+	});
+
+	async function sendReply(e?: SubmitEvent) {
+		e?.preventDefault();
+		if (!detail || sending || !reply.trim()) return;
+		const t = detail.ticket;
+		sending = true;
+		replyError = '';
+		try {
+			const res = await api<{ message: Transcript['messages'][number]; ticket: Ticket }>(
+				`/guilds/${guild.id}/tickets/${t.id}/reply`,
+				send('POST', { content: reply })
+			);
+			if (detail?.ticket.id === t.id) {
+				detail = { ...detail, ticket: res.ticket, messages: [...detail.messages, res.message] };
+			}
+			if (tickets) tickets = tickets.map((x) => (x.id === t.id ? res.ticket : x));
+			reply = '';
+		} catch (err) {
+			if (err instanceof ApiError && err.field) replyError = err.message;
+			else toast(errorMessage(err), 'error');
+		} finally {
+			sending = false;
+		}
+	}
+
 	const emptyText = $derived(
 		filter === 'open'
 			? { title: 'No open tickets', body: "You're all caught up." }
@@ -378,6 +415,37 @@
 				<div class="mt-4">
 					<TranscriptView messages={detail.messages} openerId={t.opener_id} openerName={t.opener_name} />
 				</div>
+				{#if t.status === 'open'}
+					<form
+						onsubmit={sendReply}
+						class="mt-4 rounded-xl border bg-surface p-3 transition-colors focus-within:border-border-strong {replyError
+							? 'border-danger/50'
+							: 'border-border'}"
+					>
+						<label for="reply" class="sr-only">Reply to {t.opener_name}</label>
+						<textarea
+							id="reply"
+							rows="3"
+							maxlength="2000"
+							bind:value={reply}
+							placeholder="Reply to {t.opener_name}…"
+							aria-invalid={!!replyError}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendReply();
+							}}
+							class="block w-full resize-y bg-transparent px-1 text-sm outline-none placeholder:text-subtle"
+						></textarea>
+						<div class="mt-2 flex items-center justify-between gap-3">
+							<p class="text-xs {replyError ? 'text-danger' : 'text-subtle'}">
+								{replyError || `${APP_NAME} posts it in the ticket under your name. ⌘ or Ctrl + Enter sends.`}
+							</p>
+							<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={sending || !reply.trim()}>
+								<Icon name="send" size={13} />
+								{sending ? 'Sending…' : 'Send'}
+							</button>
+						</div>
+					</form>
+				{/if}
 			{/if}
 		{/if}
 	</div>

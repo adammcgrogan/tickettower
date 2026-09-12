@@ -152,6 +152,10 @@ func toEmbeds(in []discord.Embed) []store.Embed {
 		if e.Footer != nil {
 			se.Footer = e.Footer.Text
 		}
+		// Dashboard replies name the staff member who wrote them here.
+		if e.Author != nil {
+			se.Author = &store.EmbedAuthor{Name: e.Author.Name, IconURL: e.Author.IconURL}
+		}
 		for _, f := range e.Fields {
 			se.Fields = append(se.Fields, store.EmbedField{Name: f.Name, Value: f.Value})
 		}
