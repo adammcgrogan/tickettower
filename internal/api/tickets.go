@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/disgoorg/disgo/rest"
+
 	"github.com/adammcgrogan/tickettower/internal/auth"
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
@@ -104,7 +106,13 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.FromContext(r.Context()).User
-	msg, err := s.dashboard.Reply(r.Context(), t, user.ID, user.DisplayName, user.AvatarURL, in.Content)
+	// Members know staff by their server nickname and avatar, if they have
+	// them, so use those when Discord can tell us.
+	name, avatar := user.DisplayName, user.AvatarURL
+	if m, err := s.discord.GetMember(t.GuildID, user.ID, rest.WithCtx(r.Context())); err == nil {
+		name, avatar = m.EffectiveName(), m.EffectiveAvatarURL()
+	}
+	msg, err := s.dashboard.Reply(r.Context(), t, user.ID, name, avatar, in.Content)
 	if err != nil {
 		s.writeFailure(w, err)
 		return
