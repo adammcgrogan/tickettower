@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 )
@@ -327,5 +328,55 @@ func TestDeleteTicketTypeRefusesWithOpenTickets(t *testing.T) {
 	s.pool.QueryRow(ctx, `SELECT count(*) FROM tickets WHERE guild_id = $1 AND ticket_type_id IS NULL`, int64(testGuild)).Scan(&n)
 	if n != 3 {
 		t.Errorf("tickets kept after delete = %d, want 3", n)
+	}
+}
+
+func TestTicketsToCleanUp(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	tt := newType(t, s, testGuild, "Help")
+
+	open := func(n int) Ticket {
+		t.Helper()
+		tk := Ticket{GuildID: testGuild, Number: n, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+			ChannelID: snowflake.ID(8100 + n), OpenerID: 42, OpenerName: "adam"}
+		if err := s.CreateTicket(ctx, &tk); err != nil {
+			t.Fatal(err)
+		}
+		return tk
+	}
+	stillOpen, botClosed, cleaned, handDeleted := open(1), open(2), open(3), open(4)
+	for _, tk := range []Ticket{botClosed, cleaned} {
+		if _, err := s.CloseTicket(ctx, tk.ID, 1, "staff", "done"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.MarkChannelCleaned(ctx, cleaned.ID); err != nil {
+		t.Fatal(err)
+	}
+	// A channel deleted by hand is already gone, so it needs no cleanup.
+	if _, err := s.CloseTicketByChannel(ctx, handDeleted.ChannelID, "Channel was deleted"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A close that just happened is still in progress.
+	if got, _ := s.TicketsToCleanUp(ctx, time.Now().Add(-time.Minute)); len(got) != 0 {
+		t.Errorf("fresh closes to clean up = %d, want 0", len(got))
+	}
+	got, err := s.TicketsToCleanUp(ctx, time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != botClosed.ID {
+		t.Fatalf("to clean up = %+v, want only ticket %d", got, botClosed.ID)
+	}
+	_ = stillOpen
+
+	if err := s.MarkChannelCleaned(ctx, botClosed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.TicketsToCleanUp(ctx, time.Now().Add(time.Minute)); len(got) != 0 {
+		t.Errorf("after marking cleaned = %d, want 0", len(got))
 	}
 }

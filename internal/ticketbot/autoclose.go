@@ -22,7 +22,8 @@ const (
 
 // autoCloseTickets warns members about inactive tickets and later closes
 // them, checking every few minutes. Every step is a conditional update, so a
-// reply that lands at the last moment always wins.
+// reply that lands at the last moment always wins. The same loop retries the
+// channel cleanup of closed tickets whose channel was left behind.
 func (b *Bot) autoCloseTickets(ctx context.Context) {
 	ticker := time.NewTicker(autoCloseInterval)
 	defer ticker.Stop()
@@ -52,6 +53,8 @@ func (b *Bot) runAutoClose(ctx context.Context, now time.Time) {
 	for _, it := range due {
 		b.autoClose(ctx, it, now)
 	}
+
+	b.cleanUpClosedTickets(ctx, now)
 }
 
 func (b *Bot) warnInactive(ctx context.Context, it store.InactiveTicket, now time.Time) {

@@ -159,9 +159,38 @@ func (s *Store) CloseTicket(ctx context.Context, id int64, closedBy snowflake.ID
 // a ticket channel is deleted outside the bot.
 func (s *Store) CloseTicketByChannel(ctx context.Context, channelID snowflake.ID, reason string) (bool, error) {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE tickets SET status = 'closed', close_reason = $2, closed_at = now()
+		UPDATE tickets SET status = 'closed', close_reason = $2, closed_at = now(), channel_cleaned_at = now()
 		WHERE channel_id = $1 AND status = 'open'`, int64(channelID), reason)
 	return tag.RowsAffected() == 1, err
+}
+
+// TicketsToCleanUp returns closed tickets whose channel the bot hasn't
+// finished with yet (deleted, or archived for threads), closed before the
+// given time so a close still in progress isn't picked up.
+func (s *Store) TicketsToCleanUp(ctx context.Context, closedBefore time.Time) ([]Ticket, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+ticketColumns+` FROM tickets
+		WHERE status = 'closed' AND channel_cleaned_at IS NULL AND closed_at <= $1
+		ORDER BY closed_at LIMIT 50`, closedBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Ticket
+	for rows.Next() {
+		t, err := scanTicket(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// MarkChannelCleaned records that a closed ticket's channel is dealt with.
+func (s *Store) MarkChannelCleaned(ctx context.Context, ticketID int64) error {
+	_, err := s.pool.Exec(ctx, `UPDATE tickets SET channel_cleaned_at = now() WHERE id = $1 AND channel_cleaned_at IS NULL`, ticketID)
+	return err
 }
 
 // MoveTicket moves an open ticket to another ticket type. It reports false if
