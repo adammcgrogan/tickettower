@@ -511,7 +511,13 @@
 					{/snippet}
 				</TicketSummary>
 				<div class="mt-4">
-					<TranscriptView messages={detail.messages} openerId={t.opener_id} openerName={t.opener_name} />
+					<TranscriptView
+						messages={detail.messages}
+						openerId={t.opener_id}
+						openerName={t.opener_name}
+						roles={detail.roles}
+						channels={detail.channels}
+					/>
 				</div>
 				{#if t.status === 'open'}
 					<form

@@ -68,7 +68,33 @@ func (s *Server) getTranscript(w http.ResponseWriter, r *http.Request) {
 			guild.IconURL = &url
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ticket": t, "messages": messages, "guild": guild})
+	roles, channels := s.mentionNames(r.Context(), t.GuildID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ticket": t, "messages": messages, "guild": guild, "roles": roles, "channels": channels,
+	})
+}
+
+// mentionNames returns the guild's current role and channel names by ID, so
+// the transcript can show "@Moderators" and "#billing" instead of bare
+// mentions. Best effort: if the bot has left the guild the maps are empty
+// and the viewer sees generic placeholders.
+func (s *Server) mentionNames(ctx context.Context, guildID snowflake.ID) (roles, channels map[string]string) {
+	roles, channels = map[string]string{}, map[string]string{}
+	if rs, err := s.rawRoles(ctx, guildID); err == nil {
+		for _, r := range rs {
+			roles[r.ID.String()] = r.Name
+		}
+	} else {
+		s.log.Debug("roles for transcript", slog.Any("err", err))
+	}
+	if cs, err := s.rawChannels(ctx, guildID); err == nil {
+		for _, c := range cs {
+			channels[c.ID().String()] = c.Name()
+		}
+	} else {
+		s.log.Debug("channels for transcript", slog.Any("err", err))
+	}
+	return roles, channels
 }
 
 // isSupportStaff checks the user's current roles against the ticket type's
