@@ -210,6 +210,7 @@
 						<code>/ticket move</code>: move it to another ticket type, which hands it to that type's
 						support team (and category, for channels). You can also move tickets from the Tickets page.
 					</li>
+						<li><code>/reply</code>: send one of your <a href="/help/saved-replies">saved replies</a></li>
 					</ul>
 
 					<h2>If your team can't see tickets</h2>
@@ -230,6 +231,45 @@
 						People with Manage Server can always use the dashboard. To let others in, such as support
 						leads, add their roles under <strong>Settings → Dashboard roles</strong>. They can do
 						everything except change who has dashboard access.
+					</p>
+				{:else if guide.slug === 'saved-replies'}
+					<p>
+						Saved replies are answers your team sends often, like a refund policy or how to appeal a ban.
+						Write them once, then send them into any ticket in a couple of clicks.
+					</p>
+
+					<h2>Adding a saved reply</h2>
+					<p>
+						In the dashboard, open <strong>Saved replies</strong> under Setup and choose
+						<strong>New saved reply</strong>. Give it a name your team will recognise, like "Refund
+						policy", and write the message. A server can have up to 50.
+					</p>
+
+					<h2>Sending one from the dashboard</h2>
+					<p>
+						On the Tickets page, pick a reply from <strong>Saved replies</strong> next to the reply box.
+						It's added to the box, so you can change anything before you press Send.
+					</p>
+
+					<h2>Sending one from Discord</h2>
+					<p>
+						In a ticket, type <code>/reply</code>, start typing the reply's name and pick it from the
+						list. {APP_NAME} posts it straight away, under your name. Only support staff can use it.
+					</p>
+
+					<h2>Placeholders</h2>
+					<p>These are filled in when the reply is sent:</p>
+					<ul>
+						<li><code>{'{user}'}</code>: mentions the member, without pinging them</li>
+						<li><code>{'{username}'}</code>: the member's name</li>
+						<li><code>{'{number}'}</code>: the ticket number</li>
+						<li><code>{'{type}'}</code>: the ticket type</li>
+						<li><code>{'{server}'}</code>: your server's name</li>
+						<li><code>{'{staff}'}</code>: the name of whoever sends it</li>
+					</ul>
+					<p>
+						They work in replies you type yourself in the dashboard too. A saved reply counts as your
+						team's response, just like one typed by hand.
 					</p>
 				{:else if guide.slug === 'permissions'}
 					<p>

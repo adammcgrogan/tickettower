@@ -63,6 +63,7 @@
 	const setup: NavItem[] = $derived([
 		{ label: 'Ticket types', href: `${base}/ticket-types`, icon: 'tag' },
 		{ label: 'Ticket buttons', href: `${base}/buttons`, icon: 'panel' },
+		{ label: 'Saved replies', href: `${base}/replies`, icon: 'message' },
 		{ label: 'Settings', href: `${base}/settings`, icon: 'settings' }
 	]);
 	const isActive = (href: string) =>

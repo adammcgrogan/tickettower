@@ -28,6 +28,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at`, plus auto-close state (`last_activity_at`, `waiting_on_staff`, `auto_close_warned_at`) |
 | `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags) |
 | `ticket_feedback` | 1–5 rating + comment per ticket |
+| `saved_replies` | Answers a team sends often: name (unique per guild, ignoring case) and message |
 
 Names (`opener_name`, `type_name`, …) are snapshots so history reads well after people or types change.
 
@@ -98,6 +99,7 @@ Authenticated: `/api/me`, `/api/guilds`, `/api/transcripts/{ticketID}`, and unde
 - `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=open|closed&type={ticketTypeID}&q={search}&before={ticketID}&limit=` (newest first, at most 200 per page; `before` pages past a ticket), `tickets/{id}/close` (POST), `tickets/{id}/reply` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
 - `ticket-types` (GET/POST), `ticket-types/{id}` (PATCH/DELETE)
 - `panels` (GET/POST), `panels/{id}` (PATCH/DELETE), `panels/{id}/publish` (POST)
+- `saved-replies` (GET/POST), `saved-replies/{id}` (PATCH/DELETE)
 
 ## Deployment
 

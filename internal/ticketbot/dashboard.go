@@ -76,20 +76,13 @@ func (d *Dashboard) Move(ctx context.Context, t store.Ticket, typeID int64, byID
 	return moved, err
 }
 
-// Reply posts a dashboard user's message in an open ticket and returns it as
-// saved in the transcript. byName and avatarURL are how the member knows the
-// staff member, ideally their server nickname and avatar.
-//
-// The bot skips its own messages when tracking replies, so this records the
-// team's first response and restarts the auto-close clock itself. Once the
-// message is posted the reply has worked, so bookkeeping failures are only
-// logged.
+// Reply posts a dashboard user's message in an open ticket, with its
+// placeholders filled in, and returns it as saved in the transcript. byName
+// and avatarURL are how the member knows the staff member, ideally their
+// server nickname and avatar.
 func (d *Dashboard) Reply(ctx context.Context, t store.Ticket, byID snowflake.ID, byName, avatarURL, text string) (store.TicketMessage, error) {
-	server, serverIcon := d.b.guildName(ctx, t.GuildID), ""
-	if g, err := d.b.store.GetGuild(ctx, t.GuildID); err == nil && g.Icon != nil {
-		serverIcon = fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.png", g.ID, *g.Icon)
-	}
-	reply := replyMessage(d.b.cfg.AppName, byName, avatarURL, server, serverIcon, text)
+	server, serverIcon := d.b.guildBrand(ctx, t.GuildID)
+	reply := replyMessage(d.b.cfg.AppName, byName, avatarURL, server, serverIcon, replyText(text, t, server, byName))
 	m, err := d.b.rest.CreateMessage(t.ChannelID, reply, rest.WithCtx(ctx))
 	if discordx.IsCode(err, discordx.CodeUnknownChannel) {
 		// Deleted while the bot was offline, so the ticket was never closed.
@@ -99,34 +92,39 @@ func (d *Dashboard) Reply(ctx context.Context, t store.Ticket, byID snowflake.ID
 		return store.TicketMessage{}, err
 	}
 	msg := toTicketMessage(t.ID, *m)
-	log := d.b.log.With(slog.Int64("ticket_id", t.ID))
 
 	// The bot captures the message too; whichever insert comes second is
 	// ignored. Saving it here means the transcript has it straight away.
 	if err := d.b.store.InsertTicketMessage(ctx, msg); err != nil {
-		log.Error("failed to save dashboard reply", slog.Any("err", err))
+		d.b.log.Error("failed to save dashboard reply", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
 	}
-	byOpener := byID == t.OpenerID
-	if !byOpener {
-		if err := d.b.store.SetFirstResponse(ctx, t.ID, m.CreatedAt); err != nil {
-			log.Error("failed to record first response", slog.Any("err", err))
-		}
-	}
-	if err := d.b.store.RecordActivity(ctx, t.ID, m.CreatedAt, byOpener); err != nil {
-		log.Error("failed to record ticket activity", slog.Any("err", err))
-	}
+	d.b.recordReply(ctx, t, byID, m.CreatedAt)
 	return msg, nil
 }
 
-// replyMessage is a staff reply sent from the dashboard. The bot posts it, so
-// the embed names the staff member at the top and says at the bottom that the
-// server's staff sent it, so members know it's a real reply from the team.
+// guildBrand returns a guild's name and icon URL, for reply footers.
+func (b *Bot) guildBrand(ctx context.Context, id snowflake.ID) (name, iconURL string) {
+	name = b.guildName(ctx, id)
+	if g, err := b.store.GetGuild(ctx, id); err == nil && g.Icon != nil {
+		iconURL = fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.png", g.ID, *g.Icon)
+	}
+	return name, iconURL
+}
+
+// replyMessage is a staff reply the bot posts, from the dashboard or with
+// /reply. The embed names the staff member at the top and says at the bottom
+// that the server's staff sent it, so members know it's a real reply from
+// the team. appName is set for replies from the dashboard, to say so.
 func replyMessage(appName, staff, staffAvatar, server, serverIcon, text string) discord.MessageCreate {
+	footer := fmt.Sprintf("Sent by %s staff", server)
+	if appName != "" {
+		footer += fmt.Sprintf(" from the %s Dashboard", appName)
+	}
 	return discord.NewMessageCreate().
 		WithEmbeds(discord.NewEmbed().
 			WithAuthor(staff, "", staffAvatar).
 			WithDescription(text).
 			WithColor(colorAccent).
-			WithFooter(fmt.Sprintf("Sent by %s staff from the %s Dashboard", server, appName), serverIcon)).
+			WithFooter(footer, serverIcon)).
 		WithAllowedMentions(&discord.AllowedMentions{})
 }

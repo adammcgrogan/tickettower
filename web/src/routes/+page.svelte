@@ -93,6 +93,7 @@
 		{ name: '/ticket remove', body: 'Take away their access again' },
 		{ name: '/ticket move', body: 'Change the ticket type' },
 		{ name: '/ticket rename', body: 'Give the channel a clearer name' },
+		{ name: '/reply', body: 'Send one of your saved replies' },
 		{ name: '/close', body: 'Close the ticket, with an optional reason' }
 	];
 
