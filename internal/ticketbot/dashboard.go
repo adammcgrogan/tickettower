@@ -2,6 +2,7 @@ package ticketbot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -24,6 +25,10 @@ import (
 // stays in the bot's ticketCache until it restarts, which only matters if
 // someone posts in the locked thread.
 type Dashboard struct{ b *Bot }
+
+// ErrChannelDeleted means a ticket's channel was deleted in Discord without
+// the bot noticing. The ticket has been closed.
+var ErrChannelDeleted = errors.New("ticket channel was deleted")
 
 func NewDashboard(cfg config.Config, st *store.Store, r rest.Rest, log *slog.Logger) *Dashboard {
 	return &Dashboard{b: &Bot{cfg: cfg, store: st, rest: r, log: log, tickets: newTicketCache()}}
@@ -63,7 +68,11 @@ func (d *Dashboard) Reply(ctx context.Context, t store.Ticket, byID snowflake.ID
 	}
 	reply := replyMessage(d.b.cfg.AppName, byName, avatarURL, server, serverIcon, text)
 	m, err := d.b.rest.CreateMessage(t.ChannelID, reply, rest.WithCtx(ctx))
-	if err != nil {
+	if discordx.IsCode(err, discordx.CodeUnknownChannel) {
+		// Deleted while the bot was offline, so the ticket was never closed.
+		d.b.closeDeletedChannel(t.ChannelID)
+		return store.TicketMessage{}, ErrChannelDeleted
+	} else if err != nil {
 		return store.TicketMessage{}, err
 	}
 	msg := toTicketMessage(t.ID, *m)

@@ -46,6 +46,16 @@ func (c *ticketCache) remove(channelID snowflake.ID) {
 	delete(c.refs, channelID)
 }
 
+func (c *ticketCache) channelIDs() []snowflake.ID {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	ids := make([]snowflake.ID, 0, len(c.refs))
+	for id := range c.refs {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (c *ticketCache) replace(refs []store.TicketRef) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

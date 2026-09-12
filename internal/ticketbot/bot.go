@@ -21,6 +21,7 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/config"
+	"github.com/adammcgrogan/tickettower/internal/discordx"
 	"github.com/adammcgrogan/tickettower/internal/panels"
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
@@ -159,6 +160,37 @@ func (b *Bot) onGuildsReady(_ *events.GuildsReady) {
 		b.log.Error("failed to reconcile guilds", slog.Any("err", err))
 	}
 	b.log.Info("guilds ready", slog.Int("count", len(ids)))
+	go b.closeMissingTickets()
+}
+
+// closeMissingTickets closes tickets whose channel was deleted while the bot
+// was offline (a restart or deploy), since Discord's delete event never
+// reached it.
+func (b *Bot) closeMissingTickets() {
+	closed := 0
+	for _, id := range b.tickets.channelIDs() {
+		if !b.channelExists(id) {
+			b.closeDeletedChannel(id)
+			closed++
+		}
+	}
+	if closed > 0 {
+		b.log.Info("closed tickets whose channel was deleted", slog.Int("count", closed))
+	}
+}
+
+// channelExists reports whether a channel or thread still exists. Anything
+// but a clear "unknown channel" from Discord (no access, a timeout) counts
+// as existing, so a ticket is never closed by mistake.
+func (b *Bot) channelExists(id snowflake.ID) bool {
+	// Archived threads aren't cached, so a miss is checked with Discord.
+	if _, ok := b.client.Caches.Channel(id); ok {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := b.rest.GetChannel(id, rest.WithCtx(ctx))
+	return !discordx.IsCode(err, discordx.CodeUnknownChannel)
 }
 
 func (b *Bot) onGuildJoin(e *events.GuildJoin) {
