@@ -275,6 +275,7 @@
 				for="parent"
 				optional
 				hint="New ticket channels are created in this category."
+				help="channels-vs-threads"
 				error={errors.parent_id}
 			>
 				<ChannelSelect
@@ -291,6 +292,7 @@
 				label="Channel"
 				for="parent"
 				hint="Threads are created in this channel. Members need to be able to see it, but each thread is private."
+				help="channels-vs-threads"
 				error={errors.parent_id}
 			>
 				<ChannelSelect
@@ -308,6 +310,7 @@
 			label={form.mode === 'channel' ? 'Channel name' : 'Thread name'}
 			for="name_format"
 			hint={formatHint}
+			help="ticket-types"
 			error={errors.name_format}
 		>
 			<input
@@ -335,6 +338,7 @@
 			hint={form.support_role_ids.length
 				? undefined
 				: 'With no support roles, only people with Manage Server can see these tickets.'}
+			help="support-team"
 			error={errors.support_role_ids}
 		>
 			<RolePicker id="roles" {roles} bind:value={form.support_role_ids} />
@@ -348,6 +352,9 @@
 				<p class="hint mt-1">
 					Ask members a few questions before their ticket opens. Their answers are posted in the
 					welcome message, so your team has the details up front.
+					<a href="/help/forms" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
+						Learn more
+					</a>
 				</p>
 			</div>
 			{#if form.questions.length > 0 && form.questions.length < MAX_QUESTIONS}
@@ -445,6 +452,7 @@
 			for="welcome"
 			optional
 			hint={'Posted when the ticket opens. Use {user} to mention the member.'}
+			help="ticket-types"
 			error={errors.welcome_message}
 		>
 			<textarea
@@ -477,6 +485,7 @@
 			label="Close inactive tickets"
 			for="auto_close"
 			hint={autoCloseHint}
+			help="auto-close"
 			error={errors.auto_close_hours}
 		>
 			<select

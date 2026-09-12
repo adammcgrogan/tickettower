@@ -2,7 +2,7 @@
 
 Open-source Discord ticket bot (a simpler, better-looking alternative to Ticket Tool / tickets.bot). The owner hosts it on Railway so anyone can add it. The bar: **professional, easy to use, sleek and modern**. Fewer options done well beats many confusing ones.
 
-Named "Ticket Tower" (tickettower.net), configurable via `APP_NAME` (Go) and `VITE_APP_NAME` (web).
+Named "Ticket Tower" (tickettower.net), configurable via `APP_NAME` (Go) and `VITE_APP_NAME` (web). `VITE_SUPPORT_URL` sets the "Get support" link (defaults to GitHub issues).
 
 More detail: `docs/architecture.md` (how it fits together), `docs/development.md` (local setup and the Railway deployment) and `docs/roadmap.md` (what's done and what's next).
 
@@ -40,9 +40,10 @@ internal/auth         Discord OAuth2 + Redis sessions
 internal/panels       renders panel messages (shared by API publish + bot interaction IDs)
 internal/discordx     Discord error codes → friendly messages
 internal/entitlements per-tier limits (premium-ready; everything is free today)
-web/src/lib           api.ts (types + fetch wrapper), components/, format.ts, markdown.ts, toast.svelte.ts
+web/src/lib           api.ts (types + fetch wrapper), components/, format.ts, markdown.ts, toast.svelte.ts,
+                      help.ts (the help guide list; link to one with Field's help="slug")
 web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,buttons,tickets,analytics,settings},
-                      /transcripts/[ticketId], /privacy
+                      /transcripts/[ticketId], /privacy, /help and /help/[slug] (public guides)
 ```
 
 ## Conventions

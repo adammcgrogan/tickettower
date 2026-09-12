@@ -2,6 +2,7 @@
 	import { onMount, setContext } from 'svelte';
 	import { page } from '$app/state';
 	import { api, type Guild, type Ticket, type User } from '$lib/api';
+	import { SUPPORT_URL } from '$lib/brand';
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import Logo from '$lib/components/Logo.svelte';
@@ -200,6 +201,31 @@
 				{#each setup as item (item.label)}<li>{@render navLink(item)}</li>{/each}
 			</ul>
 		</nav>
+
+		<!-- New tabs, so reading help doesn't lose unsaved changes. -->
+		<ul class="space-y-0.5 px-3 pb-3">
+			<li>
+				<a
+					href="/help"
+					target="_blank"
+					class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-elevated/60 hover:text-fg"
+				>
+					<Icon name="help" />
+					<span class="flex-1">Help</span>
+				</a>
+			</li>
+			<li>
+				<a
+					href={SUPPORT_URL}
+					target="_blank"
+					rel="noopener"
+					class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-elevated/60 hover:text-fg"
+				>
+					<Icon name="external" />
+					<span class="flex-1">Get support</span>
+				</a>
+			</li>
+		</ul>
 
 		{#if user}
 			<div class="flex items-center gap-2.5 border-t border-border p-3">

@@ -129,6 +129,7 @@
 				for="log_channel"
 				optional
 				hint="Use a channel only staff can see. {APP_NAME} needs permission to send messages there."
+				help="permissions"
 				error={errors.log_channel_id}
 			>
 				<div class="sm:max-w-sm">
@@ -159,6 +160,7 @@
 				hint={guild.can_manage
 					? 'Members with these roles can use everything except this setting.'
 					: 'Only people with Manage Server can change who has access.'}
+				help="support-team"
 				error={errors.dashboard_role_ids}
 			>
 				<div class="sm:max-w-sm">
@@ -187,6 +189,7 @@
 				label="Keep transcripts for"
 				for="retention"
 				hint="Older transcripts are deleted automatically. Ticket details and stats are kept."
+				help="transcripts"
 				error={errors.transcript_retention_days}
 			>
 				<select id="retention" class="input sm:w-56" bind:value={retentionValue}>
