@@ -27,7 +27,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | `ticket_blocks` | Members who can't open any ticket in a guild, with the reason (shown to them) and who blocked them |
 | `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
 | `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at`, plus auto-close state (`last_activity_at`, `waiting_on_staff`, `auto_close_warned_at`) and `channel_cleaned_at` (when the bot deleted or archived the channel after closing) |
-| `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags) |
+| `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags), plus `search`, a generated `tsvector` over the text and embed text (`ticket_message_text`) with a GIN index |
 | `ticket_feedback` | 1–5 rating + comment per ticket |
 | `saved_replies` | Answers a team sends often: name (unique per guild, ignoring case) and message |
 
@@ -58,6 +58,8 @@ Attachment links are Discord CDN URLs, which are signed and expire after about a
 Deleting a ticket channel by hand also closes the ticket.
 
 Tickets can also be closed from the dashboard (`POST …/tickets/{id}/close`). The API uses `ticketbot.Dashboard`, which is the bot's close logic with a plain REST client in place of the gateway (`Bot.rest`), so the close message, log entry, DM and cleanup match a close in Discord. `Dashboard.Reply` (`POST …/tickets/{id}/reply`) posts a staff reply the same way: the bot sends an embed with the staff member's server nickname and avatar as its author and a footer saying the server's staff sent it from the dashboard (so no extra permissions are needed), saves it to the transcript straight away, and records the first response and activity itself, since the bot's message capture ignores bot messages. The bot drops a deleted channel from its `ticketCache` as usual. An archived thread stays cached until the bot restarts, which only matters if someone posts in the locked thread.
+
+**Searching tickets.** `store.ListTickets` matches the number and names with `ILIKE`, and words with Postgres full-text search over `ticket_messages.search` using the `simple` configuration (no stemming, so order numbers, usernames and any language match as typed). `searchQuery` turns the input into "every word, prefix on each" (`refun:* & polic:*`), and deleted messages are skipped. For tickets found this way, `messageMatches` returns the newest matching message with a `ts_headline` snippet; the matching words are wrapped in private-use characters (`MatchStart`, `MatchEnd`) that the Tickets page turns into highlights.
 
 **Setup check.** `GET …/setup-check` (`api/checks.go`) looks for problems that would stop tickets working, before a member hits them:
 - permissions the bot lacks where a ticket type opens tickets, worked out from its roles and the channel's overwrites (`discordx.Permissions`)
@@ -105,7 +107,7 @@ Editing a ticket type re-renders every published panel that uses it. A custom em
 Public: `/healthz`, `/api/config`, `/api/invite`, `/api/auth/{login,callback,logout}`
 
 Authenticated: `/api/me`, `/api/guilds`, `/api/transcripts/{ticketID}`, and under `/api/guilds/{guildID}`:
-- `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=open|closed&type={ticketTypeID}&q={search}&before={ticketID}&limit=` (newest first, at most 200 per page; `before` pages past a ticket), `tickets/{id}/close` (POST), `tickets/{id}/reply` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
+- `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=open|closed&type={ticketTypeID}&q={search}&before={ticketID}&limit=` (newest first, at most 200 per page; `before` pages past a ticket; `q` matches the number, names and words in the ticket's messages, and a ticket found through its messages carries a `match` with a snippet), `tickets/{id}/close` (POST), `tickets/{id}/reply` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
 - `ticket-types` (GET/POST), `ticket-types/{id}` (PATCH/DELETE)
 - `panels` (GET/POST), `panels/{id}` (PATCH/DELETE), `panels/{id}/publish` (POST)
 - `saved-replies` (GET/POST), `saved-replies/{id}` (PATCH/DELETE)

@@ -42,6 +42,8 @@
 
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
 
+- Search inside messages: the Tickets page search also matches words in a ticket's messages (including dashboard replies and form answers), with a highlighted snippet under each result
+
 - Who can open tickets: per ticket type, required roles, blocked roles and a wait between a member's tickets of that type; plus a server-wide block list (`/ticket block` with a reason the member sees, `/ticket unblock`, and a Blocked members section in Settings)
 
 ## Not yet verified by hand
