@@ -8,11 +8,19 @@ import (
 )
 
 type Embed struct {
+	Author      *EmbedAuthor `json:"author,omitempty"`
 	Title       string       `json:"title,omitempty"`
 	Description string       `json:"description,omitempty"`
 	Color       int          `json:"color,omitempty"`
 	Footer      string       `json:"footer,omitempty"`
 	Fields      []EmbedField `json:"fields,omitempty"`
+}
+
+// EmbedAuthor names who wrote an embed, such as the staff member behind a
+// reply sent from the dashboard.
+type EmbedAuthor struct {
+	Name    string `json:"name"`
+	IconURL string `json:"icon_url,omitempty"`
 }
 
 // EmbedField holds, for example, a form answer in a ticket's welcome message.

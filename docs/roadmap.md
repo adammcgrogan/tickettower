@@ -26,6 +26,8 @@
   - logging in from a transcript link comes back to the transcript
   - the bot posts a welcome with a dashboard link when it's added to a server
 
+- Replies from the dashboard: a reply box under an open ticket's conversation on the Tickets page. The bot posts it as an embed with the staff member's name and avatar (no extra permissions needed), and it's saved to the transcript, counts as the team's first response and restarts the auto-close clock
+
 - Help: short guides at `/help` (public, no login), linked from the sidebar, the landing page, "Learn more" on form hints (`Field`'s `help` prop) and setup check problems, plus a "Get support" link (`VITE_SUPPORT_URL`, defaulting to GitHub issues)
 
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket

@@ -89,6 +89,14 @@
 								class="mt-1 max-w-[520px] rounded border-l-4 bg-[#2b2d31] py-2.5 pr-4 pl-3"
 								style="border-color:{embed.color ? intToHex(embed.color) : '#1e1f22'}"
 							>
+								{#if embed.author}
+									<div class="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
+										{#if embed.author.icon_url}
+											<img src={embed.author.icon_url} alt="" class="size-6 rounded-full" loading="lazy" />
+										{/if}
+										{embed.author.name}
+									</div>
+								{/if}
 								{#if embed.title}<div class="font-semibold text-white">{embed.title}</div>{/if}
 								{#if embed.description}
 									<div class="mt-1 text-sm break-words whitespace-pre-wrap">
