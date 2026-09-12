@@ -11,7 +11,7 @@
 
 ## Done since v1
 
-- Dashboard roles: members with roles chosen in Settings can use the dashboard (everything except changing those roles)
+- Dashboard roles: members with roles chosen in Settings can use the dashboard, at a level per role: viewer (read only), support (acts on tickets) or admin (everything except changing those roles)
 - Log channel: ticket opened/claimed/closed events are posted to a channel chosen in Settings, with a transcript link on close when `PUBLIC_URL` is https
 - Pre-ticket forms: up to 5 questions per ticket type, asked in a modal when a member opens a ticket; answers are posted in the welcome message (and so appear in transcripts)
 - Dashboard redesign: new visual identity (ink navy, signal amber, Big Shoulders Display for titles and ticket numbers), a sidebar with a server switcher, a Home page with a "waiting on your team" queue and one-step quick setup, a two-pane Tickets inbox with search and inline transcripts, and live Discord previews in the ticket type and panel editors

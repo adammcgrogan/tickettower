@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/adammcgrogan/tickettower/internal/auth"
 	"github.com/adammcgrogan/tickettower/internal/discordx"
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 // memberCacheTTL bounds how long a member's roles are trusted, so removing a
@@ -23,21 +23,22 @@ func canManage(g discord.OAuth2Guild) bool {
 	return g.Owner || g.Permissions.Has(discord.PermissionAdministrator) || g.Permissions.Has(discord.PermissionManageGuild)
 }
 
-// canAccess decides whether a user may use a guild's dashboard. Managers
-// always can; other members need one of the guild's dashboard roles.
-// memberRoles costs a Discord request, so it is only called when needed.
-func canAccess(g discord.OAuth2Guild, dashboardRoles []snowflake.ID, memberRoles func() ([]snowflake.ID, error)) (allowed, manager bool, err error) {
+// accessLevel decides what a user may do in a guild's dashboard: managers
+// are owners; other members get the best level of their dashboard roles, or
+// "" for no access. memberRoles costs a Discord request, so it is only
+// called when needed.
+func accessLevel(g discord.OAuth2Guild, dashboardRoles []store.DashboardRole, memberRoles func() ([]snowflake.ID, error)) (store.AccessLevel, error) {
 	if canManage(g) {
-		return true, true, nil
+		return store.LevelOwner, nil
 	}
 	if len(dashboardRoles) == 0 {
-		return false, false, nil
+		return "", nil
 	}
 	roles, err := memberRoles()
 	if err != nil {
-		return false, false, err
+		return "", err
 	}
-	return slices.ContainsFunc(roles, func(id snowflake.ID) bool { return slices.Contains(dashboardRoles, id) }), false, nil
+	return store.HighestLevel(dashboardRoles, roles), nil
 }
 
 // memberRoles returns a user's current roles in a guild, or none if they
@@ -59,12 +60,12 @@ func (s *Server) memberRoles(ctx context.Context, guildID, userID snowflake.ID) 
 }
 
 type guildAccess struct {
-	guild   discord.OAuth2Guild
-	manager bool
+	guild discord.OAuth2Guild
+	level store.AccessLevel
 }
 
 // access looks up a guild in the user's server list and reports whether they
-// may use its dashboard.
+// may use its dashboard, and at what level.
 func (s *Server) access(ctx context.Context, sess *auth.Session, guildID snowflake.ID) (guildAccess, bool, error) {
 	guilds, err := s.auth.Guilds(ctx, sess)
 	if err != nil {
@@ -74,18 +75,18 @@ func (s *Server) access(ctx context.Context, sess *auth.Session, guildID snowfla
 		if g.ID != guildID {
 			continue
 		}
-		var dashboardRoles []snowflake.ID
+		var dashboardRoles []store.DashboardRole
 		if !canManage(g) {
 			st, err := s.store.GetGuildSettings(ctx, guildID)
 			if err != nil {
 				return guildAccess{}, false, err
 			}
-			dashboardRoles = st.DashboardRoleIDs
+			dashboardRoles = st.DashboardRoles
 		}
-		allowed, manager, err := canAccess(g, dashboardRoles, func() ([]snowflake.ID, error) {
+		level, err := accessLevel(g, dashboardRoles, func() ([]snowflake.ID, error) {
 			return s.memberRoles(ctx, guildID, sess.User.ID)
 		})
-		return guildAccess{guild: g, manager: manager}, allowed, err
+		return guildAccess{guild: g, level: level}, level != "", err
 	}
 	return guildAccess{}, false, nil
 }

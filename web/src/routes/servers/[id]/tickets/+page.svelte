@@ -5,6 +5,7 @@
 	import {
 		api,
 		ApiError,
+		atLeast,
 		errorMessage,
 		send,
 		snippetParts,
@@ -30,6 +31,8 @@
 
 	const getGuild = getContext<() => Guild>('guild');
 	const guild = $derived(getGuild());
+	// Viewers can read along but not act.
+	const canAct = $derived(atLeast(guild.level, 'support'));
 
 	const filters: { value: Filter; label: string }[] = [
 		{ value: 'open', label: 'Open' },
@@ -530,15 +533,17 @@
 							>
 								Open in Discord <Icon name="external" size={13} />
 							</a>
-							{#if moveTargets.length > 0}
+							{#if canAct && moveTargets.length > 0}
 								<button class="btn btn-secondary h-8 px-3" onclick={openMove}>
 									<Icon name="arrow-right" size={13} /> Move
 								</button>
 							{/if}
-							<button class="btn btn-secondary h-8 px-3" onclick={openClose}>
-								<Icon name="lock" size={13} /> Close ticket
-							</button>
-						{:else if t.mode === 'thread'}
+							{#if canAct}
+								<button class="btn btn-secondary h-8 px-3" onclick={openClose}>
+									<Icon name="lock" size={13} /> Close ticket
+								</button>
+							{/if}
+						{:else if t.mode === 'thread' && canAct}
 							<button class="btn btn-secondary h-8 px-3" onclick={reopenTicket} disabled={reopening}>
 								<Icon name="unlock" size={13} /> {reopening ? 'Reopening…' : 'Reopen'}
 							</button>
@@ -557,7 +562,7 @@
 						channels={detail.channels}
 					/>
 				</div>
-				{#if t.status === 'open'}
+				{#if t.status === 'open' && canAct}
 					<form
 						onsubmit={sendReply}
 						class="mt-4 rounded-xl border bg-surface p-3 transition-colors focus-within:border-border-strong {replyError

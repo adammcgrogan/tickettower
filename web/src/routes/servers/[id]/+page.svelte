@@ -2,6 +2,7 @@
 	import { getContext, onMount } from 'svelte';
 	import {
 		api,
+		atLeast,
 		errorMessage,
 		type Analytics,
 		type Channel,
@@ -136,7 +137,7 @@
 			Try again
 		</button>
 	</div>
-{:else if loaded && fresh}
+{:else if loaded && fresh && atLeast(guild.level, 'admin')}
 	<div class="mt-8">
 		<QuickSetup guildId={guild.id} {channels} {roles} ondone={load} />
 	</div>
@@ -147,7 +148,7 @@
 		</div>
 	{/if}
 
-	{#if loaded && !live}
+	{#if loaded && !live && atLeast(guild.level, 'admin')}
 		<section class="mt-8 rounded-xl border border-border bg-surface">
 			<div class="border-b border-border px-5 py-4">
 				<h2 class="font-semibold">Finish setting up</h2>

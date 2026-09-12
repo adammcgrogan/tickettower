@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, setContext } from 'svelte';
 	import { page } from '$app/state';
-	import { api, type Guild, type Ticket, type User } from '$lib/api';
+	import { api, atLeast, type Guild, type Ticket, type User } from '$lib/api';
 	import { SUPPORT_URL } from '$lib/brand';
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -197,10 +197,12 @@
 			<ul class="space-y-0.5">
 				{#each primary as item (item.label)}<li>{@render navLink(item)}</li>{/each}
 			</ul>
-			<p class="mt-7 mb-1.5 px-3 text-xs font-medium text-subtle">Setup</p>
-			<ul class="space-y-0.5">
-				{#each setup as item (item.label)}<li>{@render navLink(item)}</li>{/each}
-			</ul>
+			{#if atLeast(guild?.level, 'admin')}
+				<p class="mt-7 mb-1.5 px-3 text-xs font-medium text-subtle">Setup</p>
+				<ul class="space-y-0.5">
+					{#each setup as item (item.label)}<li>{@render navLink(item)}</li>{/each}
+				</ul>
+			{/if}
 		</nav>
 
 		<!-- New tabs, so reading help doesn't lose unsaved changes. -->

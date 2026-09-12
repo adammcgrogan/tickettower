@@ -75,32 +75,42 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/setup-check", s.getSetupCheck)
 				r.Get("/analytics", s.getAnalytics)
 				r.Get("/tickets", s.listTickets)
-				r.Post("/tickets/{ticketID}/close", s.closeTicket)
-				r.Post("/tickets/{ticketID}/reply", s.replyTicket)
-				r.Post("/tickets/{ticketID}/move", s.moveTicket)
-				r.Post("/tickets/{ticketID}/reopen", s.reopenTicket)
 				r.Get("/settings", s.getSettings)
-				r.Patch("/settings", s.updateSettings)
-
 				r.Get("/ticket-types", s.listTicketTypes)
-				r.Post("/ticket-types", s.createTicketType)
-				r.Patch("/ticket-types/{typeID}", s.updateTicketType)
-				r.Delete("/ticket-types/{typeID}", s.deleteTicketType)
-
 				r.Get("/panels", s.listPanels)
-				r.Post("/panels", s.createPanel)
-				r.Patch("/panels/{panelID}", s.updatePanel)
-				r.Delete("/panels/{panelID}", s.deletePanel)
-				r.Post("/panels/{panelID}/publish", s.publishPanel)
-
 				r.Get("/blocks", s.listBlocks)
-				r.Post("/blocks", s.createBlock)
-				r.Delete("/blocks/{userID}", s.deleteBlock)
-
 				r.Get("/saved-replies", s.listSavedReplies)
-				r.Post("/saved-replies", s.createSavedReply)
-				r.Patch("/saved-replies/{replyID}", s.updateSavedReply)
-				r.Delete("/saved-replies/{replyID}", s.deleteSavedReply)
+
+				// Acting on tickets needs support access.
+				r.Group(func(r chi.Router) {
+					r.Use(requireLevel(store.LevelSupport))
+					r.Post("/tickets/{ticketID}/close", s.closeTicket)
+					r.Post("/tickets/{ticketID}/reply", s.replyTicket)
+					r.Post("/tickets/{ticketID}/move", s.moveTicket)
+					r.Post("/tickets/{ticketID}/reopen", s.reopenTicket)
+					r.Post("/blocks", s.createBlock)
+					r.Delete("/blocks/{userID}", s.deleteBlock)
+				})
+
+				// Changing the setup needs admin access. Dashboard roles
+				// themselves are owner only (checked in validateSettings).
+				r.Group(func(r chi.Router) {
+					r.Use(requireLevel(store.LevelAdmin))
+					r.Patch("/settings", s.updateSettings)
+
+					r.Post("/ticket-types", s.createTicketType)
+					r.Patch("/ticket-types/{typeID}", s.updateTicketType)
+					r.Delete("/ticket-types/{typeID}", s.deleteTicketType)
+
+					r.Post("/panels", s.createPanel)
+					r.Patch("/panels/{panelID}", s.updatePanel)
+					r.Delete("/panels/{panelID}", s.deletePanel)
+					r.Post("/panels/{panelID}/publish", s.publishPanel)
+
+					r.Post("/saved-replies", s.createSavedReply)
+					r.Patch("/saved-replies/{replyID}", s.updateSavedReply)
+					r.Delete("/saved-replies/{replyID}", s.deleteSavedReply)
+				})
 			})
 		})
 
@@ -194,6 +204,8 @@ type guildResponse struct {
 	BotPresent bool         `json:"bot_present"`
 	// CanManage is false for members who only have a dashboard role.
 	CanManage bool `json:"can_manage"`
+	// Level is what the user may do here: viewer, support, admin or owner.
+	Level store.AccessLevel `json:"level"`
 }
 
 // listGuilds returns the servers the user can use the dashboard for,
@@ -232,7 +244,7 @@ func (s *Server) listGuilds(w http.ResponseWriter, r *http.Request) {
 
 	out := []guildResponse{}
 	for _, g := range guilds {
-		allowed, manager, err := canAccess(g, dashboardRoles[g.ID], func() ([]snowflake.ID, error) {
+		level, err := accessLevel(g, dashboardRoles[g.ID], func() ([]snowflake.ID, error) {
 			return s.memberRoles(r.Context(), g.ID, sess.User.ID)
 		})
 		if err != nil {
@@ -240,8 +252,9 @@ func (s *Server) listGuilds(w http.ResponseWriter, r *http.Request) {
 			s.log.Warn("check dashboard role", slog.String("guild_id", g.ID.String()), slog.Any("err", err))
 			continue
 		}
-		if allowed {
-			out = append(out, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: active[g.ID], CanManage: manager})
+		if level != "" {
+			out = append(out, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: active[g.ID],
+				CanManage: level == store.LevelOwner, Level: level})
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -285,15 +298,41 @@ func guildFrom(r *http.Request) discord.OAuth2Guild {
 	return r.Context().Value(guildCtxKey{}).(guildAccess).guild
 }
 
+// levelOf is the user's access level in the request's guild.
+func levelOf(r *http.Request) store.AccessLevel {
+	return r.Context().Value(guildCtxKey{}).(guildAccess).level
+}
+
 // isManager reports whether the user has Manage Server (or more) in the
 // request's guild, as opposed to only a dashboard role.
-func isManager(r *http.Request) bool {
-	return r.Context().Value(guildCtxKey{}).(guildAccess).manager
+func isManager(r *http.Request) bool { return levelOf(r) == store.LevelOwner }
+
+// requireLevel rejects requests from users below min with a 403. Routes
+// without it only need dashboard access (viewer).
+func requireLevel(min store.AccessLevel) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !levelOf(r).AtLeast(min) {
+				writeError(w, http.StatusForbidden, levelMessage(min))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func levelMessage(min store.AccessLevel) string {
+	if min == store.LevelAdmin {
+		return "Only dashboard admins can change the setup. Ask a server manager for admin access."
+	}
+	return "Your dashboard access is read only. Ask a server manager for support access to act on tickets."
 }
 
 func (s *Server) getGuild(w http.ResponseWriter, r *http.Request) {
 	g := guildFrom(r)
-	writeJSON(w, http.StatusOK, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: true, CanManage: isManager(r)})
+	level := levelOf(r)
+	writeJSON(w, http.StatusOK, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: true,
+		CanManage: level == store.LevelOwner, Level: level})
 }
 
 // securityHeaders stops the dashboard being framed by another site (its

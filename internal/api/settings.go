@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -37,7 +38,7 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	// copies; otherwise cur would change too and hide what was edited.
 	in := cur
 	in.TranscriptRetentionDays = clonePtr(cur.TranscriptRetentionDays)
-	in.DashboardRoleIDs = slices.Clone(cur.DashboardRoleIDs)
+	in.DashboardRoles = slices.Clone(cur.DashboardRoles)
 	in.LogChannelID = clonePtr(cur.LogChannelID)
 	if !decodeJSON(w, r, &in) {
 		return
@@ -75,25 +76,50 @@ func (s *Server) validateSettings(ctx context.Context, guildID snowflake.ID, man
 		}
 	}
 
-	in.DashboardRoleIDs = normaliseIDs(in.DashboardRoleIDs)
+	in.DashboardRoles = normaliseDashboardRoles(in.DashboardRoles)
 	// Otherwise anyone with a dashboard role could hand out access.
-	if !manager && !slices.Equal(in.DashboardRoleIDs, normaliseIDs(cur.DashboardRoleIDs)) {
-		return invalid("dashboard_role_ids", "Only people with Manage Server can change who has dashboard access.")
+	if !manager && !slices.Equal(in.DashboardRoles, normaliseDashboardRoles(cur.DashboardRoles)) {
+		return invalid("dashboard_roles", "Only people with Manage Server can change who has dashboard access.")
 	}
-	if len(in.DashboardRoleIDs) > maxDashboardRoles {
-		return invalid("dashboard_role_ids", fmt.Sprintf("Choose up to %d roles.", maxDashboardRoles))
+	if len(in.DashboardRoles) > maxDashboardRoles {
+		return invalid("dashboard_roles", fmt.Sprintf("Choose up to %d roles.", maxDashboardRoles))
 	}
-	if len(in.DashboardRoleIDs) > 0 {
+	for _, r := range in.DashboardRoles {
+		if !r.Level.Valid() {
+			return invalid("dashboard_roles", "Choose viewer, support or admin for each role.")
+		}
+	}
+	if len(in.DashboardRoles) > 0 {
 		roles, err := s.guildRoles(ctx, guildID)
 		if err != nil {
 			return err
 		}
 		// Quietly drop roles that have since been deleted in Discord.
-		in.DashboardRoleIDs = slices.DeleteFunc(in.DashboardRoleIDs, func(id snowflake.ID) bool {
-			return !slices.ContainsFunc(roles, func(r roleResponse) bool { return r.ID == id })
+		in.DashboardRoles = slices.DeleteFunc(in.DashboardRoles, func(dr store.DashboardRole) bool {
+			return !slices.ContainsFunc(roles, func(r roleResponse) bool { return r.ID == dr.RoleID })
 		})
 	}
 	return nil
+}
+
+// normaliseDashboardRoles sorts roles by ID, keeping one entry per role (the
+// highest level wins), and returns an empty (not nil) slice.
+func normaliseDashboardRoles(in []store.DashboardRole) []store.DashboardRole {
+	best := map[snowflake.ID]store.AccessLevel{}
+	for _, r := range in {
+		if r.RoleID == 0 {
+			continue
+		}
+		if cur, ok := best[r.RoleID]; !ok || r.Level.AtLeast(cur) {
+			best[r.RoleID] = r.Level
+		}
+	}
+	out := make([]store.DashboardRole, 0, len(best))
+	for id, level := range best {
+		out = append(out, store.DashboardRole{RoleID: id, Level: level})
+	}
+	slices.SortFunc(out, func(a, b store.DashboardRole) int { return cmp.Compare(a.RoleID, b.RoleID) })
+	return out
 }
 
 func clonePtr[T any](p *T) *T {
