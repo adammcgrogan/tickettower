@@ -54,12 +54,15 @@ func (s *Server) Handler() http.Handler {
 		r.Use(requireJSON)
 		r.Get("/config", s.getConfig)
 		r.Get("/invite", s.invite)
-		r.Get("/auth/login", s.login)
-		r.Get("/auth/callback", s.callback)
-		r.Post("/auth/logout", s.logout)
+		r.Group(func(r chi.Router) {
+			r.Use(newRateLimiter(authLimit, authWindow).middleware(byIP))
+			r.Get("/auth/login", s.login)
+			r.Get("/auth/callback", s.callback)
+			r.Post("/auth/logout", s.logout)
+		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(s.auth.Middleware)
+			r.Use(s.auth.Middleware, newRateLimiter(userLimit, userWindow).middleware(byUser))
 			r.Get("/me", s.getMe)
 			r.Get("/guilds", s.listGuilds)
 			r.Get("/transcripts/{ticketID}", s.getTranscript)
