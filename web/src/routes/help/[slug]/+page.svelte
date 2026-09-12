@@ -149,6 +149,31 @@
 						your support roles are still pinged once when the ticket opens.
 					</p>
 
+					<h2>Claiming</h2>
+					<p>
+						By default, claiming a ticket just tells everyone who's handling it. For channel tickets you
+						can make it do more: <strong>Others read only</strong> lets the rest of the team follow along
+						without replying over the claimer, and <strong>Others lose access</strong> hides the ticket
+						from them. Pick roles that keep full access, such as senior staff; administrators always keep
+						it. Unclaiming, or moving the ticket, gives the team their access back. Private threads can't
+						limit a role's access, so this only applies to channel tickets.
+					</p>
+
+					<h2>Reply target and reminders</h2>
+					<p>
+						A <strong>reply target</strong> is how long a member should wait for the team, counted from
+						their first unanswered message. Analytics shows how often the first reply beat it, and Home
+						marks tickets past it as overdue. <strong>Remind the team</strong> posts a reminder in the
+						ticket or your log channel once a ticket has waited that long, mentioning the claimer (or the
+						support roles if nobody has claimed it), and can repeat until someone replies.
+					</p>
+					<p>
+						Tickets <strong>on hold</strong> are left out of all of this. Staff put a ticket on hold with
+						<code>/ticket hold</code> (or Hold on the Tickets page) while waiting on something else, such
+						as a payment provider. It leaves the team's queue and won't close for inactivity until the
+						member writes again or staff resume it.
+					</p>
+
 					<h2>Who can open these tickets</h2>
 					<p>
 						By default, anyone who can see your ticket buttons can open any type. Each type can narrow
@@ -260,6 +285,10 @@
 						support team (and category, for channels). You can also move tickets from the Tickets page.
 					</li>
 						<li><code>/reply</code>: send one of your <a href="/help/saved-replies">saved replies</a></li>
+						<li>
+							<code>/ticket hold</code> and <code>/ticket resume</code>: park a ticket that's waiting on
+							something other than the member or your team, and pick it back up.
+						</li>
 						<li>
 							<code>/ticket block</code> and <code>/ticket unblock</code>: stop someone opening tickets in
 							the server, or let them again. These work anywhere, not just inside a ticket.

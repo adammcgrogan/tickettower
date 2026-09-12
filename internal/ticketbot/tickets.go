@@ -377,6 +377,7 @@ func (b *Bot) toggleClaim(ctx context.Context, channelID snowflake.ID, m *discor
 		if _, err := b.store.UnclaimTicket(ctx, t.ID, me); err != nil {
 			return "", err
 		}
+		b.releaseClaimLock(ctx, t, tt, me)
 		return discord.UserMention(me) + " unclaimed this ticket.", nil
 	}
 	if t.ClaimedBy != nil {
@@ -389,8 +390,9 @@ func (b *Bot) toggleClaim(ctx context.Context, channelID snowflake.ID, m *discor
 	if !ok {
 		return "", userErr("Someone else claimed this ticket just now.")
 	}
+	b.applyClaimLock(ctx, t, tt, me)
 	go b.logEvent(t.GuildID, claimedLog(t, me))
-	return "🙋 " + discord.UserMention(me) + " has claimed this ticket and will help you from here.", nil
+	return "🙋 " + discord.UserMention(me) + " has claimed this ticket and will help you from here." + claimLockNote(t, tt, me), nil
 }
 
 // closeTicket marks the ticket closed and returns the closing message. The

@@ -7,6 +7,7 @@
 		ApiError,
 		atLeast,
 		errorMessage,
+		overdueAt,
 		send,
 		snippetParts,
 		type Guild,
@@ -155,11 +156,17 @@
 	const shown = $derived.by(() => {
 		const list = tickets ?? [];
 		if (filter !== 'open') return list;
-		// Tickets waiting on the team come first, longest wait at the top.
-		const waiting = list.filter((t) => t.waiting_on_staff);
-		waiting.sort((a, b) => a.last_activity_at.localeCompare(b.last_activity_at));
-		return [...waiting, ...list.filter((t) => !t.waiting_on_staff)];
+		// Tickets waiting on the team come first, longest wait at the top;
+		// tickets on hold go last.
+		const waiting = list.filter((t) => t.waiting_on_staff && !t.on_hold);
+		waiting.sort((a, b) => (a.waiting_since ?? a.last_activity_at).localeCompare(b.waiting_since ?? b.last_activity_at));
+		const rest = list.filter((t) => !t.waiting_on_staff && !t.on_hold);
+		return [...waiting, ...rest, ...list.filter((t) => t.on_hold)];
 	});
+	const isOverdue = (t: Ticket) => {
+		const at = overdueAt(t, types);
+		return at !== null && at <= Date.now();
+	};
 
 	// --- The selected ticket ---
 
@@ -207,6 +214,59 @@
 	let closeReason = $state('');
 	let closeError = $state('');
 	let closing = $state(false);
+
+	// --- Holding ---
+	let holdOpen = $state(false);
+	let holdReason = $state('');
+	let holdError = $state('');
+	let holding = $state(false);
+
+	function openHold() {
+		holdReason = '';
+		holdError = '';
+		holdOpen = true;
+	}
+
+	/** Swaps the updated ticket into the list and the open detail. */
+	function replaceTicket(updated: Ticket) {
+		if (detail) detail = { ...detail, ticket: updated };
+		if (tickets) tickets = tickets.map((x) => (x.id === updated.id ? updated : x));
+	}
+
+	async function holdTicket() {
+		if (!detail) return;
+		const t = detail.ticket;
+		holding = true;
+		holdError = '';
+		try {
+			const updated = await api<Ticket>(`/guilds/${guild.id}/tickets/${t.id}/hold`, send('POST', { reason: holdReason }));
+			replaceTicket(updated);
+			holdOpen = false;
+			toast(`Ticket #${t.number} on hold`);
+		} catch (e) {
+			if (e instanceof ApiError && e.field) holdError = e.message;
+			else {
+				holdOpen = false;
+				toast(errorMessage(e), 'error');
+			}
+		} finally {
+			holding = false;
+		}
+	}
+
+	async function resumeTicket() {
+		if (!detail || holding) return;
+		const t = detail.ticket;
+		holding = true;
+		try {
+			replaceTicket(await api<Ticket>(`/guilds/${guild.id}/tickets/${t.id}/resume`, send('POST', {})));
+			toast(`Ticket #${t.number} resumed`);
+		} catch (e) {
+			toast(errorMessage(e), 'error');
+		} finally {
+			holding = false;
+		}
+	}
 
 	// --- Reopening (thread tickets only: channels are deleted on close) ---
 	let reopening = $state(false);
@@ -472,7 +532,7 @@
 								</div>
 								<div class="truncate text-sm text-muted">{t.type_name}</div>
 								<div class="mt-1 truncate text-xs {state.tone === 'waiting' ? 'text-accent' : 'text-subtle'}">
-									{state.label}{t.claimed_by_name && t.status === 'open' ? `, claimed by ${t.claimed_by_name}` : ''}
+									{#if isOverdue(t)}<span class="font-medium text-danger">Overdue</span>, {/if}{state.label}{t.claimed_by_name && t.status === 'open' ? `, claimed by ${t.claimed_by_name}` : ''}
 								</div>
 								{#if t.match}
 									<p class="mt-1.5 line-clamp-2 text-xs text-muted">
@@ -539,6 +599,15 @@
 								</button>
 							{/if}
 							{#if canAct}
+								{#if t.on_hold}
+									<button class="btn btn-secondary h-8 px-3" onclick={resumeTicket} disabled={holding}>
+										<Icon name="clock" size={13} /> {holding ? 'Resuming…' : 'Resume'}
+									</button>
+								{:else}
+									<button class="btn btn-secondary h-8 px-3" onclick={openHold}>
+										<Icon name="clock" size={13} /> Hold
+									</button>
+								{/if}
 								<button class="btn btn-secondary h-8 px-3" onclick={openClose}>
 									<Icon name="lock" size={13} /> Close ticket
 								</button>
@@ -641,6 +710,29 @@
 		<button class="btn btn-ghost" onclick={() => (moveOpen = false)}>Cancel</button>
 		<button class="btn btn-primary" onclick={moveTicket} disabled={moving || !moveTo}>
 			{moving ? 'Moving…' : 'Move ticket'}
+		</button>
+	{/snippet}
+</Dialog>
+
+<Dialog
+	bind:open={holdOpen}
+	title="Put ticket #{detail?.ticket.number ?? ''} on hold?"
+	description="For tickets waiting on something other than the member or your team. It leaves your queue and won't close for inactivity. The member's next message, or Resume, brings it back."
+>
+	<Field label="Waiting on" for="hold-reason" optional error={holdError}>
+		<input
+			id="hold-reason"
+			class="input"
+			bind:value={holdReason}
+			maxlength="200"
+			placeholder="e.g. The payment provider's review"
+			aria-invalid={!!holdError}
+		/>
+	</Field>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (holdOpen = false)}>Cancel</button>
+		<button class="btn btn-primary" onclick={holdTicket} disabled={holding}>
+			{holding ? 'Holding…' : 'Put on hold'}
 		</button>
 	{/snippet}
 </Dialog>

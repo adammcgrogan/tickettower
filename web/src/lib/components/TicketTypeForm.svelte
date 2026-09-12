@@ -8,9 +8,12 @@
 		MAX_BUTTON_LABEL,
 		MAX_QUESTIONS,
 		MAX_RATING_PROMPT,
+		MINUTE_OPTIONS,
+		minutesLabel,
 		send,
 		type ButtonStyle,
 		type Channel,
+		type ClaimLock,
 		type Guild,
 		type Panel,
 		type QuestionStyle,
@@ -62,7 +65,14 @@
 			ask_rating: initial?.ask_rating ?? true,
 			rating_prompt: initial?.rating_prompt ?? '',
 			button_style: initial?.button_style ?? 'primary',
-			button_label: initial?.button_label ?? ''
+			button_label: initial?.button_label ?? '',
+			claim_lock: initial?.claim_lock ?? 'off',
+			claim_lock_exempt_role_ids: initial?.claim_lock_exempt_role_ids ?? [],
+			reply_target_minutes: initial?.reply_target_minutes ?? null,
+			reminder_minutes: initial?.reminder_minutes ?? null,
+			reminder_repeat: initial?.reminder_repeat ?? false,
+			reminder_where: initial?.reminder_where ?? 'ticket',
+			reminder_ping: initial?.reminder_ping ?? 'claimer'
 		}))
 	);
 
@@ -105,6 +115,30 @@
 		{ value: 'danger', label: 'Red', swatch: '#da373c' }
 	];
 
+	const claimLocks: { value: ClaimLock; label: string; body: string }[] = [
+		{ value: 'off', label: 'Nothing changes', body: 'Everyone on the team can still read and reply.' },
+		{ value: 'read_only', label: 'Others read only', body: 'The rest of the team can follow along but not reply.' },
+		{ value: 'hidden', label: 'Others lose access', body: 'Only the claimer and the member can see the ticket.' }
+	];
+	const minuteChoices = [{ value: '', label: 'None' }, ...MINUTE_OPTIONS.map((m) => ({ value: String(m), label: minutesLabel(m) }))];
+	const reminderChoices = [{ value: '', label: "Don't remind" }, ...MINUTE_OPTIONS.map((m) => ({ value: String(m), label: `After ${minutesLabel(m)}` }))];
+	const reminderWheres = [
+		{ value: 'ticket', label: 'In the ticket' },
+		{ value: 'log', label: 'In the log channel' },
+		{ value: 'both', label: 'Both' }
+	];
+	const reminderPings = [
+		{ value: 'claimer', label: 'The claimer, or the support roles if unclaimed' },
+		{ value: 'roles', label: 'The support roles' },
+		{ value: 'none', label: 'Nobody' }
+	];
+	const minutesOrNull = (v: string) => (v ? Number(v) : null);
+
+	// A claim lock needs channel tickets, since threads can't restrict a role.
+	$effect(() => {
+		if (form.mode === 'thread' && form.claim_lock !== 'off') form.claim_lock = 'off';
+	});
+
 	const answerStyles: { value: QuestionStyle; label: string }[] = [
 		{ value: 'short', label: 'Short answer' },
 		{ value: 'paragraph', label: 'Paragraph' }
@@ -121,6 +155,8 @@
 
 	let channels = $state<Channel[]>([]);
 	let roles = $state<Role[]>([]);
+	// Only support roles can be exempt from a claim lock.
+	const supportRolesOnly = $derived(roles.filter((r) => form.support_role_ids.includes(r.id)));
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 
@@ -456,6 +492,113 @@
 		>
 			<RolePicker id="roles" {roles} bind:value={form.support_role_ids} />
 		</Field>
+	</section>
+
+	<section class="card space-y-5 p-5">
+		<div>
+			<h2 class="font-medium">Claiming</h2>
+			<p class="hint mt-1">
+				What happens to the rest of the support team once someone claims a ticket.
+				{#if form.mode === 'thread'}
+					Private threads can't limit a role's access, so this only applies to channel tickets.
+				{/if}
+			</p>
+		</div>
+		<div class="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="When a ticket is claimed">
+			{#each claimLocks as c (c.value)}
+				{@const selected = form.claim_lock === c.value}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={selected}
+					disabled={form.mode === 'thread' && c.value !== 'off'}
+					onclick={() => (form.claim_lock = c.value)}
+					class="rounded-xl border p-4 text-left transition-colors disabled:opacity-50 {selected
+						? 'border-accent bg-accent/5'
+						: 'border-border hover:border-border-strong'}"
+				>
+					<span class="block text-sm font-medium">{c.label}</span>
+					<span class="mt-0.5 block text-xs text-muted">{c.body}</span>
+				</button>
+			{/each}
+		</div>
+		{#if errors.claim_lock}<p class="text-xs text-danger">{errors.claim_lock}</p>{/if}
+		{#if form.claim_lock !== 'off'}
+			<Field
+				label="Roles that keep full access"
+				for="claim_exempt"
+				optional
+				hint={supportRolesOnly.length
+					? 'Support roles that can always read and reply, such as senior staff. Administrators always can.'
+					: 'Add support roles above first.'}
+				error={errors.claim_lock_exempt_role_ids}
+			>
+				<RolePicker id="claim_exempt" roles={supportRolesOnly} bind:value={form.claim_lock_exempt_role_ids} />
+			</Field>
+			<p class="hint">The claimer unclaiming, or the ticket moving, gives the team their access back.</p>
+		{/if}
+	</section>
+
+	<section class="card space-y-5 p-5">
+		<div>
+			<h2 class="font-medium">Reply target and reminders</h2>
+			<p class="hint mt-1">
+				How long a member should wait for the team, measured from their first unanswered message.
+				Tickets on hold don't count.
+			</p>
+		</div>
+		<div class="grid gap-5 sm:grid-cols-2">
+			<Field
+				label="Reply target"
+				for="reply_target"
+				hint="Analytics shows how often the first reply beat it, and Home counts tickets past it."
+				error={errors.reply_target_minutes}
+			>
+				<select
+					id="reply_target"
+					class="input"
+					value={form.reply_target_minutes?.toString() ?? ''}
+					onchange={(e) => (form.reply_target_minutes = minutesOrNull(e.currentTarget.value))}
+					aria-invalid={!!errors.reply_target_minutes}
+				>
+					{#each minuteChoices as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+				</select>
+			</Field>
+			<Field
+				label="Remind the team"
+				for="reminder"
+				hint="Posts a reminder once a ticket has waited this long."
+				error={errors.reminder_minutes}
+			>
+				<select
+					id="reminder"
+					class="input"
+					value={form.reminder_minutes?.toString() ?? ''}
+					onchange={(e) => (form.reminder_minutes = minutesOrNull(e.currentTarget.value))}
+					aria-invalid={!!errors.reminder_minutes}
+				>
+					{#each reminderChoices as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+				</select>
+			</Field>
+		</div>
+		{#if form.reminder_minutes}
+			<div class="grid gap-5 sm:grid-cols-2">
+				<Field label="Post reminders" for="reminder_where" error={errors.reminder_where}>
+					<select id="reminder_where" class="input" bind:value={form.reminder_where}>
+						{#each reminderWheres as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+					</select>
+				</Field>
+				<Field label="Mention" for="reminder_ping" hint="Only applies to reminders in the ticket." error={errors.reminder_ping}>
+					<select id="reminder_ping" class="input" bind:value={form.reminder_ping}>
+						{#each reminderPings as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+					</select>
+				</Field>
+			</div>
+			<label class="flex cursor-pointer items-center gap-2 text-sm">
+				<input type="checkbox" class="size-4 accent-accent" bind:checked={form.reminder_repeat} />
+				Keep reminding every {minutesLabel(form.reminder_minutes)} until someone replies
+			</label>
+		{/if}
 	</section>
 
 	<section class="card space-y-5 p-5">

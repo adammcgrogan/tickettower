@@ -118,8 +118,22 @@
 			{
 				label: 'Open now',
 				value: data.open_now.toLocaleString(),
-				hint: data.waiting_now ? `${data.waiting_now.toLocaleString()} waiting on your team` : 'None waiting on your team',
+				hint: [
+					data.waiting_now ? `${data.waiting_now.toLocaleString()} waiting on your team` : 'None waiting on your team',
+					data.overdue_now ? `${data.overdue_now} past target` : '',
+					data.on_hold_now ? `${data.on_hold_now} on hold` : ''
+				]
+					.filter(Boolean)
+					.join(', '),
 				waiting: data.waiting_now > 0
+			},
+			{
+				label: 'Replied within target',
+				value: s.target_measured ? pct(s.target_met, s.target_measured) : '—',
+				hint: s.target_measured
+					? (change(s.target_met / s.target_measured, p?.target_measured ? p.target_met / p.target_measured : null, ['better', 'worse']) ??
+						`Of ${plural(s.target_measured, 'ticket')} with a reply target`)
+					: 'Set a reply target on a ticket type to measure this'
 			},
 			{
 				label: 'First response',
@@ -371,6 +385,7 @@
 								<th class="px-3 py-2 text-right font-medium">Opened</th>
 								<th class="px-3 py-2 text-right font-medium">First response</th>
 								<th class="px-3 py-2 text-right font-medium">Resolution</th>
+								<th class="px-3 py-2 text-right font-medium">In target</th>
 								<th class="px-5 py-2 text-right font-medium">Rating</th>
 							</tr>
 						</thead>
@@ -381,6 +396,9 @@
 									<td class="px-3 py-2.5 text-right tabular-nums">{t.opened.toLocaleString()}</td>
 									<td class="px-3 py-2.5 text-right tabular-nums">{formatDuration(t.first_response_median_seconds)}</td>
 									<td class="px-3 py-2.5 text-right tabular-nums">{formatDuration(t.resolution_median_seconds)}</td>
+									<td class="px-3 py-2.5 text-right tabular-nums {t.target_measured ? '' : 'text-subtle'}">
+										{t.target_measured ? pct(t.target_met, t.target_measured) : '—'}
+									</td>
 									<td class="px-5 py-2.5 text-right tabular-nums {t.rating_avg == null ? 'text-subtle' : ''}">
 										{t.rating_avg != null ? t.rating_avg.toFixed(1) : t.asks_rating ? '—' : 'Not asked'}
 									</td>
