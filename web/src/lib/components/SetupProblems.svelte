@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { SetupProblem } from '$lib/api';
+	import type { GuideSlug } from '$lib/help';
 	import Icon from './Icon.svelte';
 
 	/** Problems from the setup check, each linking to where it's fixed. */
@@ -23,6 +24,14 @@
 				return `${base}/settings`;
 		}
 	}
+
+	// The help guide that explains each kind of problem.
+	const guides: Record<SetupProblem['kind'], GuideSlug> = {
+		ticket_type: 'permissions',
+		panel: 'getting-started',
+		unlisted: 'getting-started',
+		log_channel: 'permissions'
+	};
 
 	let checking = $state(false);
 	async function recheck() {
@@ -53,7 +62,16 @@
 				<Icon name="alert" class="mt-0.5 text-danger" />
 				<div class="min-w-0 flex-1">
 					<div class="text-sm font-medium">{p.title}</div>
-					<div class="mt-0.5 text-sm text-muted">{p.detail}</div>
+					<div class="mt-0.5 text-sm text-muted">
+						{p.detail}
+						<a
+							href="/help/{guides[p.kind]}"
+							target="_blank"
+							class="whitespace-nowrap text-fg underline-offset-4 hover:underline"
+						>
+							Learn more
+						</a>
+					</div>
 				</div>
 				{#if to !== page.url.pathname}
 					<a href={to} class="btn btn-secondary h-8 shrink-0 px-3">Fix</a>

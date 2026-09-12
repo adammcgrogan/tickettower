@@ -255,6 +255,7 @@
 					hint={qs.mode === 'channel'
 						? 'Each ticket gets its own channel, in this category if you pick one.'
 						: 'Tickets open as private threads inside this channel.'}
+					help="channels-vs-threads"
 					error={qsErrors.parent_id}
 				>
 					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -277,6 +278,7 @@
 					for="qs-roles"
 					optional
 					hint="These roles can see and reply to every ticket. People with Manage Server always can."
+					help="support-team"
 					error={qsErrors.support_role_ids}
 				>
 					<div class="sm:max-w-sm">

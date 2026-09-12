@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { getMe, loginURL, type TicketType, type User } from '$lib/api';
-	import { APP_NAME } from '$lib/brand';
+	import { APP_NAME, SUPPORT_URL } from '$lib/brand';
 	import Icon from '$lib/components/Icon.svelte';
 	import Logo from '$lib/components/Logo.svelte';
 	import PanelPreview from '$lib/components/PanelPreview.svelte';
@@ -56,6 +56,7 @@
 	<header class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
 		<Logo />
 		<nav class="flex items-center gap-1 text-sm">
+			<a href="/help" class="btn btn-ghost">Help</a>
 			<a href={GITHUB_URL} target="_blank" rel="noopener" class="btn btn-ghost">GitHub</a>
 			{#if user}
 				<a href="/servers" class="btn btn-secondary">Dashboard</a>
@@ -124,9 +125,11 @@
 	</main>
 
 	<footer class="border-t border-border">
-		<div class="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 text-xs text-subtle">
+		<div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-5 gap-y-3 px-5 py-6 text-xs text-subtle">
 			<span>© {new Date().getFullYear()} {APP_NAME}</span>
-			<div class="flex gap-5">
+			<div class="flex flex-wrap gap-5">
+				<a href="/help" class="transition-colors hover:text-fg">Help</a>
+				<a href={SUPPORT_URL} target="_blank" rel="noopener" class="transition-colors hover:text-fg">Get support</a>
 				<a href="/privacy" class="transition-colors hover:text-fg">Privacy</a>
 				<a href={GITHUB_URL} target="_blank" rel="noopener" class="transition-colors hover:text-fg">
 					Open source on GitHub

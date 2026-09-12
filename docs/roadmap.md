@@ -26,6 +26,8 @@
   - logging in from a transcript link comes back to the transcript
   - the bot posts a welcome with a dashboard link when it's added to a server
 
+- Help: short guides at `/help` (public, no login), linked from the sidebar, the landing page, "Learn more" on form hints (`Field`'s `help` prop) and setup check problems, plus a "Get support" link (`VITE_SUPPORT_URL`, defaulting to GitHub issues)
+
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
 
 ## Not yet verified by hand
