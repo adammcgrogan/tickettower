@@ -17,12 +17,17 @@ const (
 
 // Panel is the message members interact with to open tickets.
 type Panel struct {
-	ID            int64         `json:"id"`
-	GuildID       snowflake.ID  `json:"guild_id"`
-	Title         string        `json:"title"`
-	Description   string        `json:"description"`
-	Color         int           `json:"color"`
-	Style         PanelStyle    `json:"style"`
+	ID          int64        `json:"id"`
+	GuildID     snowflake.ID `json:"guild_id"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	Color       int          `json:"color"`
+	Style       PanelStyle   `json:"style"`
+	// ImageURL and ThumbnailURL are optional https images on the embed.
+	// Placeholder is the dropdown's prompt; "" uses the default.
+	ImageURL      string        `json:"image_url"`
+	ThumbnailURL  string        `json:"thumbnail_url"`
+	Placeholder   string        `json:"placeholder"`
 	ChannelID     *snowflake.ID `json:"channel_id"`
 	MessageID     *snowflake.ID `json:"message_id"`
 	TicketTypeIDs []int64       `json:"ticket_type_ids"`
@@ -30,7 +35,8 @@ type Panel struct {
 }
 
 const panelSelect = `
-	SELECT p.id, p.guild_id, p.title, p.description, p.color, p.style, p.channel_id, p.message_id, p.created_at,
+	SELECT p.id, p.guild_id, p.title, p.description, p.color, p.style, p.image_url, p.thumbnail_url, p.placeholder,
+	       p.channel_id, p.message_id, p.created_at,
 	       COALESCE((SELECT array_agg(l.ticket_type_id ORDER BY l.position)
 	                 FROM panel_ticket_types l WHERE l.panel_id = p.id), '{}')
 	FROM panels p`
@@ -42,8 +48,8 @@ func scanPanel(row pgx.Row) (Panel, error) {
 		style                string
 		channelID, messageID *int64
 	)
-	err := row.Scan(&p.ID, &guildID, &p.Title, &p.Description, &p.Color, &style, &channelID, &messageID,
-		&p.CreatedAt, &p.TicketTypeIDs)
+	err := row.Scan(&p.ID, &guildID, &p.Title, &p.Description, &p.Color, &style, &p.ImageURL, &p.ThumbnailURL,
+		&p.Placeholder, &channelID, &messageID, &p.CreatedAt, &p.TicketTypeIDs)
 	if err != nil {
 		return p, notFound(err)
 	}
@@ -104,9 +110,10 @@ func (s *Store) CreatePanel(ctx context.Context, p *Panel) error {
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO panels (guild_id, title, description, color, style)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-		int64(p.GuildID), p.Title, p.Description, p.Color, string(p.Style)).Scan(&p.ID, &p.CreatedAt)
+		INSERT INTO panels (guild_id, title, description, color, style, image_url, thumbnail_url, placeholder)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
+		int64(p.GuildID), p.Title, p.Description, p.Color, string(p.Style), p.ImageURL, p.ThumbnailURL, p.Placeholder,
+	).Scan(&p.ID, &p.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -126,9 +133,11 @@ func (s *Store) UpdatePanel(ctx context.Context, p Panel) error {
 	defer tx.Rollback(ctx)
 
 	tag, err := tx.Exec(ctx, `
-		UPDATE panels SET title = $3, description = $4, color = $5, style = $6, updated_at = now()
+		UPDATE panels SET title = $3, description = $4, color = $5, style = $6, image_url = $7, thumbnail_url = $8,
+		                  placeholder = $9, updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
-		int64(p.GuildID), p.ID, p.Title, p.Description, p.Color, string(p.Style))
+		int64(p.GuildID), p.ID, p.Title, p.Description, p.Color, string(p.Style), p.ImageURL, p.ThumbnailURL,
+		p.Placeholder)
 	if err != nil {
 		return err
 	}

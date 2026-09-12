@@ -45,8 +45,10 @@ type ticketTypeInput struct {
 	CooldownMinutes int              `json:"cooldown_minutes"`
 	// AskRating is a pointer so a client that doesn't send it (the setup
 	// templates) keeps the default of asking.
-	AskRating    *bool  `json:"ask_rating"`
-	RatingPrompt string `json:"rating_prompt"`
+	AskRating    *bool             `json:"ask_rating"`
+	RatingPrompt string            `json:"rating_prompt"`
+	ButtonStyle  store.ButtonStyle `json:"button_style"`
+	ButtonLabel  string            `json:"button_label"`
 }
 
 func (in ticketTypeInput) apply(t *store.TicketType) {
@@ -66,6 +68,8 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.CooldownMinutes = in.CooldownMinutes
 	t.AskRating = in.AskRating == nil || *in.AskRating
 	t.RatingPrompt = in.RatingPrompt
+	t.ButtonStyle = in.ButtonStyle
+	t.ButtonLabel = in.ButtonLabel
 }
 
 // validateQuestions normalises a ticket type's form questions.
@@ -151,6 +155,16 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	}
 	if !slices.Contains(cooldownOptions, in.CooldownMinutes) {
 		return invalid("cooldown_minutes", "Choose one of the listed waits.")
+	}
+	if in.ButtonStyle == "" {
+		in.ButtonStyle = store.ButtonPrimary
+	}
+	if !slices.Contains(store.ButtonStyles, in.ButtonStyle) {
+		return invalid("button_style", "Choose one of the listed button colours.")
+	}
+	in.ButtonLabel = strings.TrimSpace(in.ButtonLabel)
+	if utf8.RuneCountInString(in.ButtonLabel) > store.MaxButtonLabel {
+		return invalid("button_label", fmt.Sprintf("Keep the button label to %d characters or fewer.", store.MaxButtonLabel))
 	}
 	in.RatingPrompt = strings.TrimSpace(in.RatingPrompt)
 	if utf8.RuneCountInString(in.RatingPrompt) > store.MaxRatingPrompt {

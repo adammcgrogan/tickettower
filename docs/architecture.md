@@ -25,7 +25,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
 | `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5), `auto_close_hours`, who can open it (`required_role_ids`, `blocked_role_ids`, `cooldown_minutes`), `ask_rating` and `rating_prompt` |
 | `ticket_blocks` | Members who can't open any ticket in a guild, with the reason (shown to them) and who blocked them |
-| `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
+| `panels` + `panel_ticket_types` | Panel content/style, optional `image_url`, `thumbnail_url` and dropdown `placeholder`, where it's published (`channel_id`, `message_id`), and its ordered ticket types. Each ticket type's `button_style` (Discord colour) and `button_label` decide how it looks on a panel |
 | `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at` and `reopened_at`, plus auto-close state (`last_activity_at`, `waiting_on_staff`, `auto_close_warned_at`) and `channel_cleaned_at` (when the bot deleted or archived the channel after closing) |
 | `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags), plus `search`, a generated `tsvector` over the text and embed text (`ticket_message_text`) with a GIN index |
 | `ticket_feedback` | 1–5 rating + comment per ticket |

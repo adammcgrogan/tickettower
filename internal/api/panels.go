@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -23,6 +24,9 @@ type panelInput struct {
 	Description   string           `json:"description"`
 	Color         int              `json:"color"`
 	Style         store.PanelStyle `json:"style"`
+	ImageURL      string           `json:"image_url"`
+	ThumbnailURL  string           `json:"thumbnail_url"`
+	Placeholder   string           `json:"placeholder"`
 	TicketTypeIDs []int64          `json:"ticket_type_ids"`
 }
 
@@ -31,7 +35,27 @@ func (in panelInput) apply(p *store.Panel) {
 	p.Description = in.Description
 	p.Color = in.Color
 	p.Style = in.Style
+	p.ImageURL = in.ImageURL
+	p.ThumbnailURL = in.ThumbnailURL
+	p.Placeholder = in.Placeholder
 	p.TicketTypeIDs = in.TicketTypeIDs
+}
+
+// maxImageURL is Discord's limit on an embed image URL.
+const maxImageURL = 2048
+
+// validateImageURL normalises an optional image link. Discord only shows
+// https images.
+func validateImageURL(field, raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || len(raw) > maxImageURL {
+		return "", invalid(field, "Paste a full https:// link to an image.")
+	}
+	return raw, nil
 }
 
 func (s *Server) validatePanel(ctx context.Context, guildID snowflake.ID, in *panelInput) error {
@@ -51,6 +75,17 @@ func (s *Server) validatePanel(ctx context.Context, guildID snowflake.ID, in *pa
 	}
 	if in.Style != store.PanelButtons && in.Style != store.PanelDropdown {
 		return invalid("style", "Choose buttons or a dropdown menu.")
+	}
+	var err error
+	if in.ImageURL, err = validateImageURL("image_url", in.ImageURL); err != nil {
+		return err
+	}
+	if in.ThumbnailURL, err = validateImageURL("thumbnail_url", in.ThumbnailURL); err != nil {
+		return err
+	}
+	in.Placeholder = strings.TrimSpace(in.Placeholder)
+	if utf8.RuneCountInString(in.Placeholder) > 150 {
+		return invalid("placeholder", "Keep the dropdown prompt to 150 characters or fewer.")
 	}
 
 	// De-duplicate while keeping the chosen order.

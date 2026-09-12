@@ -76,8 +76,9 @@
 					<h2>Changing your ticket buttons</h2>
 					<p>
 						<strong>Ticket buttons</strong> in the dashboard lets you change the message's title,
-						description and colour, show the ticket types as buttons or a dropdown menu, and choose which
-						ticket types appear. One message can offer up to 25 ticket types.
+						description and colour, add a banner image or thumbnail, show the ticket types as buttons or a
+						dropdown menu (with your own prompt), and choose which ticket types appear. One message can
+						offer up to 25 ticket types. Each button's colour and label come from its ticket type.
 					</p>
 					<p>
 						Publishing again edits the message you already posted, so members never see a duplicate.
@@ -100,8 +101,10 @@
 
 					<h2>Name, emoji and description</h2>
 					<p>
-						The name is the button's label. The description is shown under the option when your ticket
-						buttons are a dropdown menu.
+						The name is the button's label, unless you set a <strong>button label</strong> of its own (so
+						the button can say "Get help" while the type is called "General support"). Each button also
+						has a <strong>colour</strong>: blurple, grey, green or red. The description is shown under the
+						option when your ticket buttons are a dropdown menu.
 					</p>
 					<p>
 						For the emoji, use a single emoji, or a custom emoji from your server written as

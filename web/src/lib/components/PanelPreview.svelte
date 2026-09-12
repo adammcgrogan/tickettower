@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { PanelStyle, TicketType } from '$lib/api';
-	import { intToHex } from '$lib/api';
+	import type { ButtonStyle, PanelStyle, TicketType } from '$lib/api';
+	import { DEFAULT_DROPDOWN_PLACEHOLDER, intToHex } from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 
 	let {
@@ -8,14 +8,29 @@
 		description,
 		color,
 		style,
+		imageUrl = '',
+		thumbnailUrl = '',
+		placeholder = '',
 		types
 	}: {
 		title: string;
 		description: string;
 		color: number;
 		style: PanelStyle;
+		imageUrl?: string;
+		thumbnailUrl?: string;
+		placeholder?: string;
 		types: TicketType[];
 	} = $props();
+
+	// Discord's button colours.
+	const buttonColor: Record<ButtonStyle, string> = {
+		primary: '#5865f2',
+		secondary: '#4e5058',
+		success: '#248046',
+		danger: '#da373c'
+	};
+	const isHttps = (u: string) => /^https:\/\//.test(u.trim());
 
 	// Custom emoji can't be rendered without Discord's CDN, so show their name.
 	const emojiText = (e: string) => e.replace(/^<a?:(\w+):\d+>$/, ':$1:');
@@ -46,9 +61,19 @@
 				class="mt-1.5 max-w-[432px] rounded border-l-4 bg-[#2b2d31] py-3 pr-4 pl-3"
 				style="border-color:{intToHex(color)}"
 			>
-				<div class="font-semibold break-words text-white">{title || 'Panel title'}</div>
-				{#if description}
-					<p class="mt-1.5 text-sm break-words whitespace-pre-wrap text-[#dbdee1]">{description}</p>
+				<div class="flex gap-4">
+					<div class="min-w-0 flex-1">
+						<div class="font-semibold break-words text-white">{title || 'Panel title'}</div>
+						{#if description}
+							<p class="mt-1.5 text-sm break-words whitespace-pre-wrap text-[#dbdee1]">{description}</p>
+						{/if}
+					</div>
+					{#if isHttps(thumbnailUrl)}
+						<img src={thumbnailUrl} alt="" class="size-20 shrink-0 rounded object-cover" />
+					{/if}
+				</div>
+				{#if isHttps(imageUrl)}
+					<img src={imageUrl} alt="" class="mt-3 max-h-72 w-full rounded object-cover" />
 				{/if}
 				<div class="mt-2 text-xs text-[#949ba4]">Powered by {APP_NAME}</div>
 			</div>
@@ -59,7 +84,7 @@
 				<div
 					class="mt-2 flex max-w-[400px] items-center justify-between rounded border border-[#1e1f22] bg-[#1e1f22] px-3 py-2.5 text-sm text-[#949ba4]"
 				>
-					Choose a topic…
+					{placeholder.trim() || DEFAULT_DROPDOWN_PLACEHOLDER}
 					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
 				</div>
 			{:else}
@@ -67,9 +92,12 @@
 					{#each rows as row, i (i)}
 						<div class="flex flex-wrap gap-2">
 							{#each row as t (t.id)}
-								<span class="inline-flex items-center gap-1.5 rounded bg-[#5865f2] px-4 py-1.5 text-sm font-medium text-white">
+								<span
+									class="inline-flex items-center gap-1.5 rounded px-4 py-1.5 text-sm font-medium text-white"
+									style="background:{buttonColor[t.button_style] ?? buttonColor.primary}"
+								>
 									{#if t.emoji}<span>{emojiText(t.emoji)}</span>{/if}
-									{t.name}
+									{t.button_label || t.name}
 								</span>
 							{/each}
 						</div>

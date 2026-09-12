@@ -4,6 +4,7 @@
 	import {
 		api,
 		ApiError,
+		DEFAULT_DROPDOWN_PLACEHOLDER,
 		errorMessage,
 		hexToInt,
 		intToHex,
@@ -43,6 +44,9 @@
 		description: p.description,
 		color: p.color,
 		style: p.style,
+		image_url: p.image_url,
+		thumbnail_url: p.thumbnail_url,
+		placeholder: p.placeholder,
 		ticket_type_ids: [...p.ticket_type_ids]
 	});
 
@@ -57,6 +61,9 @@
 							"Pick a topic below and we'll open a private ticket for you. Our team will be with you shortly.",
 						color: 0xf2b544,
 						style: 'buttons',
+						image_url: '',
+						thumbnail_url: '',
+						placeholder: '',
 						ticket_type_ids: types.slice(0, MAX_TYPES).map((t) => t.id)
 					}
 		)
@@ -240,6 +247,40 @@
 					{/each}
 				</div>
 			</Field>
+			<div class="grid gap-5 sm:grid-cols-2">
+				<Field
+					label="Banner image"
+					for="image_url"
+					optional
+					hint="A large image under the text. Use an https:// link, such as an image uploaded to Discord."
+					error={errors.image_url}
+				>
+					<input
+						id="image_url"
+						class="input"
+						type="url"
+						bind:value={form.image_url}
+						placeholder="https://"
+						aria-invalid={!!errors.image_url}
+					/>
+				</Field>
+				<Field
+					label="Thumbnail"
+					for="thumbnail_url"
+					optional
+					hint="A small image in the corner, like your server's logo."
+					error={errors.thumbnail_url}
+				>
+					<input
+						id="thumbnail_url"
+						class="input"
+						type="url"
+						bind:value={form.thumbnail_url}
+						placeholder="https://"
+						aria-invalid={!!errors.thumbnail_url}
+					/>
+				</Field>
+			</div>
 		</section>
 
 		<section class="card space-y-5 p-5">
@@ -250,6 +291,23 @@
 				</div>
 				<Segmented options={styles} bind:value={form.style} label="Show as" />
 			</div>
+			{#if form.style === 'dropdown'}
+				<Field label="Dropdown prompt" for="placeholder" optional error={errors.placeholder}>
+					<input
+						id="placeholder"
+						class="input"
+						bind:value={form.placeholder}
+						maxlength="150"
+						placeholder={DEFAULT_DROPDOWN_PLACEHOLDER}
+						aria-invalid={!!errors.placeholder}
+					/>
+				</Field>
+			{:else}
+				<p class="hint">
+					Each button's colour and label are set on its
+					<a href="/servers/{guildId}/ticket-types" class="text-fg underline-offset-4 hover:underline">ticket type</a>.
+				</p>
+			{/if}
 
 			{#if types.length === 0}
 				<p class="rounded-lg border border-dashed border-border p-4 text-sm text-muted">
@@ -327,6 +385,9 @@
 			description={form.description}
 			color={form.color}
 			style={form.style}
+			imageUrl={form.image_url}
+			thumbnailUrl={form.thumbnail_url}
+			placeholder={form.placeholder}
 			types={selected}
 		/>
 	</aside>

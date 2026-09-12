@@ -50,6 +50,8 @@
 
 - Reopen: closed thread tickets can be reopened from the close message, the closing DM or the Tickets page (the thread is unarchived and tracked again; channel tickets can't be, since the channel is gone). Members typing `/close` on their own ticket without a reason are asked to confirm
 
+- Ticket buttons that match the server: per ticket type, a button colour (blurple, grey, green, red) and a label that can differ from the name; per set of buttons, a banner image, a thumbnail and the dropdown's prompt. All shown in the editors' previews
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.
