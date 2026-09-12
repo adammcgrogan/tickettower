@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
@@ -77,5 +78,20 @@ func TestDropdownAndOrdering(t *testing.T) {
 func TestNoTypesMeansNoComponents(t *testing.T) {
 	if c := components(store.Panel{Style: store.PanelButtons}, nil); c != nil {
 		t.Errorf("components = %v, want nil", c)
+	}
+}
+
+func TestCustomEmojiID(t *testing.T) {
+	tests := map[string]snowflake.ID{
+		"<:help:123456789012345678>":    123456789012345678,
+		" <a:wave:123456789012345678> ": 123456789012345678,
+		"🎫":                             0,
+		"":                              0,
+		"<:bad:12>":                     0,
+	}
+	for in, want := range tests {
+		if got := CustomEmojiID(in); got != want {
+			t.Errorf("CustomEmojiID(%q) = %d, want %d", in, got, want)
+		}
 	}
 }

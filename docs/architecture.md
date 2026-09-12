@@ -86,7 +86,7 @@ The SQL rules live in `store/autoclose.go`; the dashboard hint repeats the lead 
 - If it moved channels, post a new message and delete the old one.
 - If the old message is gone (unknown message), post a new one.
 
-Editing a ticket type re-renders every published panel that uses it.
+Editing a ticket type re-renders every published panel that uses it. A custom emoji on a ticket type must be one of the server's own (checked against `GetEmojis` when the type is saved), since Discord only lets the bot put emoji from servers it's in on buttons; if Discord still rejects an emoji at publish time, the error says so.
 
 **Rate limits** (`api/ratelimit.go`, in-process token buckets): the auth routes allow 10 requests a minute per IP, since each login writes an OAuth state to Redis; everything behind a login allows 240 a minute per user, mostly so one dashboard can't burn through the Discord rate limit the API shares with the bot. Over the limit is a 429 with `Retry-After`, shown by the dashboard as a toast. The buckets live in the API process, so running several API replicas would multiply the limits.
 
