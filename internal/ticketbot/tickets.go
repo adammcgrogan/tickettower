@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
@@ -97,7 +98,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	if err != nil {
 		return 0, err
 	}
-	name := channelName(tt.NameFormat, number, user)
+	name := channelName(tt.NameFormat, number, user, tt.Name, answers)
 
 	var channelID snowflake.ID
 	switch tt.Mode {
@@ -153,7 +154,8 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	// captured in the transcript.
 	b.tickets.put(store.TicketRef{ID: ticket.ID, ChannelID: channelID, OpenerID: user.ID})
 
-	if _, err := b.rest.CreateMessage(channelID, welcomeMessage(ticket, tt, answers), rest.WithCtx(ctx)); err != nil {
+	welcome := welcomeMessage(ticket, tt, answers, b.guildName(ctx, guildID))
+	if _, err := b.rest.CreateMessage(channelID, welcome, rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to send welcome message", slog.Any("err", err))
 	}
 	go b.logEvent(guildID, openedLog(ticket))
@@ -184,14 +186,54 @@ func channelOverwrites(guildID, botID, openerID snowflake.ID, supportRoles []sno
 	return overwrites
 }
 
+// answerPlaceholders returns "{answer1}" to "{answer5}" paired with the
+// member's answers (empty when there's no such question), each passed
+// through clean.
+func answerPlaceholders(answers []formAnswer, clean func(string) string) []string {
+	pairs := make([]string, 0, 2*store.MaxQuestions)
+	for i := range store.MaxQuestions {
+		var v string
+		if i < len(answers) {
+			v = clean(answers[i].answer)
+		}
+		pairs = append(pairs, fmt.Sprintf("{answer%d}", i+1), v)
+	}
+	return pairs
+}
+
+// slug lowercases s and joins its words with hyphens, e.g. "Billing & refunds"
+// becomes "billing-refunds".
+func slug(s string) string {
+	var b strings.Builder
+	gap := false
+	for _, r := range strings.ToLower(s) {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+			gap = true
+			continue
+		}
+		if gap && b.Len() > 0 {
+			b.WriteByte('-')
+		}
+		gap = false
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // channelName fills in a ticket type's name format, e.g. "ticket-{number}".
-func channelName(format string, number int, user discord.User) string {
-	name := strings.NewReplacer(
+// Placeholders are replaced in one pass, so a member's answer can't inject
+// another placeholder.
+func channelName(format string, number int, user discord.User, typeName string, answers []formAnswer) string {
+	pairs := []string{
 		"{number}", fmt.Sprintf("%04d", number),
 		"{username}", user.Username,
 		"{user}", user.Username,
-	).Replace(format)
-	name = strings.TrimSpace(name)
+		"{type}", slug(typeName),
+	}
+	pairs = append(pairs, answerPlaceholders(answers, slug)...)
+	name := strings.NewReplacer(pairs...).Replace(format)
+	// An empty placeholder can leave a stray hyphen, e.g. "{answer1}-{number}".
+	name = strings.Trim(name, " -")
 	if name == "" {
 		name = fmt.Sprintf("ticket-%04d", number)
 	}
@@ -204,12 +246,35 @@ func channelName(format string, number int, user discord.User) string {
 // embedLimit is Discord's cap on the total text in a message's embeds.
 const embedLimit = 6000
 
-func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer) discord.MessageCreate {
+// welcomeText fills in the placeholders in a ticket type's welcome message.
+// Mentions inside an embed are shown but don't ping anyone.
+func welcomeText(t store.Ticket, tt store.TicketType, answers []formAnswer, server string) string {
 	text := tt.WelcomeMessage
 	if strings.TrimSpace(text) == "" {
 		text = defaultWelcome
 	}
-	text = strings.ReplaceAll(text, "{user}", discord.UserMention(t.OpenerID))
+	support := "the team"
+	if len(tt.SupportRoleIDs) > 0 {
+		roles := make([]string, len(tt.SupportRoleIDs))
+		for i, id := range tt.SupportRoleIDs {
+			roles[i] = discord.RoleMention(id)
+		}
+		support = strings.Join(roles, " ")
+	}
+	pairs := []string{
+		"{user}", discord.UserMention(t.OpenerID),
+		"{username}", t.OpenerName,
+		"{number}", fmt.Sprintf("%04d", t.Number),
+		"{type}", tt.Name,
+		"{server}", server,
+		"{support}", support,
+	}
+	pairs = append(pairs, answerPlaceholders(answers, strings.TrimSpace)...)
+	return strings.NewReplacer(pairs...).Replace(text)
+}
+
+func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer, server string) discord.MessageCreate {
+	text := welcomeText(t, tt, answers, server)
 
 	// Mentioning support roles also adds them to private threads.
 	mentions := []string{discord.UserMention(t.OpenerID)}
