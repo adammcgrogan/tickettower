@@ -88,6 +88,8 @@ The SQL rules live in `store/autoclose.go`; the dashboard hint repeats the lead 
 
 Editing a ticket type re-renders every published panel that uses it.
 
+**Rate limits** (`api/ratelimit.go`, in-process token buckets): the auth routes allow 10 requests a minute per IP, since each login writes an OAuth state to Redis; everything behind a login allows 240 a minute per user, mostly so one dashboard can't burn through the Discord rate limit the API shares with the bot. Over the limit is a 429 with `Retry-After`, shown by the dashboard as a toast. The buckets live in the API process, so running several API replicas would multiply the limits.
+
 **Security headers.** Every API response carries `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy` and a `Permissions-Policy` (`securityHeaders` in `api/server.go`), plus HSTS when the request arrived over https. The SPA's full Content-Security-Policy is a `<meta>` tag that SvelteKit writes at build time with the hash of its bootstrap script (`csp` in `web/vite.config.ts`): scripts, styles, fonts and API calls are same-origin only; images may come from any https host because Discord embeds can link anywhere.
 
 **Dashboard auth.**
