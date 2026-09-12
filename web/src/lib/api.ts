@@ -138,7 +138,32 @@ export type Ticket = {
 	last_activity_at: string;
 	/** True when the member sent the last message, so the team owes a reply. */
 	waiting_on_staff: boolean;
+	/** The message that matched a search, when the search matched what was said. */
+	match?: { author_name: string; snippet: string };
 };
+
+/** Wrap the matching words in a search snippet; see `snippetParts`. */
+export const MATCH_START = '\ue000';
+export const MATCH_END = '\ue001';
+
+/** Splits a search snippet into runs, marking the ones that matched. */
+export function snippetParts(snippet: string): { text: string; hit: boolean }[] {
+	const out: { text: string; hit: boolean }[] = [];
+	for (const [i, chunk] of snippet.split(MATCH_START).entries()) {
+		if (i === 0) {
+			if (chunk) out.push({ text: chunk, hit: false });
+			continue;
+		}
+		const end = chunk.indexOf(MATCH_END);
+		if (end < 0) {
+			out.push({ text: chunk, hit: false });
+			continue;
+		}
+		out.push({ text: chunk.slice(0, end), hit: true });
+		if (chunk.length > end + 1) out.push({ text: chunk.slice(end + 1), hit: false });
+	}
+	return out;
+}
 
 export type Embed = {
 	/** Who wrote it, e.g. the staff member behind a dashboard reply. */

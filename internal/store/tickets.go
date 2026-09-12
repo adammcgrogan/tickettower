@@ -39,6 +39,9 @@ type Ticket struct {
 	// WaitingOnStaff is true when the opener sent the last message, which
 	// pauses auto-close.
 	WaitingOnStaff bool `json:"waiting_on_staff"`
+	// Match is set by ListTickets when a search matched something said in
+	// the ticket rather than its number or names.
+	Match *MessageMatch `json:"match,omitempty"`
 }
 
 const ticketColumns = `id, guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name,
@@ -206,7 +209,8 @@ func (s *Store) MoveTicket(ctx context.Context, guildID snowflake.ID, id, typeID
 type TicketQuery struct {
 	Status TicketStatus // "" for any
 	TypeID *int64
-	// Search matches the ticket number and the opener, claimer and type names.
+	// Search matches the ticket number, the opener, claimer and type names,
+	// and words in the ticket's messages.
 	Search string
 	// Before continues the list after this ticket, for paging.
 	Before *int64
@@ -216,11 +220,13 @@ type TicketQuery struct {
 // likeEscaper makes a search term match literally in a LIKE pattern.
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// ListTickets returns the guild's tickets matching q, newest first.
+// ListTickets returns the guild's tickets matching q, newest first. Tickets
+// found through their messages carry a Match with a snippet.
 func (s *Store) ListTickets(ctx context.Context, guildID snowflake.ID, q TicketQuery) ([]Ticket, error) {
-	pattern := ""
+	pattern, words := "", ""
 	if q.Search != "" {
 		pattern = "%" + likeEscaper.Replace(q.Search) + "%"
+		words = searchQuery(q.Search)
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+ticketColumns+` FROM tickets
@@ -228,11 +234,14 @@ func (s *Store) ListTickets(ctx context.Context, guildID snowflake.ID, q TicketQ
 		  AND ($2 = '' OR status = $2)
 		  AND ($3::bigint IS NULL OR ticket_type_id = $3)
 		  AND ($4 = '' OR number::text LIKE $4 OR opener_name ILIKE $4 OR type_name ILIKE $4
-		       OR claimed_by_name ILIKE $4)
+		       OR claimed_by_name ILIKE $4
+		       OR ($7 <> '' AND EXISTS (SELECT 1 FROM ticket_messages m
+		                                WHERE m.ticket_id = tickets.id AND m.deleted_at IS NULL
+		                                  AND m.search @@ to_tsquery('simple', $7))))
 		  AND ($5::bigint IS NULL
 		       OR (opened_at, id) < (SELECT opened_at, id FROM tickets WHERE guild_id = $1 AND id = $5))
 		ORDER BY opened_at DESC, id DESC LIMIT $6`,
-		int64(guildID), string(q.Status), q.TypeID, pattern, q.Before, q.Limit)
+		int64(guildID), string(q.Status), q.TypeID, pattern, q.Before, q.Limit, words)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +255,26 @@ func (s *Store) ListTickets(ctx context.Context, guildID snowflake.ID, q TicketQ
 		}
 		out = append(out, t)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if words == "" {
+		return out, nil
+	}
+	ids := make([]int64, len(out))
+	for i, t := range out {
+		ids[i] = t.ID
+	}
+	matches, err := s.messageMatches(ctx, ids, words)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if m, ok := matches[out[i].ID]; ok {
+			out[i].Match = &m
+		}
+	}
+	return out, nil
 }
 
 type TicketStats struct {

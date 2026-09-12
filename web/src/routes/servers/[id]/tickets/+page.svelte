@@ -7,6 +7,7 @@
 		ApiError,
 		errorMessage,
 		send,
+		snippetParts,
 		type Guild,
 		type SavedReply,
 		type Ticket,
@@ -379,7 +380,7 @@
 			size={15}
 			class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-subtle"
 		/>
-		<input bind:value={query} placeholder="Search by number, member or type" class="input pl-9" />
+		<input bind:value={query} placeholder="Search tickets and messages" class="input pl-9" />
 	</label>
 	{#if types.length > 1}
 		<select bind:value={typeFilter} class="input w-auto" aria-label="Ticket type">
@@ -445,6 +446,14 @@
 								<div class="mt-1 truncate text-xs {state.tone === 'waiting' ? 'text-accent' : 'text-subtle'}">
 									{state.label}{t.claimed_by_name && t.status === 'open' ? `, claimed by ${t.claimed_by_name}` : ''}
 								</div>
+								{#if t.match}
+									<p class="mt-1.5 line-clamp-2 text-xs text-muted">
+										<span class="text-subtle">{t.match.author_name}:</span>
+										{#each snippetParts(t.match.snippet) as part, i (i)}{#if part.hit}<mark
+													class="rounded-sm bg-accent/20 px-0.5 text-fg">{part.text}</mark
+												>{:else}{part.text}{/if}{/each}
+									</p>
+								{/if}
 							</div>
 						</a>
 					</li>
