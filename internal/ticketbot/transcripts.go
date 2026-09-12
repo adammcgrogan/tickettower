@@ -77,10 +77,18 @@ func (c *ticketCache) markResponded(channelID snowflake.ID) bool {
 	return true
 }
 
-// capturedTypes are the message types kept in transcripts; system messages
-// such as "user joined the thread" are skipped.
+// captured reports whether a message type is kept in transcripts: ordinary
+// messages, replies and the responses to slash and context menu commands
+// (the bot's own "Ticket closed" and "X added Y" notices from /close and
+// /ticket, and any other bot's used in the ticket). System messages such as
+// "user joined the thread" are skipped.
 func captured(t discord.MessageType) bool {
-	return t == discord.MessageTypeDefault || t == discord.MessageTypeReply
+	switch t {
+	case discord.MessageTypeDefault, discord.MessageTypeReply,
+		discord.MessageTypeSlashCommand, discord.MessageTypeContextMenuCommand:
+		return true
+	}
+	return false
 }
 
 func (b *Bot) onMessageCreate(e *events.GuildMessageCreate) {
