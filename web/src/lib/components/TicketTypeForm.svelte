@@ -16,6 +16,7 @@
 		type ClaimLock,
 		type Guild,
 		type Panel,
+		type PanelInput,
 		type QuestionStyle,
 		type Role,
 		type TicketMode,
@@ -39,7 +40,11 @@
 	import Segmented from './Segmented.svelte';
 	import WelcomePreview from './WelcomePreview.svelte';
 
-	let { guildId, initial }: { guildId: string; initial?: TicketType } = $props();
+	let {
+		guildId,
+		initial,
+		onsaved
+	}: { guildId: string; initial?: TicketType; onsaved?: (name: string) => void } = $props();
 
 	const DEFAULT_WELCOME =
 		'Thanks for reaching out, {user}! Tell us what you need help with and someone from the team will be with you shortly.';
@@ -160,22 +165,30 @@
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 
-	// A new ticket type can go straight onto existing ticket buttons, so it
-	// isn't forgotten. With just one set, that's the obvious choice.
+	// Which ticket buttons show this type. A new type can go straight onto
+	// existing ones, so it isn't forgotten; with just one set, that's the
+	// obvious choice.
 	const MAX_PANEL_TYPES = 25;
-	let panels = $state<Panel[]>([]);
+	let panels = $state<Panel[] | null>(null);
 	let addTo = $state<number[]>([]);
-	const isFull = (p: Panel) => p.ticket_type_ids.length >= MAX_PANEL_TYPES;
+	const onPanel = (p: Panel) => !!initial && p.ticket_type_ids.includes(initial.id);
+	const isFull = (p: Panel) => !onPanel(p) && p.ticket_type_ids.length >= MAX_PANEL_TYPES;
+	// Ticket buttons need at least one type, so their only one can't be taken off.
+	const isOnly = (p: Panel) => onPanel(p) && p.ticket_type_ids.length === 1;
+
+	const snapshot = () => JSON.stringify([form, [...addTo].sort()]);
+	let saved = $state('');
+	const dirty = $derived(!!initial && saved !== '' && snapshot() !== saved);
 
 	onMount(async () => {
-		if (!initial) {
-			api<Panel[]>(`/guilds/${guildId}/panels`)
-				.then((p) => {
-					panels = p;
-					if (p.length === 1 && !isFull(p[0])) addTo = [p[0].id];
-				})
-				.catch(() => {});
-		}
+		api<Panel[]>(`/guilds/${guildId}/panels`)
+			.then((p) => {
+				panels = p;
+				if (initial) addTo = p.filter(onPanel).map((x) => x.id);
+				else if (p.length === 1 && !isFull(p[0])) addTo = [p[0].id];
+				saved = snapshot();
+			})
+			.catch(() => (panels = []));
 		try {
 			[channels, roles] = await Promise.all([
 				api<Channel[]>(`/guilds/${guildId}/channels`),
@@ -186,21 +199,28 @@
 		}
 	});
 
-	/** Adds a new ticket type to the chosen ticket buttons, returning how many failed. */
-	async function addToPanels(type: TicketType): Promise<number> {
+	/** Puts the type on, or takes it off, the ticket buttons that changed, returning how many failed. */
+	async function syncPanels(typeId: number): Promise<number> {
 		let failed = 0;
-		for (const p of panels.filter((p) => addTo.includes(p.id))) {
+		for (const p of panels ?? []) {
+			const want = addTo.includes(p.id);
+			if (want === p.ticket_type_ids.includes(typeId)) continue;
+			const body: PanelInput = {
+				title: p.title,
+				description: p.description,
+				color: p.color,
+				style: p.style,
+				image_url: p.image_url,
+				thumbnail_url: p.thumbnail_url,
+				placeholder: p.placeholder,
+				ticket_type_ids: want ? [...p.ticket_type_ids, typeId] : p.ticket_type_ids.filter((id) => id !== typeId)
+			};
 			try {
-				const res = await api<{ warning: string }>(
+				const res = await api<{ panel: Panel; warning: string }>(
 					`/guilds/${guildId}/panels/${p.id}`,
-					send('PATCH', {
-						title: p.title,
-						description: p.description,
-						color: p.color,
-						style: p.style,
-						ticket_type_ids: [...p.ticket_type_ids, type.id]
-					})
+					send('PATCH', body)
 				);
+				panels = (panels ?? []).map((x) => (x.id === p.id ? res.panel : x));
 				if (res.warning) toast(res.warning, 'info');
 			} catch {
 				failed++;
@@ -261,654 +281,764 @@
 					`/guilds/${guildId}/ticket-types/${initial.id}`,
 					send('PATCH', form)
 				);
-				toast('Ticket type saved');
+				const failed = await syncPanels(initial.id);
+				if (failed) toast("Saved, but your ticket buttons couldn't all be updated. Try again from Ticket buttons.", 'error');
+				else toast('Ticket type saved');
 				if (res.warning) toast(res.warning, 'info');
+				saved = snapshot();
+				onsaved?.(form.name);
 			} else {
 				const created = await api<TicketType>(`/guilds/${guildId}/ticket-types`, send('POST', form));
-				const failed = await addToPanels(created);
+				const failed = await syncPanels(created.id);
 				if (failed) {
 					toast("Ticket type created, but it couldn't be added to your ticket buttons. Add it from Ticket buttons.", 'error');
 				} else {
 					toast(addTo.length ? 'Ticket type created and added to your ticket buttons' : 'Ticket type created');
 				}
+				goto(`/servers/${guildId}/ticket-types`);
 			}
-			goto(`/servers/${guildId}/ticket-types`);
 		} catch (err) {
-			if (err instanceof ApiError && err.field) errors = { [err.field]: err.message };
-			else toast(errorMessage(err), 'error');
+			if (err instanceof ApiError && err.field) {
+				errors = { [err.field]: err.message };
+				tab = fieldTab[err.field] ?? tab;
+			} else toast(errorMessage(err), 'error');
 		} finally {
 			saving = false;
 		}
 	}
+
+	// --- Tabs ---
+
+	type Tab = 'basics' | 'button' | 'welcome' | 'access' | 'handling' | 'closing';
+	const tabs: { id: Tab; label: string }[] = [
+		{ id: 'basics', label: 'Basics' },
+		{ id: 'button', label: 'Button' },
+		{ id: 'welcome', label: 'Questions and welcome' },
+		{ id: 'access', label: 'Who can open' },
+		{ id: 'handling', label: 'While open' },
+		{ id: 'closing', label: 'Closing' }
+	];
+	let tab = $state<Tab>('basics');
+
+	// Where each field lives, so a save error shows the tab it's on.
+	const fieldTab: Record<string, Tab> = {
+		name: 'basics',
+		emoji: 'basics',
+		description: 'basics',
+		mode: 'basics',
+		parent_id: 'basics',
+		name_format: 'basics',
+		support_role_ids: 'basics',
+		button_label: 'button',
+		button_style: 'button',
+		questions: 'welcome',
+		welcome_message: 'welcome',
+		required_role_ids: 'access',
+		blocked_role_ids: 'access',
+		max_open_per_user: 'access',
+		cooldown_minutes: 'access',
+		claim_lock: 'handling',
+		claim_lock_exempt_role_ids: 'handling',
+		reply_target_minutes: 'handling',
+		reminder_minutes: 'handling',
+		reminder_where: 'handling',
+		reminder_ping: 'handling',
+		auto_close_hours: 'handling',
+		ask_rating: 'closing',
+		rating_prompt: 'closing'
+	};
+	const tabHasError = (t: Tab) => Object.keys(errors).some((f) => fieldTab[f] === t);
+
+	let tabButtons = $state<Record<string, HTMLButtonElement>>({});
+	function tabKey(e: KeyboardEvent, i: number) {
+		const by = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+		if (!by) return;
+		e.preventDefault();
+		const next = tabs[(i + by + tabs.length) % tabs.length].id;
+		tab = next;
+		tabButtons[next]?.focus();
+	}
+
+	const buttonSwatch = $derived(buttonStyles.find((b) => b.value === form.button_style)?.swatch);
 </script>
 
+{#snippet heading(title: string, hint?: string)}
+	<div>
+		<h2 class="font-medium">{title}</h2>
+		{#if hint}<p class="hint mt-1">{hint}</p>{/if}
+	</div>
+{/snippet}
+
 <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-<form onsubmit={save} class="space-y-5">
-	<section class="card space-y-5 p-5">
-		<h2 class="font-medium">Basics</h2>
-		<div class="grid gap-5 sm:grid-cols-[1fr_7rem]">
-			<Field label="Name" for="name" error={errors.name}>
-				<input
-					id="name"
-					class="input"
-					bind:value={form.name}
-					maxlength="80"
-					placeholder="e.g. General support"
-					aria-invalid={!!errors.name}
-					required
-				/>
-			</Field>
-			<Field label="Emoji" for="emoji" optional error={errors.emoji}>
-				<input
-					id="emoji"
-					class="input text-center"
-					bind:value={form.emoji}
-					placeholder="🎫"
-					aria-invalid={!!errors.emoji}
-				/>
-			</Field>
-		</div>
-		<Field
-			label="Description"
-			for="description"
-			optional
-			hint="Shown under the option when ticket buttons are shown as a dropdown menu."
-			error={errors.description}
-		>
-			<input
-				id="description"
-				class="input"
-				bind:value={form.description}
-				maxlength="100"
-				placeholder="e.g. Questions about the server or your account"
-				aria-invalid={!!errors.description}
-			/>
-		</Field>
-	</section>
-
-	<section class="card space-y-5 p-5">
-		<div>
-			<h2 class="font-medium">The button</h2>
-			<p class="hint mt-1">How this type looks on your ticket buttons message.</p>
-		</div>
-		<div class="grid gap-5 sm:grid-cols-[1fr_auto]">
-			<Field
-				label="Button label"
-				for="button_label"
-				optional
-				hint="Leave empty to use the name."
-				error={errors.button_label}
-			>
-				<input
-					id="button_label"
-					class="input"
-					bind:value={form.button_label}
-					maxlength={MAX_BUTTON_LABEL}
-					placeholder={form.name || 'e.g. Get help'}
-					aria-invalid={!!errors.button_label}
-				/>
-			</Field>
-			<Field label="Button colour" for="button_style" error={errors.button_style}>
-				<div class="flex gap-2" role="radiogroup" id="button_style" aria-label="Button colour">
-					{#each buttonStyles as b (b.value)}
-						{@const on = form.button_style === b.value}
-						<button
-							type="button"
-							role="radio"
-							aria-checked={on}
-							title={b.label}
-							aria-label={b.label}
-							onclick={() => (form.button_style = b.value)}
-							class="grid h-9 w-11 place-items-center rounded-lg border transition-colors {on
-								? 'border-fg'
-								: 'border-border hover:border-border-strong'}"
-						>
-							<span class="h-4 w-6 rounded-sm" style="background:{b.swatch}"></span>
-						</button>
-					{/each}
-				</div>
-			</Field>
-		</div>
-		<div class="rounded-xl bg-[#313338] p-4">
-			<span
-				class="inline-flex items-center gap-1.5 rounded px-4 py-1.5 text-sm font-medium text-white"
-				style="background:{buttonStyles.find((b) => b.value === form.button_style)?.swatch}"
-			>
-				{#if form.emoji}<span>{form.emoji.replace(/^<a?:(\w+):\d+>$/, ':$1:')}</span>{/if}
-				{form.button_label || form.name || 'Ticket type'}
-			</span>
-		</div>
-	</section>
-
-	<section class="card space-y-5 p-5">
-		<div>
-			<h2 class="font-medium">Where tickets open</h2>
-			<p class="hint mt-1">Only the member who opened the ticket and your support team can see it.</p>
-		</div>
-		<div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Ticket format">
-			{#each modes as m (m.value)}
-				{@const selected = form.mode === m.value}
+	<form onsubmit={save} class="min-w-0">
+		<div role="tablist" aria-label="Ticket type settings" class="flex gap-1 overflow-x-auto border-b border-border">
+			{#each tabs as t, i (t.id)}
+				{@const active = tab === t.id}
 				<button
 					type="button"
-					role="radio"
-					aria-checked={selected}
-					onclick={() => setMode(m.value)}
-					class="flex gap-3 rounded-xl border p-4 text-left transition-colors {selected
-						? 'border-accent bg-accent/5'
-						: 'border-border hover:border-border-strong'}"
+					role="tab"
+					id="tab-{t.id}"
+					aria-selected={active}
+					aria-controls="tabpanel"
+					tabindex={active ? 0 : -1}
+					bind:this={tabButtons[t.id]}
+					onclick={() => (tab = t.id)}
+					onkeydown={(e) => tabKey(e, i)}
+					class="-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm whitespace-nowrap transition-colors {active
+						? 'border-fg font-medium text-fg'
+						: 'border-transparent text-muted hover:text-fg'}"
 				>
-					<span
-						class="grid size-8 shrink-0 place-items-center rounded-lg bg-elevated {selected
-							? 'text-accent'
-							: 'text-muted'}"
+					{t.label}
+					{#if tabHasError(t.id)}<span class="size-1.5 rounded-full bg-danger" aria-label="Has a problem"></span>{/if}
+				</button>
+			{/each}
+		</div>
+
+		<div id="tabpanel" role="tabpanel" aria-labelledby="tab-{tab}" class="card mt-5 divide-y divide-border">
+			{#if tab === 'basics'}
+				<section class="space-y-5 p-5">
+					<div class="grid gap-5 sm:grid-cols-[1fr_7rem]">
+						<Field label="Name" for="name" error={errors.name}>
+							<input
+								id="name"
+								class="input"
+								bind:value={form.name}
+								maxlength="80"
+								placeholder="e.g. General support"
+								aria-invalid={!!errors.name}
+								required
+							/>
+						</Field>
+						<Field label="Emoji" for="emoji" optional error={errors.emoji}>
+							<input
+								id="emoji"
+								class="input text-center"
+								bind:value={form.emoji}
+								placeholder="🎫"
+								aria-invalid={!!errors.emoji}
+							/>
+						</Field>
+					</div>
+					<Field
+						label="Description"
+						for="description"
+						optional
+						hint="Shown under the option when ticket buttons are shown as a dropdown menu."
+						error={errors.description}
 					>
-						<Icon name={m.icon} />
-					</span>
-					<span>
-						<span class="block text-sm font-medium">{m.label}</span>
-						<span class="mt-0.5 block text-xs text-muted">{m.body}</span>
-					</span>
-				</button>
-			{/each}
-		</div>
+						<input
+							id="description"
+							class="input"
+							bind:value={form.description}
+							maxlength="100"
+							placeholder="e.g. Questions about the server or your account"
+							aria-invalid={!!errors.description}
+						/>
+					</Field>
+				</section>
 
-		{#if form.mode === 'channel'}
-			<Field
-				label="Category"
-				for="parent"
-				optional
-				hint="New ticket channels are created in this category."
-				help="channels-vs-threads"
-				error={errors.parent_id}
-			>
-				<ChannelSelect
-					id="parent"
-					{channels}
-					kinds={['category']}
-					bind:value={form.parent_id}
-					placeholder="No category"
-					invalid={!!errors.parent_id}
-				/>
-			</Field>
-		{:else}
-			<Field
-				label="Channel"
-				for="parent"
-				hint="Threads are created in this channel. Members need to be able to see it, but each thread is private."
-				help="channels-vs-threads"
-				error={errors.parent_id}
-			>
-				<ChannelSelect
-					id="parent"
-					{channels}
-					kinds={['text']}
-					bind:value={form.parent_id}
-					placeholder="Select a channel"
-					invalid={!!errors.parent_id}
-				/>
-			</Field>
-		{/if}
+				<section class="space-y-5 p-5">
+					{@render heading(
+						'Where tickets open',
+						'Only the member who opened the ticket and your support team can see it.'
+					)}
+					<div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Ticket format">
+						{#each modes as m (m.value)}
+							{@const selected = form.mode === m.value}
+							<button
+								type="button"
+								role="radio"
+								aria-checked={selected}
+								onclick={() => setMode(m.value)}
+								class="flex gap-3 rounded-xl border p-4 text-left transition-colors {selected
+									? 'border-accent bg-accent/5'
+									: 'border-border hover:border-border-strong'}"
+							>
+								<span
+									class="grid size-8 shrink-0 place-items-center rounded-lg bg-elevated {selected
+										? 'text-accent'
+										: 'text-muted'}"
+								>
+									<Icon name={m.icon} />
+								</span>
+								<span>
+									<span class="block text-sm font-medium">{m.label}</span>
+									<span class="mt-0.5 block text-xs text-muted">{m.body}</span>
+								</span>
+							</button>
+						{/each}
+					</div>
 
-		<Field
-			label={form.mode === 'channel' ? 'Channel name' : 'Thread name'}
-			for="name_format"
-			hint="Preview: {namePreview}"
-			help="ticket-types"
-			error={errors.name_format}
-		>
-			<input
-				id="name_format"
-				class="input font-mono text-[13px]"
-				bind:this={nameInput}
-				bind:value={form.name_format}
-				maxlength="90"
-				aria-invalid={!!errors.name_format}
-			/>
-			<PlaceholderChips
-				items={[...namePlaceholders, ...answerTokens]}
-				target={nameInput}
-				bind:value={form.name_format}
-			/>
-		</Field>
-	</section>
+					{#if form.mode === 'channel'}
+						<Field
+							label="Category"
+							for="parent"
+							optional
+							hint="New ticket channels are created in this category."
+							help="channels-vs-threads"
+							error={errors.parent_id}
+						>
+							<ChannelSelect
+								id="parent"
+								{channels}
+								kinds={['category']}
+								bind:value={form.parent_id}
+								placeholder="No category"
+								invalid={!!errors.parent_id}
+							/>
+						</Field>
+					{:else}
+						<Field
+							label="Channel"
+							for="parent"
+							hint="Threads are created in this channel. Members need to be able to see it, but each thread is private."
+							help="channels-vs-threads"
+							error={errors.parent_id}
+						>
+							<ChannelSelect
+								id="parent"
+								{channels}
+								kinds={['text']}
+								bind:value={form.parent_id}
+								placeholder="Select a channel"
+								invalid={!!errors.parent_id}
+							/>
+						</Field>
+					{/if}
 
-	<section class="card space-y-5 p-5">
-		<div>
-			<h2 class="font-medium">Support team</h2>
-			<p class="hint mt-1">
-				These roles can see, claim and close tickets{form.mode === 'thread'
-					? ", and are pinged into each new thread"
-					: ''}. People with Manage Server always can.
-			</p>
-		</div>
-		<Field
-			label="Support roles"
-			for="roles"
-			hint={form.support_role_ids.length
-				? undefined
-				: 'With no support roles, only people with Manage Server can see these tickets.'}
-			help="support-team"
-			error={errors.support_role_ids}
-		>
-			<RolePicker id="roles" {roles} bind:value={form.support_role_ids} />
-		</Field>
-	</section>
+					<Field
+						label={form.mode === 'channel' ? 'Channel name' : 'Thread name'}
+						for="name_format"
+						hint="Preview: {namePreview}"
+						help="ticket-types"
+						error={errors.name_format}
+					>
+						<input
+							id="name_format"
+							class="input font-mono text-[13px]"
+							bind:this={nameInput}
+							bind:value={form.name_format}
+							maxlength="90"
+							aria-invalid={!!errors.name_format}
+						/>
+						<PlaceholderChips
+							items={[...namePlaceholders, ...answerTokens]}
+							target={nameInput}
+							bind:value={form.name_format}
+						/>
+					</Field>
+				</section>
 
-	<section class="card space-y-5 p-5">
-		<div>
-			<h2 class="font-medium">Claiming</h2>
-			<p class="hint mt-1">
-				What happens to the rest of the support team once someone claims a ticket.
-				{#if form.mode === 'thread'}
-					Private threads can't limit a role's access, so this only applies to channel tickets.
-				{/if}
-			</p>
-		</div>
-		<div class="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="When a ticket is claimed">
-			{#each claimLocks as c (c.value)}
-				{@const selected = form.claim_lock === c.value}
-				<button
-					type="button"
-					role="radio"
-					aria-checked={selected}
-					disabled={form.mode === 'thread' && c.value !== 'off'}
-					onclick={() => (form.claim_lock = c.value)}
-					class="rounded-xl border p-4 text-left transition-colors disabled:opacity-50 {selected
-						? 'border-accent bg-accent/5'
-						: 'border-border hover:border-border-strong'}"
-				>
-					<span class="block text-sm font-medium">{c.label}</span>
-					<span class="mt-0.5 block text-xs text-muted">{c.body}</span>
-				</button>
-			{/each}
-		</div>
-		{#if errors.claim_lock}<p class="text-xs text-danger">{errors.claim_lock}</p>{/if}
-		{#if form.claim_lock !== 'off'}
-			<Field
-				label="Roles that keep full access"
-				for="claim_exempt"
-				optional
-				hint={supportRolesOnly.length
-					? 'Support roles that can always read and reply, such as senior staff. Administrators always can.'
-					: 'Add support roles above first.'}
-				error={errors.claim_lock_exempt_role_ids}
-			>
-				<RolePicker id="claim_exempt" roles={supportRolesOnly} bind:value={form.claim_lock_exempt_role_ids} />
-			</Field>
-			<p class="hint">The claimer unclaiming, or the ticket moving, gives the team their access back.</p>
-		{/if}
-	</section>
+				<section class="space-y-5 p-5">
+					{@render heading(
+						'Support team',
+						`These roles can see, claim and close tickets${form.mode === 'thread' ? ', and are pinged into each new thread' : ''}. People with Manage Server always can.`
+					)}
+					<Field
+						label="Support roles"
+						for="roles"
+						hint={form.support_role_ids.length
+							? undefined
+							: 'With no support roles, only people with Manage Server can see these tickets.'}
+						help="support-team"
+						error={errors.support_role_ids}
+					>
+						<RolePicker id="roles" {roles} bind:value={form.support_role_ids} />
+					</Field>
+				</section>
+			{:else if tab === 'button'}
+				<section class="space-y-5 p-5">
+					{@render heading('The button', 'How this type looks on your ticket buttons message.')}
+					<div class="grid gap-5 sm:grid-cols-[1fr_auto]">
+						<Field
+							label="Button label"
+							for="button_label"
+							optional
+							hint="Leave empty to use the name."
+							error={errors.button_label}
+						>
+							<input
+								id="button_label"
+								class="input"
+								bind:value={form.button_label}
+								maxlength={MAX_BUTTON_LABEL}
+								placeholder={form.name || 'e.g. Get help'}
+								aria-invalid={!!errors.button_label}
+							/>
+						</Field>
+						<Field label="Button colour" for="button_style" error={errors.button_style}>
+							<div class="flex gap-2" role="radiogroup" id="button_style" aria-label="Button colour">
+								{#each buttonStyles as b (b.value)}
+									{@const on = form.button_style === b.value}
+									<button
+										type="button"
+										role="radio"
+										aria-checked={on}
+										title={b.label}
+										aria-label={b.label}
+										onclick={() => (form.button_style = b.value)}
+										class="grid h-9 w-11 place-items-center rounded-lg border transition-colors {on
+											? 'border-fg'
+											: 'border-border hover:border-border-strong'}"
+									>
+										<span class="h-4 w-6 rounded-sm" style="background:{b.swatch}"></span>
+									</button>
+								{/each}
+							</div>
+						</Field>
+					</div>
+				</section>
 
-	<section class="card space-y-5 p-5">
-		<div>
-			<h2 class="font-medium">Reply target and reminders</h2>
-			<p class="hint mt-1">
-				How long a member should wait for the team, measured from their first unanswered message.
-				Tickets on hold don't count.
-			</p>
-		</div>
-		<div class="grid gap-5 sm:grid-cols-2">
-			<Field
-				label="Reply target"
-				for="reply_target"
-				hint="Analytics shows how often the first reply beat it, and Home counts tickets past it."
-				error={errors.reply_target_minutes}
-			>
-				<select
-					id="reply_target"
-					class="input"
-					value={form.reply_target_minutes?.toString() ?? ''}
-					onchange={(e) => (form.reply_target_minutes = minutesOrNull(e.currentTarget.value))}
-					aria-invalid={!!errors.reply_target_minutes}
-				>
-					{#each minuteChoices as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-				</select>
-			</Field>
-			<Field
-				label="Remind the team"
-				for="reminder"
-				hint="Posts a reminder once a ticket has waited this long."
-				error={errors.reminder_minutes}
-			>
-				<select
-					id="reminder"
-					class="input"
-					value={form.reminder_minutes?.toString() ?? ''}
-					onchange={(e) => (form.reminder_minutes = minutesOrNull(e.currentTarget.value))}
-					aria-invalid={!!errors.reminder_minutes}
-				>
-					{#each reminderChoices as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-				</select>
-			</Field>
-		</div>
-		{#if form.reminder_minutes}
-			<div class="grid gap-5 sm:grid-cols-2">
-				<Field label="Post reminders" for="reminder_where" error={errors.reminder_where}>
-					<select id="reminder_where" class="input" bind:value={form.reminder_where}>
-						{#each reminderWheres as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-					</select>
-				</Field>
-				<Field label="Mention" for="reminder_ping" hint="Only applies to reminders in the ticket." error={errors.reminder_ping}>
-					<select id="reminder_ping" class="input" bind:value={form.reminder_ping}>
-						{#each reminderPings as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-					</select>
-				</Field>
-			</div>
-			<label class="flex cursor-pointer items-center gap-2 text-sm">
-				<input type="checkbox" class="size-4 accent-accent" bind:checked={form.reminder_repeat} />
-				Keep reminding every {minutesLabel(form.reminder_minutes)} until someone replies
-			</label>
-		{/if}
-	</section>
+				<section class="space-y-4 p-5">
+					{@render heading(
+						'Shown on',
+						'Members can only open this type from ticket buttons it’s on. Published buttons update in Discord straight away.'
+					)}
+					{#if panels === null}
+						<div class="h-16 animate-pulse rounded-lg bg-elevated"></div>
+					{:else if panels.length === 0}
+						<p class="rounded-lg border border-dashed border-border p-4 text-sm text-muted">
+							You haven't made any ticket buttons yet.
+							<a href="/servers/{guildId}/buttons/new" class="text-fg underline-offset-4 hover:underline">
+								Create them
+							</a>
+							once this type is saved.
+						</p>
+					{:else}
+						<ul class="divide-y divide-border rounded-lg border border-border">
+							{#each panels as p (p.id)}
+								{@const locked = isFull(p) || isOnly(p)}
+								<li>
+									<label class="flex items-center gap-3 px-3 py-2.5 text-sm {locked ? '' : 'cursor-pointer'}">
+										<input
+											type="checkbox"
+											class="size-4 accent-accent"
+											disabled={locked}
+											checked={addTo.includes(p.id)}
+											onchange={(e) =>
+												(addTo = e.currentTarget.checked
+													? [...addTo, p.id]
+													: addTo.filter((id) => id !== p.id))}
+										/>
+										<span class="min-w-0 flex-1 truncate {locked && !addTo.includes(p.id) ? 'text-muted' : ''}">
+											{p.title}
+										</span>
+										<span class="shrink-0 text-xs text-subtle">
+											{#if isFull(p)}Full{:else if isOnly(p)}Its only type{:else if p.message_id}Published{:else}Draft{/if}
+										</span>
+									</label>
+								</li>
+							{/each}
+						</ul>
+						{#if addTo.length === 0}
+							<p class="flex items-center gap-1.5 text-xs text-muted">
+								<Icon name="alert" size={13} /> Not on any ticket buttons, so members can't open it yet.
+							</p>
+						{/if}
+					{/if}
+				</section>
+			{:else if tab === 'welcome'}
+				<section class="space-y-5 p-5">
+					<div class="flex items-start justify-between gap-4">
+						<div>
+							<h2 class="font-medium">Questions</h2>
+							<p class="hint mt-1">
+								Asked in a pop-up before the ticket opens. The answers are posted in the welcome message,
+								so your team has the details up front.
+								<a href="/help/forms" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
+									Learn more
+								</a>
+							</p>
+						</div>
+						{#if form.questions.length > 0 && form.questions.length < MAX_QUESTIONS}
+							<button type="button" class="btn btn-secondary h-8 shrink-0 px-3" onclick={addQuestion}>
+								<Icon name="plus" size={14} /> Add question
+							</button>
+						{/if}
+					</div>
 
-	<section class="card space-y-5 p-5">
-		<div>
-			<h2 class="font-medium">Who can open these tickets</h2>
-			<p class="hint mt-1">
-				Anyone who can see your ticket buttons, unless you narrow it down here. Members who don't
-				qualify are told why when they click.
-			</p>
-		</div>
-		<Field
-			label="Required roles"
-			for="required_roles"
-			optional
-			hint={form.required_role_ids.length
-				? 'Members need at least one of these roles.'
-				: 'Leave empty to let any member open this type.'}
-			help="ticket-types"
-			error={errors.required_role_ids}
-		>
-			<RolePicker id="required_roles" {roles} bind:value={form.required_role_ids} />
-		</Field>
-		<Field
-			label="Blocked roles"
-			for="blocked_roles"
-			optional
-			hint="Members with any of these roles can't open this type, such as a Muted role."
-			error={errors.blocked_role_ids}
-		>
-			<RolePicker id="blocked_roles" {roles} bind:value={form.blocked_role_ids} />
-		</Field>
-		<p class="hint">
-			To stop one person opening any ticket, use <code>/ticket block</code> in Discord or the blocked
-			list in <a href="/servers/{guildId}/settings" class="text-fg underline-offset-4 hover:underline">Settings</a>.
-		</p>
-	</section>
+					{#if form.questions.length === 0}
+						<div class="rounded-xl border border-dashed border-border px-6 py-8 text-center">
+							<p class="text-sm font-medium">No questions</p>
+							<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+								Members go straight to their ticket. Add up to {MAX_QUESTIONS} questions, like an order number
+								or what they need help with.
+							</p>
+							<button type="button" class="btn btn-secondary mt-4 h-8 px-3" onclick={addQuestion}>
+								<Icon name="plus" size={14} /> Add question
+							</button>
+						</div>
+					{:else}
+						<ol class="space-y-3">
+							{#each form.questions as q, i (i)}
+								<li class="space-y-4 rounded-lg border border-border bg-bg/40 p-4">
+									<div class="flex items-center gap-2">
+										<span class="text-xs font-medium text-muted">Question {i + 1}</span>
+										<div class="ml-auto flex items-center gap-0.5">
+											<button
+												type="button"
+												class="btn btn-ghost h-7 px-1.5"
+												disabled={i === 0}
+												onclick={() => moveQuestion(i, -1)}
+												aria-label="Move question {i + 1} up"
+											>
+												<Icon name="chevron-up" size={14} />
+											</button>
+											<button
+												type="button"
+												class="btn btn-ghost h-7 px-1.5"
+												disabled={i === form.questions.length - 1}
+												onclick={() => moveQuestion(i, 1)}
+												aria-label="Move question {i + 1} down"
+											>
+												<Icon name="chevron-down" size={14} />
+											</button>
+											<button
+												type="button"
+												class="btn btn-ghost h-7 px-1.5 hover:text-danger"
+												onclick={() => form.questions.splice(i, 1)}
+												aria-label="Remove question {i + 1}"
+											>
+												<Icon name="trash" size={14} />
+											</button>
+										</div>
+									</div>
+									<div class="grid gap-4 sm:grid-cols-2">
+										<Field label="Question" for="q-{i}-label">
+											<input
+												id="q-{i}-label"
+												class="input"
+												bind:value={q.label}
+												maxlength="45"
+												placeholder="e.g. What's your order number?"
+												required
+											/>
+										</Field>
+										<Field label="Placeholder" for="q-{i}-placeholder" optional>
+											<input
+												id="q-{i}-placeholder"
+												class="input"
+												bind:value={q.placeholder}
+												maxlength="100"
+												placeholder="e.g. #12345"
+											/>
+										</Field>
+									</div>
+									<div class="flex flex-wrap items-center justify-between gap-3">
+										<Segmented label="Answer length" options={answerStyles} bind:value={q.style} />
+										<label class="flex cursor-pointer items-center gap-2 text-sm">
+											<input type="checkbox" class="size-4 accent-accent" bind:checked={q.required} />
+											Required
+										</label>
+									</div>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+					{#if errors.questions}<p class="text-xs text-danger">{errors.questions}</p>{/if}
+				</section>
 
-	<section class="card space-y-5 p-5">
-		<div class="flex items-start justify-between gap-4">
-			<div>
-				<h2 class="font-medium">Questions</h2>
-				<p class="hint mt-1">
-					Ask members a few questions before their ticket opens. Their answers are posted in the
-					welcome message, so your team has the details up front.
-					<a href="/help/forms" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
-						Learn more
-					</a>
-				</p>
-			</div>
-			{#if form.questions.length > 0 && form.questions.length < MAX_QUESTIONS}
-				<button type="button" class="btn btn-secondary h-8 shrink-0 px-3" onclick={addQuestion}>
-					<Icon name="plus" size={14} /> Add question
-				</button>
+				<section class="space-y-5 p-5">
+					<Field
+						label="Welcome message"
+						for="welcome"
+						optional
+						hint="Posted when the ticket opens. Click a placeholder to add it; mentions here don't ping anyone."
+						help="ticket-types"
+						error={errors.welcome_message}
+					>
+						<textarea
+							id="welcome"
+							class="input"
+							rows="4"
+							bind:this={welcomeInput}
+							bind:value={form.welcome_message}
+							maxlength="2000"
+							placeholder={DEFAULT_WELCOME}
+							aria-invalid={!!errors.welcome_message}
+						></textarea>
+						<PlaceholderChips
+							items={[...welcomePlaceholders, ...answerTokens]}
+							target={welcomeInput}
+							bind:value={form.welcome_message}
+						/>
+					</Field>
+				</section>
+			{:else if tab === 'access'}
+				<section class="space-y-5 p-5">
+					{@render heading(
+						'Roles',
+						"Anyone who can see your ticket buttons can open this type, unless you narrow it down here. Members who don't qualify are told why when they click."
+					)}
+					<Field
+						label="Required roles"
+						for="required_roles"
+						optional
+						hint={form.required_role_ids.length
+							? 'Members need at least one of these roles.'
+							: 'Leave empty to let any member open this type.'}
+						help="ticket-types"
+						error={errors.required_role_ids}
+					>
+						<RolePicker id="required_roles" {roles} bind:value={form.required_role_ids} />
+					</Field>
+					<Field
+						label="Blocked roles"
+						for="blocked_roles"
+						optional
+						hint="Members with any of these roles can't open this type, such as a Muted role."
+						error={errors.blocked_role_ids}
+					>
+						<RolePicker id="blocked_roles" {roles} bind:value={form.blocked_role_ids} />
+					</Field>
+					<p class="hint">
+						To stop one person opening any ticket, use <code>/ticket block</code> in Discord or the blocked
+						list in <a href="/servers/{guildId}/settings" class="text-fg underline-offset-4 hover:underline">Settings</a>.
+					</p>
+				</section>
+
+				<section class="space-y-5 p-5">
+					{@render heading('Limits')}
+					<div class="grid gap-5 sm:grid-cols-2">
+						<Field
+							label="Open tickets per member"
+							for="max_open"
+							hint="How many of these one member can have open at once."
+							error={errors.max_open_per_user}
+						>
+							<input
+								id="max_open"
+								type="number"
+								min="1"
+								max="10"
+								class="input w-24"
+								bind:value={form.max_open_per_user}
+								aria-invalid={!!errors.max_open_per_user}
+							/>
+						</Field>
+						<Field
+							label="Wait between tickets"
+							for="cooldown"
+							hint="After one closes, before the same member can open another. Stops open, close, open again."
+							error={errors.cooldown_minutes}
+						>
+							<select id="cooldown" class="input" bind:value={form.cooldown_minutes} aria-invalid={!!errors.cooldown_minutes}>
+								{#each cooldownOptions as o (o.value)}
+									<option value={o.value}>{o.label}</option>
+								{/each}
+							</select>
+						</Field>
+					</div>
+				</section>
+			{:else if tab === 'handling'}
+				<section class="space-y-5 p-5">
+					<div>
+						<h2 class="font-medium">Claiming</h2>
+						<p class="hint mt-1">
+							What happens to the rest of the support team once someone claims a ticket.
+							{#if form.mode === 'thread'}
+								Private threads can't limit a role's access, so this only applies to channel tickets.
+							{/if}
+						</p>
+					</div>
+					<div class="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="When a ticket is claimed">
+						{#each claimLocks as c (c.value)}
+							{@const selected = form.claim_lock === c.value}
+							<button
+								type="button"
+								role="radio"
+								aria-checked={selected}
+								disabled={form.mode === 'thread' && c.value !== 'off'}
+								onclick={() => (form.claim_lock = c.value)}
+								class="rounded-xl border p-4 text-left transition-colors disabled:opacity-50 {selected
+									? 'border-accent bg-accent/5'
+									: 'border-border hover:border-border-strong'}"
+							>
+								<span class="block text-sm font-medium">{c.label}</span>
+								<span class="mt-0.5 block text-xs text-muted">{c.body}</span>
+							</button>
+						{/each}
+					</div>
+					{#if errors.claim_lock}<p class="text-xs text-danger">{errors.claim_lock}</p>{/if}
+					{#if form.claim_lock !== 'off'}
+						<Field
+							label="Roles that keep full access"
+							for="claim_exempt"
+							optional
+							hint={supportRolesOnly.length
+								? 'Support roles that can always read and reply, such as senior staff. Administrators always can.'
+								: 'Add support roles under Basics first.'}
+							error={errors.claim_lock_exempt_role_ids}
+						>
+							<RolePicker id="claim_exempt" roles={supportRolesOnly} bind:value={form.claim_lock_exempt_role_ids} />
+						</Field>
+						<p class="hint">The claimer unclaiming, or the ticket moving, gives the team their access back.</p>
+					{/if}
+				</section>
+
+				<section class="space-y-5 p-5">
+					{@render heading(
+						'Reply target and reminders',
+						"How long a member should wait for the team, measured from their first unanswered message. Tickets on hold don't count."
+					)}
+					<div class="grid gap-5 sm:grid-cols-2">
+						<Field
+							label="Reply target"
+							for="reply_target"
+							hint="Analytics shows how often the first reply beat it, and Home counts tickets past it."
+							error={errors.reply_target_minutes}
+						>
+							<select
+								id="reply_target"
+								class="input"
+								value={form.reply_target_minutes?.toString() ?? ''}
+								onchange={(e) => (form.reply_target_minutes = minutesOrNull(e.currentTarget.value))}
+								aria-invalid={!!errors.reply_target_minutes}
+							>
+								{#each minuteChoices as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+							</select>
+						</Field>
+						<Field
+							label="Remind the team"
+							for="reminder"
+							hint="Posts a reminder once a ticket has waited this long."
+							error={errors.reminder_minutes}
+						>
+							<select
+								id="reminder"
+								class="input"
+								value={form.reminder_minutes?.toString() ?? ''}
+								onchange={(e) => (form.reminder_minutes = minutesOrNull(e.currentTarget.value))}
+								aria-invalid={!!errors.reminder_minutes}
+							>
+								{#each reminderChoices as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+							</select>
+						</Field>
+					</div>
+					{#if form.reminder_minutes}
+						<div class="grid gap-5 sm:grid-cols-2">
+							<Field label="Post reminders" for="reminder_where" error={errors.reminder_where}>
+								<select id="reminder_where" class="input" bind:value={form.reminder_where}>
+									{#each reminderWheres as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+								</select>
+							</Field>
+							<Field label="Mention" for="reminder_ping" hint="Only applies to reminders in the ticket." error={errors.reminder_ping}>
+								<select id="reminder_ping" class="input" bind:value={form.reminder_ping}>
+									{#each reminderPings as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+								</select>
+							</Field>
+						</div>
+						<label class="flex cursor-pointer items-center gap-2 text-sm">
+							<input type="checkbox" class="size-4 accent-accent" bind:checked={form.reminder_repeat} />
+							Keep reminding every {minutesLabel(form.reminder_minutes)} until someone replies
+						</label>
+					{/if}
+				</section>
+
+				<section class="space-y-5 p-5">
+					<Field
+						label="Close inactive tickets"
+						for="auto_close"
+						hint={autoCloseHint}
+						help="auto-close"
+						error={errors.auto_close_hours}
+					>
+						<select
+							id="auto_close"
+							class="input sm:w-56"
+							value={form.auto_close_hours?.toString() ?? ''}
+							onchange={(e) =>
+								(form.auto_close_hours = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+							aria-invalid={!!errors.auto_close_hours}
+						>
+							{#each autoCloseOptions as o (o.value)}
+								<option value={o.value}>{o.label}</option>
+							{/each}
+						</select>
+					</Field>
+				</section>
+			{:else}
+				<section class="space-y-5 p-5">
+					{@render heading(
+						'When a ticket closes',
+						'The member gets a message saying their ticket was closed, with a link to the transcript.'
+					)}
+					<label class="flex cursor-pointer items-start gap-3 text-sm">
+						<input type="checkbox" class="mt-0.5 size-4 accent-accent" bind:checked={form.ask_rating} />
+						<span>
+							<span class="block font-medium">Ask for a rating</span>
+							<span class="mt-0.5 block text-xs text-muted">
+								One to five stars, with an optional comment. Ratings show up in Analytics{form.ask_rating
+									? ' and in your log channel'
+									: ''}. Turn this off for types where it would feel wrong, like reporting someone.
+							</span>
+						</span>
+					</label>
+					{#if form.ask_rating}
+						<Field
+							label="Rating request"
+							for="rating_prompt"
+							optional
+							hint="The question under the closing message. Leave empty for the default."
+							error={errors.rating_prompt}
+						>
+							<textarea
+								id="rating_prompt"
+								class="input"
+								rows="2"
+								bind:this={ratingInput}
+								bind:value={form.rating_prompt}
+								maxlength={MAX_RATING_PROMPT}
+								placeholder={DEFAULT_RATING_PROMPT}
+								aria-invalid={!!errors.rating_prompt}
+							></textarea>
+							<PlaceholderChips items={ratingPlaceholders} target={ratingInput} bind:value={form.rating_prompt} />
+						</Field>
+					{/if}
+				</section>
 			{/if}
 		</div>
 
-		{#if form.questions.length === 0}
-			<div class="rounded-xl border border-dashed border-border px-6 py-8 text-center">
-				<p class="text-sm font-medium">No questions</p>
-				<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
-					Members go straight to their ticket. Add up to {MAX_QUESTIONS} questions, like an order number
-					or what they need help with.
-				</p>
-				<button type="button" class="btn btn-secondary mt-4 h-8 px-3" onclick={addQuestion}>
-					<Icon name="plus" size={14} /> Add question
+		<div
+			class="sticky bottom-4 mt-5 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/90 p-3 shadow-2xl shadow-black/40 backdrop-blur"
+		>
+			<span class="pl-1 text-xs text-muted">
+				{#if initial}{dirty ? 'Unsaved changes' : 'All changes saved'}{:else}Every tab is saved together{/if}
+			</span>
+			<div class="flex gap-2">
+				<a href="/servers/{guildId}/ticket-types" class="btn btn-ghost">{initial ? 'Back' : 'Cancel'}</a>
+				<button type="submit" class="btn btn-primary" disabled={saving || (!!initial && !dirty)}>
+					{saving ? 'Saving…' : initial ? 'Save changes' : 'Create ticket type'}
 				</button>
 			</div>
-		{:else}
-			<ol class="space-y-3">
-				{#each form.questions as q, i (i)}
-					<li class="space-y-4 rounded-lg border border-border bg-bg/40 p-4">
-						<div class="flex items-center gap-2">
-							<span class="text-xs font-medium text-muted">Question {i + 1}</span>
-							<div class="ml-auto flex items-center gap-0.5">
-								<button
-									type="button"
-									class="btn btn-ghost h-7 px-1.5"
-									disabled={i === 0}
-									onclick={() => moveQuestion(i, -1)}
-									aria-label="Move question {i + 1} up"
-								>
-									<Icon name="chevron-up" size={14} />
-								</button>
-								<button
-									type="button"
-									class="btn btn-ghost h-7 px-1.5"
-									disabled={i === form.questions.length - 1}
-									onclick={() => moveQuestion(i, 1)}
-									aria-label="Move question {i + 1} down"
-								>
-									<Icon name="chevron-down" size={14} />
-								</button>
-								<button
-									type="button"
-									class="btn btn-ghost h-7 px-1.5 hover:text-danger"
-									onclick={() => form.questions.splice(i, 1)}
-									aria-label="Remove question {i + 1}"
-								>
-									<Icon name="trash" size={14} />
-								</button>
-							</div>
-						</div>
-						<div class="grid gap-4 sm:grid-cols-2">
-							<Field label="Question" for="q-{i}-label">
-								<input
-									id="q-{i}-label"
-									class="input"
-									bind:value={q.label}
-									maxlength="45"
-									placeholder="e.g. What's your order number?"
-									required
-								/>
-							</Field>
-							<Field label="Placeholder" for="q-{i}-placeholder" optional>
-								<input
-									id="q-{i}-placeholder"
-									class="input"
-									bind:value={q.placeholder}
-									maxlength="100"
-									placeholder="e.g. #12345"
-								/>
-							</Field>
-						</div>
-						<div class="flex flex-wrap items-center justify-between gap-3">
-							<Segmented label="Answer length" options={answerStyles} bind:value={q.style} />
-							<label class="flex cursor-pointer items-center gap-2 text-sm">
-								<input type="checkbox" class="size-4 accent-accent" bind:checked={q.required} />
-								Required
-							</label>
-						</div>
-					</li>
-				{/each}
-			</ol>
-		{/if}
-		{#if errors.questions}<p class="text-xs text-danger">{errors.questions}</p>{/if}
-	</section>
-
-	<section class="card space-y-5 p-5">
-		<div>
-			<h2 class="font-medium">When a ticket closes</h2>
-			<p class="hint mt-1">
-				The member gets a message saying their ticket was closed, with a link to the transcript.
-			</p>
 		</div>
-		<label class="flex cursor-pointer items-start gap-3 text-sm">
-			<input type="checkbox" class="mt-0.5 size-4 accent-accent" bind:checked={form.ask_rating} />
-			<span>
-				<span class="block font-medium">Ask for a rating</span>
-				<span class="mt-0.5 block text-xs text-muted">
-					One to five stars, with an optional comment. Ratings show up in Analytics{form.ask_rating
-						? ' and in your log channel'
-						: ''}. Turn this off for types where it would feel wrong, like reporting someone.
+	</form>
+
+	<aside class="space-y-6 lg:sticky lg:top-6 lg:self-start">
+		<div>
+			<p class="mb-3 text-sm text-muted">Its button</p>
+			<div class="rounded-xl bg-[#313338] p-4">
+				<span
+					class="inline-flex items-center gap-1.5 rounded px-4 py-1.5 text-sm font-medium text-white"
+					style="background:{buttonSwatch}"
+				>
+					{#if form.emoji}<span>{form.emoji.replace(/^<a?:(\w+):\d+>$/, ':$1:')}</span>{/if}
+					{form.button_label || form.name || 'Ticket type'}
 				</span>
-			</span>
-		</label>
-		{#if form.ask_rating}
-			<Field
-				label="Rating request"
-				for="rating_prompt"
-				optional
-				hint="The question under the closing message. Leave empty for the default."
-				error={errors.rating_prompt}
-			>
-				<textarea
-					id="rating_prompt"
-					class="input"
-					rows="2"
-					bind:this={ratingInput}
-					bind:value={form.rating_prompt}
-					maxlength={MAX_RATING_PROMPT}
-					placeholder={DEFAULT_RATING_PROMPT}
-					aria-invalid={!!errors.rating_prompt}
-				></textarea>
-				<PlaceholderChips items={ratingPlaceholders} target={ratingInput} bind:value={form.rating_prompt} />
-			</Field>
-		{/if}
-	</section>
-
-	<section class="card space-y-5 p-5">
-		<h2 class="font-medium">Messages & limits</h2>
-		<Field
-			label="Welcome message"
-			for="welcome"
-			optional
-			hint="Posted when the ticket opens. Click a placeholder to add it; mentions here don't ping anyone."
-			help="ticket-types"
-			error={errors.welcome_message}
-		>
-			<textarea
-				id="welcome"
-				class="input"
-				rows="4"
-				bind:this={welcomeInput}
-				bind:value={form.welcome_message}
-				maxlength="2000"
-				placeholder={DEFAULT_WELCOME}
-				aria-invalid={!!errors.welcome_message}
-			></textarea>
-			<PlaceholderChips
-				items={[...welcomePlaceholders, ...answerTokens]}
-				target={welcomeInput}
-				bind:value={form.welcome_message}
-			/>
-		</Field>
-		<Field
-			label="Open tickets per member"
-			for="max_open"
-			hint="How many tickets of this type one member can have open at once."
-			error={errors.max_open_per_user}
-		>
-			<input
-				id="max_open"
-				type="number"
-				min="1"
-				max="10"
-				class="input w-24"
-				bind:value={form.max_open_per_user}
-				aria-invalid={!!errors.max_open_per_user}
-			/>
-		</Field>
-		<Field
-			label="Wait between tickets"
-			for="cooldown"
-			hint="How long a member waits after one of their tickets of this type closes before they can open another. Stops open, close, open again."
-			error={errors.cooldown_minutes}
-		>
-			<select id="cooldown" class="input sm:w-56" bind:value={form.cooldown_minutes} aria-invalid={!!errors.cooldown_minutes}>
-				{#each cooldownOptions as o (o.value)}
-					<option value={o.value}>{o.label}</option>
-				{/each}
-			</select>
-		</Field>
-		<Field
-			label="Close inactive tickets"
-			for="auto_close"
-			hint={autoCloseHint}
-			help="auto-close"
-			error={errors.auto_close_hours}
-		>
-			<select
-				id="auto_close"
-				class="input sm:w-56"
-				value={form.auto_close_hours?.toString() ?? ''}
-				onchange={(e) =>
-					(form.auto_close_hours = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-				aria-invalid={!!errors.auto_close_hours}
-			>
-				{#each autoCloseOptions as o (o.value)}
-					<option value={o.value}>{o.label}</option>
-				{/each}
-			</select>
-		</Field>
-	</section>
-
-	{#if !initial && panels.length > 0}
-		<section class="card space-y-4 p-5">
-			<div>
-				<h2 class="font-medium">Ticket buttons</h2>
-				<p class="hint mt-1">
-					Members can only open this type once it's on your ticket buttons. Published buttons update
-					in Discord straight away.
-				</p>
 			</div>
-			<ul class="space-y-2">
-				{#each panels as p (p.id)}
-					{@const full = isFull(p)}
-					<li>
-						<label class="flex items-center gap-3 text-sm {full ? 'opacity-50' : 'cursor-pointer'}">
-							<input
-								type="checkbox"
-								class="size-4 accent-accent"
-								disabled={full}
-								checked={addTo.includes(p.id)}
-								onchange={(e) =>
-									(addTo = e.currentTarget.checked
-										? [...addTo, p.id]
-										: addTo.filter((id) => id !== p.id))}
-							/>
-							<span class="min-w-0 flex-1 truncate">Add to “{p.title}”</span>
-							<span class="shrink-0 text-xs text-subtle">
-								{#if full}Full{:else if p.message_id}Published{:else}Draft{/if}
-							</span>
-						</label>
-					</li>
-				{/each}
-			</ul>
-		</section>
-	{/if}
-
-	<div
-		class="sticky bottom-4 flex items-center justify-end gap-2 rounded-xl border border-border bg-surface/90 p-3 shadow-2xl shadow-black/40 backdrop-blur"
-	>
-		<a href="/servers/{guildId}/ticket-types" class="btn btn-ghost">Cancel</a>
-		<button type="submit" class="btn btn-primary" disabled={saving}>
-			{saving ? 'Saving…' : initial ? 'Save changes' : 'Create ticket type'}
-		</button>
-	</div>
-</form>
-
-<aside class="lg:sticky lg:top-6 lg:self-start">
-	<p class="mb-3 text-sm text-muted">The welcome message in each new ticket</p>
-	<WelcomePreview
-		name={form.name}
-		welcome={form.welcome_message}
-		fallback={DEFAULT_WELCOME}
-		questions={form.questions}
-		server={getGuild()?.name ?? 'your server'}
-		supportRoles={form.support_role_ids
-			.map((id) => roles.find((r) => r.id === id))
-			.filter((r): r is Role => !!r)}
-	/>
-</aside>
+		</div>
+		<div>
+			<p class="mb-3 text-sm text-muted">The welcome message in each new ticket</p>
+			<WelcomePreview
+				name={form.name}
+				welcome={form.welcome_message}
+				fallback={DEFAULT_WELCOME}
+				questions={form.questions}
+				server={getGuild()?.name ?? 'your server'}
+				supportRoles={form.support_role_ids
+					.map((id) => roles.find((r) => r.id === id))
+					.filter((r): r is Role => !!r)}
+			/>
+		</div>
+	</aside>
 </div>

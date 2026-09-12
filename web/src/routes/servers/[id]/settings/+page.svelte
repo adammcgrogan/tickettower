@@ -177,9 +177,9 @@
 		</button>
 	</div>
 {:else if !settings}
-	<div class="mt-8 max-w-3xl space-y-5" aria-busy="true">
-		{#each Array(2) as _, i (i)}
-			<div class="card space-y-4 p-5">
+	<div class="mt-8 max-w-3xl divide-y divide-border border-y border-border" aria-busy="true">
+		{#each Array(3) as _, i (i)}
+			<div class="space-y-4 py-6">
 				<div class="h-4 w-32 animate-pulse rounded bg-elevated"></div>
 				<div class="h-3 w-2/3 animate-pulse rounded bg-elevated"></div>
 				<div class="h-9 w-56 animate-pulse rounded-lg bg-elevated"></div>
@@ -187,24 +187,24 @@
 		{/each}
 	</div>
 {:else}
-	<form onsubmit={save} class="mt-8 max-w-3xl space-y-5">
-		<section class="card space-y-5 p-5">
-			<div>
-				<h2 class="font-medium">Ticket log</h2>
-				<p class="hint mt-1">
-					{APP_NAME} posts a short note here whenever a ticket is opened, claimed or closed, so your
-					team can follow along in one place.
-				</p>
-			</div>
-			<Field
-				label="Log channel"
-				for="log_channel"
-				optional
-				hint="Use a channel only staff can see. {APP_NAME} needs permission to send messages there."
-				help="permissions"
-				error={errors.log_channel_id}
-			>
-				<div class="sm:max-w-sm">
+	<form onsubmit={save} class="mt-8 max-w-3xl">
+		<div class="divide-y divide-border border-y border-border">
+			<section class="grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+				<div>
+					<h2 class="font-medium">Ticket log</h2>
+					<p class="hint mt-1">
+						A note is posted here whenever a ticket is opened, claimed or closed, so your team can follow
+						along in one place.
+					</p>
+				</div>
+				<Field
+					label="Log channel"
+					for="log_channel"
+					optional
+					hint="Use a channel only staff can see. {APP_NAME} needs permission to send messages there."
+					help="permissions"
+					error={errors.log_channel_id}
+				>
 					<ChannelSelect
 						id="log_channel"
 						{channels}
@@ -213,141 +213,145 @@
 						placeholder="Don't log tickets"
 						invalid={!!errors.log_channel_id}
 					/>
-				</div>
-			</Field>
-		</section>
+				</Field>
+			</section>
 
-		<section class="card space-y-5 p-5">
-			<div>
-				<h2 class="font-medium">Dashboard access</h2>
-				<p class="hint mt-1">
-					People with Manage Server can always use everything here. Give other roles access at the
-					level they need.
-					<a href="/help/support-team" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
-						Learn more
-					</a>
-				</p>
-			</div>
-			{#if dashboardRoles.length === 0}
-				<p class="text-sm text-muted">No roles have dashboard access yet.</p>
-			{:else}
-				<ul class="divide-y divide-border rounded-xl border border-border">
-					{#each dashboardRoles as r, i (r.role_id)}
-						<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-							<span class="min-w-0 flex-1 truncate text-sm font-medium">{roleName(r.role_id)}</span>
-							<select
-								class="input w-auto"
-								aria-label="Access level for {roleName(r.role_id)}"
-								bind:value={r.level}
-								disabled={!guild.can_manage}
-							>
-								{#each levels as l (l.value)}<option value={l.value}>{l.label}</option>{/each}
+			<section class="grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+				<div>
+					<h2 class="font-medium">Dashboard access</h2>
+					<p class="hint mt-1">
+						People with Manage Server can always use everything here. Give other roles access at the level
+						they need.
+						<a href="/help/support-team" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
+							Learn more
+						</a>
+					</p>
+				</div>
+				<div class="space-y-4">
+					{#if dashboardRoles.length === 0}
+						<p class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">
+							No roles have dashboard access yet.
+						</p>
+					{:else}
+						<ul class="divide-y divide-border rounded-lg border border-border">
+							{#each dashboardRoles as r, i (r.role_id)}
+								<li class="flex flex-wrap items-center gap-3 px-3 py-2">
+									<span class="min-w-0 flex-1 truncate text-sm font-medium">{roleName(r.role_id)}</span>
+									<select
+										class="input h-8 w-auto"
+										aria-label="Access level for {roleName(r.role_id)}"
+										bind:value={r.level}
+										disabled={!guild.can_manage}
+									>
+										{#each levels as l (l.value)}<option value={l.value}>{l.label}</option>{/each}
+									</select>
+									{#if guild.can_manage}
+										<button
+											type="button"
+											class="btn btn-ghost size-8 p-0"
+											onclick={() => dashboardRoles.splice(i, 1)}
+											aria-label="Remove {roleName(r.role_id)}"
+										>
+											<Icon name="x" size={14} />
+										</button>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					{#if guild.can_manage && unusedRoles.length > 0 && dashboardRoles.length < 10}
+						<div class="flex flex-wrap items-center gap-2">
+							<select class="input w-auto" aria-label="Role to add" bind:value={addRole}>
+								<option value="">Add a role…</option>
+								{#each unusedRoles as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
 							</select>
-							{#if guild.can_manage}
-								<button
-									type="button"
-									class="btn btn-ghost size-8 p-0"
-									onclick={() => dashboardRoles.splice(i, 1)}
-									aria-label="Remove {roleName(r.role_id)}"
-								>
-									<Icon name="x" size={14} />
-								</button>
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			{#if guild.can_manage && unusedRoles.length > 0 && dashboardRoles.length < 10}
-				<div class="flex flex-wrap items-center gap-2">
-					<select class="input w-auto" aria-label="Role to add" bind:value={addRole}>
-						<option value="">Add a role…</option>
-						{#each unusedRoles as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
-					</select>
-					<button type="button" class="btn btn-secondary h-9" onclick={addDashboardRole} disabled={!addRole}>
-						<Icon name="plus" size={14} /> Add
-					</button>
+							<button type="button" class="btn btn-secondary h-9" onclick={addDashboardRole} disabled={!addRole}>
+								<Icon name="plus" size={14} /> Add
+							</button>
+						</div>
+					{/if}
+					<dl class="space-y-2 text-xs">
+						{#each levels as l (l.value)}
+							<div class="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2">
+								<dt class="font-medium text-fg">{l.label}</dt>
+								<dd class="text-muted">{l.body}</dd>
+							</div>
+						{/each}
+					</dl>
+					{#if !guild.can_manage}
+						<p class="text-xs text-subtle">Only people with Manage Server can change who has access.</p>
+					{/if}
+					{#if errors.dashboard_roles}<p class="text-xs text-danger">{errors.dashboard_roles}</p>{/if}
 				</div>
-			{/if}
-			<dl class="grid gap-2 text-xs text-muted sm:grid-cols-3">
-				{#each levels as l (l.value)}
-					<div>
-						<dt class="font-medium text-fg">{l.label}</dt>
-						<dd class="mt-0.5">{l.body}</dd>
-					</div>
-				{/each}
-			</dl>
-			{#if !guild.can_manage}
-				<p class="text-xs text-subtle">Only people with Manage Server can change who has access.</p>
-			{/if}
-			{#if errors.dashboard_roles}<p class="text-xs text-danger">{errors.dashboard_roles}</p>{/if}
-		</section>
+			</section>
 
-		<section class="card space-y-5 p-5">
-			<div>
-				<h2 class="font-medium">Transcripts</h2>
-				<p class="hint mt-1">
-					Messages in tickets are saved so you can review them later. Choose how long to keep them
-					after a ticket closes.
-				</p>
-			</div>
-			<Field
-				label="Keep transcripts for"
-				for="retention"
-				hint="Older transcripts are deleted automatically. Ticket details and stats are kept."
-				help="transcripts"
-				error={errors.transcript_retention_days}
-			>
-				<select id="retention" class="input sm:w-56" bind:value={retentionValue}>
-					{#each retention as o (o.value)}
-						<option value={o.value}>{o.label}</option>
-					{/each}
-				</select>
-			</Field>
-		</section>
+			<section class="grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+				<div>
+					<h2 class="font-medium">Transcripts</h2>
+					<p class="hint mt-1">Messages in tickets are saved so you can read them back after a ticket closes.</p>
+				</div>
+				<Field
+					label="Keep transcripts for"
+					for="retention"
+					hint="Older transcripts are deleted automatically. Ticket details and stats are kept."
+					help="transcripts"
+					error={errors.transcript_retention_days}
+				>
+					<select id="retention" class="input sm:w-56" bind:value={retentionValue}>
+						{#each retention as o (o.value)}
+							<option value={o.value}>{o.label}</option>
+						{/each}
+					</select>
+				</Field>
+			</section>
+		</div>
 
-		<div class="flex justify-end">
+		<div
+			class="sticky bottom-4 mt-6 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/90 p-3 shadow-2xl shadow-black/40 backdrop-blur"
+		>
+			<span class="pl-1 text-xs text-muted">{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
 			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || !atLeast(guild.level, 'admin')}>
 				{saving ? 'Saving…' : 'Save settings'}
 			</button>
 		</div>
 	</form>
 
-	<section class="card mt-5 max-w-3xl space-y-5 p-5">
-		<div class="flex items-start justify-between gap-4">
-			<div>
-				<h2 class="font-medium">Blocked members</h2>
-				<p class="hint mt-1">
-					People who can't open tickets here, for spam or abuse. Staff can also use
-					<code>/ticket block</code> and <code>/ticket unblock</code> in Discord.
-				</p>
-			</div>
-			<button class="btn btn-secondary h-8 shrink-0 px-3" onclick={openBlock}>
+	<section class="mt-10 max-w-3xl border-t border-border grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+		<div>
+			<h2 class="font-medium">Blocked members</h2>
+			<p class="hint mt-1">
+				People who can't open tickets here, for spam or abuse. Changes apply straight away. Staff can also
+				use <code>/ticket block</code> in Discord.
+			</p>
+		</div>
+		<div class="space-y-4">
+			{#if blocks.length === 0}
+				<p class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">Nobody is blocked.</p>
+			{:else}
+				<ul class="divide-y divide-border rounded-lg border border-border">
+					{#each blocks as b (b.user_id)}
+						<li class="flex items-start gap-4 px-3 py-2.5">
+							<div class="min-w-0 flex-1">
+								<p class="truncate text-sm font-medium">{b.user_name}</p>
+								<p class="mt-0.5 text-sm text-muted">
+									Blocked by {b.blocked_by_name} {timeAgo(b.created_at)}{b.reason ? `: ${b.reason}` : ''}
+								</p>
+							</div>
+							<button
+								class="btn btn-ghost h-8 shrink-0 px-3"
+								onclick={() => unblock(b)}
+								disabled={unblocking === b.user_id}
+							>
+								{unblocking === b.user_id ? 'Unblocking…' : 'Unblock'}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			<button class="btn btn-secondary h-8 px-3" onclick={openBlock}>
 				<Icon name="plus" size={14} /> Block a member
 			</button>
 		</div>
-		{#if blocks.length === 0}
-			<p class="text-sm text-muted">Nobody is blocked.</p>
-		{:else}
-			<ul class="divide-y divide-border rounded-xl border border-border">
-				{#each blocks as b (b.user_id)}
-					<li class="flex items-start gap-4 px-4 py-3">
-						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm font-medium">{b.user_name}</p>
-							<p class="mt-0.5 text-sm text-muted">
-								Blocked by {b.blocked_by_name} {timeAgo(b.created_at)}{b.reason ? `: ${b.reason}` : ''}
-							</p>
-						</div>
-						<button
-							class="btn btn-ghost h-8 shrink-0 px-3"
-							onclick={() => unblock(b)}
-							disabled={unblocking === b.user_id}
-						>
-							{unblocking === b.user_id ? 'Unblocking…' : 'Unblock'}
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
 	</section>
 {/if}
 

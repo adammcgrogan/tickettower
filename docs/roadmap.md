@@ -56,6 +56,8 @@
 - On hold: `/ticket hold`, `/ticket resume` and the Tickets page park tickets waiting on something else; they leave the queue, reminders and auto-close until the member writes or staff resume
 - Reply targets and staff reminders: per ticket type, a reply target measured in Analytics (overall and per type) with overdue tickets marked on Home and the Tickets page, and reminders to the team after a wait, in the ticket or the log channel, mentioning the claimer or the roles, once or repeating
 
+- Easier dashboard navigation: the ticket type editor is split into tabs (Basics, Button, Questions and welcome, Who can open, While open, Closing) with the button and welcome previews always beside it; a save error opens the tab with the problem. Its Button tab shows and changes which ticket buttons the type is on, for new and existing types, and the Ticket types list says where each type appears. The open Tickets queue is grouped by whose turn it is, with rarer ticket actions in a More menu. Settings uses quiet rows with a save bar scoped to the settings it saves, apart from Blocked members, which apply straight away
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.

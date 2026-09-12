@@ -8,7 +8,7 @@
 
 <PageHeader
 	title="New ticket type"
-	description="Decide where these tickets open and who handles them. You can change this later."
+	description="Basics is all you need to start. The other tabs have sensible defaults you can change any time."
 	back={{ href: `/servers/${guildId}/ticket-types`, label: 'Ticket types' }}
 />
 

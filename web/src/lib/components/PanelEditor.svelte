@@ -303,10 +303,7 @@
 					/>
 				</Field>
 			{:else}
-				<p class="hint">
-					Each button's colour and label are set on its
-					<a href="/servers/{guildId}/ticket-types" class="text-fg underline-offset-4 hover:underline">ticket type</a>.
-				</p>
+				<p class="hint">Each button's colour and label are set on its ticket type, under Button.</p>
 			{/if}
 
 			{#if types.length === 0}
@@ -323,6 +320,12 @@
 							<li class="flex items-center gap-3 px-3 py-2">
 								<span class="w-6 text-center">{t.emoji ? emojiText(t.emoji) : '·'}</span>
 								<span class="min-w-0 flex-1 truncate text-sm">{t.name}</span>
+								<a
+									href="/servers/{guildId}/ticket-types/{t.id}"
+									class="rounded-md px-2 py-1 text-xs text-muted transition-colors hover:bg-elevated hover:text-fg"
+								>
+									Edit type
+								</a>
 								<button
 									type="button"
 									class="btn btn-ghost size-7 p-0"
