@@ -36,6 +36,8 @@
 
 - Landing page that sells: reassurances under the hero, three setup steps, a five-step walkthrough of one ticket drawn as Discord shows it (`landing/Walkthrough.svelte`, copy mirrors the bot's real embeds), a dashboard Home demo (`landing/QueueDemo.svelte`), a 12-item feature grid, slash commands, open source and privacy, an FAQ and a closing call to action
 
+- Starter templates: quick setup (`QuickSetup.svelte`, on Home for a new server and on an empty ticket types page) offers Community or gaming, Store or business and Creator templates from `lib/templates.ts`, each creating three ticket types with questions, welcome messages and auto-close, plus ticket buttons for them. "Start simple" keeps the single named type
+
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
 
 ## Not yet verified by hand

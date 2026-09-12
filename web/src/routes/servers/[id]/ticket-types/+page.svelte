@@ -1,15 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { api, errorMessage, type Channel, type SetupProblem, type TicketType } from '$lib/api';
+	import { api, errorMessage, type Channel, type Role, type SetupProblem, type TicketType } from '$lib/api';
 	import { emojiText, hoursLabel } from '$lib/format';
 	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import QuickSetup from '$lib/components/QuickSetup.svelte';
 
 	const guildId = page.params.id!;
 
 	let types = $state<TicketType[] | null>(null);
 	let channels = $state<Channel[]>([]);
+	let roles = $state<Role[]>([]);
 	let problems = $state<SetupProblem[]>([]);
 	let error = $state('');
 
@@ -26,6 +28,8 @@
 		try {
 			types = await api<TicketType[]>(`/guilds/${guildId}/ticket-types`);
 			channels = await api<Channel[]>(`/guilds/${guildId}/channels`).catch(() => []);
+			// The template setup shown when there are none needs roles too.
+			if (types.length === 0) roles = await api<Role[]>(`/guilds/${guildId}/roles`).catch(() => []);
 		} catch (e) {
 			error = errorMessage(e);
 		}
@@ -73,15 +77,7 @@
 			{#each Array(3) as _, i (i)}<div class="h-[76px] animate-pulse bg-surface"></div>{/each}
 		</div>
 	{:else if types.length === 0}
-		<div class="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-			<p class="font-medium">No ticket types yet</p>
-			<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
-				Create one for each kind of help you offer, like "General support" or "Billing".
-			</p>
-			<a href="/servers/{guildId}/ticket-types/new" class="btn btn-primary mt-5">
-				<Icon name="plus" size={15} /> Create a ticket type
-			</a>
-		</div>
+		<QuickSetup {guildId} {channels} {roles} publish={false} ondone={load} />
 	{:else}
 		<ul class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
 			{#each types as t (t.id)}

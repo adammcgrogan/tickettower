@@ -64,8 +64,10 @@
 						</li>
 						<li>Log in to the dashboard with Discord and pick your server.</li>
 						<li>
-							On Home, fill in the quick setup: what members need help with, whether tickets open as
+							On Home, fill in the quick setup: pick a template for your kind of server (a community, a
+							store or a creator) or start with one ticket type, then choose whether tickets open as
 							channels or private threads, which roles handle tickets, and the channel the buttons go in.
+							Templates come with questions and welcome messages you can change later.
 						</li>
 						<li>Click <strong>Create and publish</strong>. The buttons appear in that channel straight away.</li>
 						<li>Click a button yourself to check a ticket opens, then close it.</li>

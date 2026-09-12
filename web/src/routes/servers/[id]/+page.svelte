@@ -2,9 +2,7 @@
 	import { getContext, onMount } from 'svelte';
 	import {
 		api,
-		ApiError,
 		errorMessage,
-		send,
 		type Analytics,
 		type Channel,
 		type Guild,
@@ -12,18 +10,12 @@
 		type Role,
 		type SetupProblem,
 		type Ticket,
-		type TicketMode,
 		type TicketType
 	} from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { formatDuration } from '$lib/format';
-	import { toast } from '$lib/toast.svelte';
-	import ChannelSelect from '$lib/components/ChannelSelect.svelte';
-	import Field from '$lib/components/Field.svelte';
 	import Icon from '$lib/components/Icon.svelte';
-	import PanelPreview from '$lib/components/PanelPreview.svelte';
-	import RolePicker from '$lib/components/RolePicker.svelte';
-	import Segmented from '$lib/components/Segmented.svelte';
+	import QuickSetup from '$lib/components/QuickSetup.svelte';
 	import SetupProblems from '$lib/components/SetupProblems.svelte';
 	import TicketStub from '$lib/components/TicketStub.svelte';
 
@@ -128,83 +120,6 @@
 	]);
 	const nextStep = $derived(steps.findIndex((s) => !s.done));
 
-	// --- Quick setup: one ticket type and a published panel in one go ---
-
-	let qs = $state({
-		name: 'General support',
-		mode: 'channel' as TicketMode,
-		parent: null as string | null,
-		roles: [] as string[],
-		panelChannel: null as string | null
-	});
-	let qsErrors = $state<Record<string, string>>({});
-	let qsBusy = $state(false);
-	// Kept between attempts so a retry after a failed publish doesn't
-	// create duplicates.
-	let created: { type?: TicketType; panel?: Panel } = {};
-
-	const modes: { value: TicketMode; label: string }[] = [
-		{ value: 'channel', label: 'Private channels' },
-		{ value: 'thread', label: 'Private threads' }
-	];
-	const parentKind = $derived<Channel['kind']>(qs.mode === 'thread' ? 'text' : 'category');
-	const previewTypes = $derived([{ id: 0, name: qs.name || 'General support', emoji: '' } as TicketType]);
-
-	async function quickSetup(e: SubmitEvent) {
-		e.preventDefault();
-		qsErrors = {};
-		// A category chosen for channels doesn't carry over to threads.
-		const parent = channels.some((c) => c.id === qs.parent && c.kind === parentKind) ? qs.parent : null;
-		if (qs.mode === 'thread' && !parent) {
-			qsErrors = { parent_id: 'Choose the channel that ticket threads will be created in.' };
-			return;
-		}
-		if (!qs.panelChannel) {
-			qsErrors = { panel_channel: 'Choose where to post the buttons.' };
-			return;
-		}
-
-		qsBusy = true;
-		const g = `/guilds/${guild.id}`;
-		try {
-			created.type ??= await api<TicketType>(
-				`${g}/ticket-types`,
-				send('POST', {
-					name: qs.name,
-					emoji: '',
-					description: '',
-					mode: qs.mode,
-					parent_id: parent,
-					support_role_ids: qs.roles,
-					name_format: 'ticket-{number}',
-					welcome_message: '',
-					max_open_per_user: 1,
-					questions: [],
-					auto_close_hours: null
-				})
-			);
-			created.panel ??= await api<Panel>(
-				`${g}/panels`,
-				send('POST', {
-					title: 'Need a hand?',
-					description: "Pick a topic below and we'll open a private ticket for you. Our team will be with you shortly.",
-					color: 0xf2b544,
-					style: 'buttons',
-					ticket_type_ids: [created.type.id]
-				})
-			);
-			await api<Panel>(`${g}/panels/${created.panel.id}/publish`, send('POST', { channel_id: qs.panelChannel }));
-			const name = channels.find((c) => c.id === qs.panelChannel)?.name ?? 'your channel';
-			toast(`Published. Members can open tickets from #${name}.`);
-			await load();
-		} catch (err) {
-			if (created.panel) qsErrors = { panel_channel: errorMessage(err) };
-			else if (err instanceof ApiError && err.field) qsErrors = { [err.field]: err.message };
-			else toast(errorMessage(err), 'error');
-		} finally {
-			qsBusy = false;
-		}
-	}
 </script>
 
 <svelte:head><title>{guild.name} · {APP_NAME}</title></svelte:head>
@@ -222,110 +137,9 @@
 		</button>
 	</div>
 {:else if loaded && fresh}
-	<section class="mt-8 overflow-hidden rounded-xl border border-border bg-surface">
-		<div class="grid lg:grid-cols-[minmax(0,1fr)_24rem]">
-			<form onsubmit={quickSetup} class="space-y-6 p-6 sm:p-8">
-				<div>
-					<h2 class="text-lg font-semibold">Get your ticket buttons live</h2>
-					<p class="mt-1 max-w-lg text-sm text-muted">
-						Answer a few questions and {APP_NAME} will create a ticket type and post buttons members can
-						click to open a ticket. You can add questions, auto-close and more afterwards.
-					</p>
-				</div>
-
-				<Field
-					label="What do members need help with?"
-					for="qs-name"
-					hint="This becomes the button members click."
-					error={qsErrors.name}
-				>
-					<input
-						id="qs-name"
-						class="input sm:max-w-sm"
-						bind:value={qs.name}
-						maxlength="80"
-						required
-						aria-invalid={!!qsErrors.name}
-					/>
-				</Field>
-
-				<Field
-					label="Where should tickets open?"
-					for="qs-parent"
-					hint={qs.mode === 'channel'
-						? 'Each ticket gets its own channel, in this category if you pick one.'
-						: 'Tickets open as private threads inside this channel.'}
-					help="channels-vs-threads"
-					error={qsErrors.parent_id}
-				>
-					<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-						<Segmented options={modes} bind:value={qs.mode} label="Ticket format" />
-						<div class="sm:w-60">
-							<ChannelSelect
-								id="qs-parent"
-								{channels}
-								kinds={[parentKind]}
-								bind:value={qs.parent}
-								placeholder={qs.mode === 'channel' ? 'No category' : 'Choose a channel'}
-								invalid={!!qsErrors.parent_id}
-							/>
-						</div>
-					</div>
-				</Field>
-
-				<Field
-					label="Who handles tickets?"
-					for="qs-roles"
-					optional
-					hint="These roles can see and reply to every ticket. People with Manage Server always can."
-					help="support-team"
-					error={qsErrors.support_role_ids}
-				>
-					<div class="sm:max-w-sm">
-						<RolePicker id="qs-roles" {roles} bind:value={qs.roles} />
-					</div>
-				</Field>
-
-				<Field
-					label="Where should the buttons go?"
-					for="qs-channel"
-					hint="Usually a public channel, like #support."
-					error={qsErrors.panel_channel}
-				>
-					<div class="sm:max-w-sm">
-						<ChannelSelect
-							id="qs-channel"
-							{channels}
-							kinds={['text', 'announcement']}
-							bind:value={qs.panelChannel}
-							placeholder="Choose a channel"
-							invalid={!!qsErrors.panel_channel}
-						/>
-					</div>
-				</Field>
-
-				<div class="flex flex-wrap items-center gap-4 pt-1">
-					<button type="submit" class="btn btn-primary" disabled={qsBusy}>
-						{qsBusy ? 'Publishing…' : 'Create and publish'}
-					</button>
-					<a href="{base}/ticket-types/new" class="text-sm text-muted hover:text-fg">
-						Set things up step by step instead
-					</a>
-				</div>
-			</form>
-
-			<aside class="border-t border-border bg-bg/50 p-6 sm:p-8 lg:border-t-0 lg:border-l">
-				<p class="mb-3 text-sm text-muted">What members will see</p>
-				<PanelPreview
-					title="Need a hand?"
-					description="Pick a topic below and we'll open a private ticket for you. Our team will be with you shortly."
-					color={0xf2b544}
-					style="buttons"
-					types={previewTypes}
-				/>
-			</aside>
-		</div>
-	</section>
+	<div class="mt-8">
+		<QuickSetup guildId={guild.id} {channels} {roles} ondone={load} />
+	</div>
 {:else}
 	{#if problems.length}
 		<div class="mt-8">
