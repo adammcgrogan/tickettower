@@ -4,8 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
@@ -167,12 +169,39 @@ func (s *Server) getAnalytics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
-func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
-	status := store.TicketStatus(r.URL.Query().Get("status"))
-	if status != store.StatusOpen && status != store.StatusClosed {
-		status = ""
+// maxTicketPage is the most tickets one request returns.
+const maxTicketPage = 200
+
+// ticketQuery reads the ticket list's filters: status (open or closed), type
+// (a ticket type ID), q (search), before (a ticket ID to page past) and limit.
+func ticketQuery(v url.Values) store.TicketQuery {
+	q := store.TicketQuery{Status: store.TicketStatus(v.Get("status")), Limit: maxTicketPage}
+	if q.Status != store.StatusOpen && q.Status != store.StatusClosed {
+		q.Status = ""
 	}
-	tickets, err := s.store.ListTickets(r.Context(), guildFrom(r).ID, status, 200)
+	if id, err := strconv.ParseInt(v.Get("type"), 10, 64); err == nil {
+		q.TypeID = &id
+	}
+	if id, err := strconv.ParseInt(v.Get("before"), 10, 64); err == nil {
+		q.Before = &id
+	}
+	if n, err := strconv.Atoi(v.Get("limit")); err == nil && n > 0 && n < maxTicketPage {
+		q.Limit = n
+	}
+	// Ticket numbers are shown as "#0042", so that finds ticket 42.
+	search := strings.TrimSpace(v.Get("q"))
+	if rest, ok := strings.CutPrefix(search, "#"); ok {
+		search = strings.TrimLeft(rest, "0")
+	}
+	if r := []rune(search); len(r) > 100 {
+		search = string(r[:100])
+	}
+	q.Search = search
+	return q
+}
+
+func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
+	tickets, err := s.store.ListTickets(r.Context(), guildFrom(r).ID, ticketQuery(r.URL.Query()))
 	if err != nil {
 		s.writeFailure(w, err)
 		return

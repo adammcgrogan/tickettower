@@ -26,6 +26,8 @@
   - logging in from a transcript link comes back to the transcript
   - the bot posts a welcome with a dashboard link when it's added to a server
 
+- Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.
@@ -43,5 +45,4 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 
 - Light theme (the tokens are ready for it)
 - Timezone-aware analytics (currently UTC)
-- Search and pagination on the Tickets page (currently the newest 200)
 - Custom bot branding per server

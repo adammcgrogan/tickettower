@@ -2,7 +2,16 @@
 	import { getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, ApiError, errorMessage, send, type Guild, type Ticket, type Transcript } from '$lib/api';
+	import {
+		api,
+		ApiError,
+		errorMessage,
+		send,
+		type Guild,
+		type Ticket,
+		type TicketType,
+		type Transcript
+	} from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { discordURL, ticketState, timeAgo } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
@@ -41,34 +50,98 @@
 		return page.url.pathname + (qs ? `?${qs}` : '');
 	}
 
+	// How many tickets each request loads.
+	const PAGE = 100;
+
 	let tickets = $state<Ticket[] | null>(null);
 	let error = $state('');
+	let loading = $state(false);
 	let query = $state('');
 	let typeFilter = $state('');
+	let types = $state<TicketType[]>([]);
+	// Whether older tickets are left to load.
+	let more = $state(false);
+	let loadingMore = $state(false);
+	// Numbers each list request, so a slow reply to an earlier search can't
+	// replace a newer one.
+	let seq = 0;
 
-	function load() {
-		const status = filter === 'all' ? '' : filter;
+	// The search waits for a pause in typing before asking the server.
+	let search = $state('');
+	$effect(() => {
+		const q = query.trim();
+		const timer = setTimeout(() => (search = q), 300);
+		return () => clearTimeout(timer);
+	});
+
+	const filtering = $derived(!!search || !!typeFilter);
+
+	// Another server starts from a clean slate.
+	$effect(() => {
+		const id = guild.id;
+		let stale = false;
 		tickets = null;
+		types = [];
+		typeFilter = '';
+		api<TicketType[]>(`/guilds/${id}/ticket-types`)
+			.then((t) => {
+				if (!stale) types = t;
+			})
+			.catch(() => {});
+		return () => {
+			stale = true;
+		};
+	});
+
+	function listURL(before?: number) {
+		const params = new URLSearchParams({ status: filter === 'all' ? '' : filter, limit: String(PAGE) });
+		if (typeFilter) params.set('type', typeFilter);
+		if (search) params.set('q', search);
+		if (before) params.set('before', String(before));
+		return `/guilds/${guild.id}/tickets?${params}`;
+	}
+
+	// Loads the first page. The current list stays on screen, dimmed, until
+	// the new one arrives, so searching doesn't flash a skeleton.
+	function load() {
+		const url = listURL();
+		const req = ++seq;
+		loading = true;
 		error = '';
-		api<Ticket[]>(`/guilds/${guild.id}/tickets?status=${status}`)
-			.then((t) => (tickets = t))
-			.catch((e) => (error = errorMessage(e)));
+		api<Ticket[]>(url)
+			.then((t) => {
+				if (req !== seq) return;
+				tickets = t;
+				more = t.length === PAGE;
+			})
+			.catch((e) => {
+				if (req === seq) error = errorMessage(e);
+			})
+			.finally(() => {
+				if (req === seq) loading = false;
+			});
 	}
 	$effect(load);
 
-	const typeNames = $derived([...new Set((tickets ?? []).map((t) => t.type_name))].sort());
+	async function loadMore() {
+		const last = tickets?.at(-1);
+		if (!last) return;
+		const req = seq;
+		loadingMore = true;
+		try {
+			const older = await api<Ticket[]>(listURL(last.id));
+			if (req !== seq || !tickets) return;
+			tickets = [...tickets, ...older];
+			more = older.length === PAGE;
+		} catch (e) {
+			if (req === seq) toast(errorMessage(e), 'error');
+		} finally {
+			loadingMore = false;
+		}
+	}
 
 	const shown = $derived.by(() => {
-		const q = query.trim().toLowerCase().replace(/^#0*/, '');
-		const list = (tickets ?? []).filter(
-			(t) =>
-				(!typeFilter || t.type_name === typeFilter) &&
-				(!q ||
-					String(t.number).includes(q) ||
-					t.opener_name.toLowerCase().includes(q) ||
-					t.type_name.toLowerCase().includes(q) ||
-					(t.claimed_by_name ?? '').toLowerCase().includes(q))
-		);
+		const list = tickets ?? [];
 		if (filter !== 'open') return list;
 		// Tickets waiting on the team come first, longest wait at the top.
 		const waiting = list.filter((t) => t.waiting_on_staff);
@@ -178,10 +251,10 @@
 		/>
 		<input bind:value={query} placeholder="Search by number, member or type" class="input pl-9" />
 	</label>
-	{#if typeNames.length > 1}
+	{#if types.length > 1}
 		<select bind:value={typeFilter} class="input w-auto" aria-label="Ticket type">
 			<option value="">All ticket types</option>
-			{#each typeNames as name (name)}<option value={name}>{name}</option>{/each}
+			{#each types as tt (tt.id)}<option value={String(tt.id)}>{tt.name}</option>{/each}
 		</select>
 	{/if}
 </div>
@@ -199,19 +272,22 @@
 			<div class="space-y-px overflow-hidden rounded-xl border border-border" aria-busy="true">
 				{#each Array(6) as _, i (i)}<div class="h-[84px] animate-pulse bg-surface"></div>{/each}
 			</div>
+		{:else if tickets.length === 0 && filtering}
+			<div class="rounded-xl border border-dashed border-border px-6 py-14 text-center">
+				<p class="font-medium">No tickets match</p>
+				<p class="mt-1 text-sm text-muted">Try a different search or ticket type.</p>
+			</div>
 		{:else if tickets.length === 0}
 			<div class="rounded-xl border border-dashed border-border px-6 py-14 text-center">
 				<p class="font-medium">{emptyText.title}</p>
 				<p class="mx-auto mt-1 max-w-xs text-sm text-muted">{emptyText.body}</p>
 			</div>
-		{:else if shown.length === 0}
-			<div class="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-				<p class="font-medium">No tickets match</p>
-				<p class="mt-1 text-sm text-muted">Try a different search or ticket type.</p>
-			</div>
 		{:else}
 			<ul
-				class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto"
+				aria-busy={loading}
+				class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface transition-opacity lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto {loading
+					? 'opacity-60'
+					: ''}"
 			>
 				{#each shown as t (t.id)}
 					{@const state = ticketState(t)}
@@ -243,10 +319,14 @@
 						</a>
 					</li>
 				{/each}
+				{#if more}
+					<li class="p-2">
+						<button class="btn btn-ghost w-full" onclick={loadMore} disabled={loadingMore}>
+							{loadingMore ? 'Loading…' : 'Load older tickets'}
+						</button>
+					</li>
+				{/if}
 			</ul>
-			{#if tickets.length >= 200}
-				<p class="mt-3 text-xs text-subtle">Showing the newest 200 tickets.</p>
-			{/if}
 		{/if}
 	</div>
 

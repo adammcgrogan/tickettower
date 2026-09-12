@@ -205,9 +205,83 @@ func TestTicketLifecycle(t *testing.T) {
 	if stats.Open != 0 || stats.OpenedWeek != 2 {
 		t.Errorf("stats = %+v", stats)
 	}
-	closed, _ := s.ListTickets(ctx, testGuild, StatusClosed, 10)
-	all, _ := s.ListTickets(ctx, testGuild, "", 10)
+	closed, _ := s.ListTickets(ctx, testGuild, TicketQuery{Status: StatusClosed, Limit: 10})
+	all, _ := s.ListTickets(ctx, testGuild, TicketQuery{Limit: 10})
 	if len(closed) != 2 || len(all) != 2 {
 		t.Errorf("list closed=%d all=%d", len(closed), len(all))
+	}
+}
+
+func TestListTicketsFiltersAndPages(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	seedGuild(t, s, 3001)
+	billing := newType(t, s, testGuild, "Billing")
+	general := newType(t, s, testGuild, "General")
+
+	channel := snowflake.ID(8000)
+	add := func(guildID snowflake.ID, tt TicketType, number int, opener string) Ticket {
+		t.Helper()
+		channel++
+		tk := Ticket{GuildID: guildID, Number: number, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+			ChannelID: channel, OpenerID: 42, OpenerName: opener}
+		if err := s.CreateTicket(ctx, &tk); err != nil {
+			t.Fatal(err)
+		}
+		return tk
+	}
+	add(testGuild, billing, 1, "alice")
+	second := add(testGuild, general, 2, "bob")
+	add(testGuild, billing, 3, "carol_x")
+	fourth := add(testGuild, general, 4, "100% dave")
+	fifth := add(testGuild, billing, 5, "erin")
+	foreign := add(3001, newType(t, s, 3001, "Billing"), 1, "alice")
+	s.CloseTicket(ctx, second.ID, 100, "staff", "")
+	s.ClaimTicket(ctx, fifth.ID, 100, "zed")
+
+	list := func(q TicketQuery) []int {
+		t.Helper()
+		if q.Limit == 0 {
+			q.Limit = 10
+		}
+		got, err := s.ListTickets(ctx, testGuild, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		numbers := []int{}
+		for _, tk := range got {
+			numbers = append(numbers, tk.Number)
+		}
+		return numbers
+	}
+	id := func(v int64) *int64 { return &v }
+
+	tests := []struct {
+		name string
+		q    TicketQuery
+		want []int
+	}{
+		{"newest first", TicketQuery{Limit: 2}, []int{5, 4}},
+		{"next page", TicketQuery{Limit: 2, Before: id(fourth.ID)}, []int{3, 2}},
+		{"last page", TicketQuery{Limit: 2, Before: id(second.ID)}, []int{1}},
+		{"cursor from another guild", TicketQuery{Before: id(foreign.ID)}, []int{}},
+		{"status", TicketQuery{Status: StatusClosed}, []int{2}},
+		{"ticket type", TicketQuery{TypeID: &billing.ID}, []int{5, 3, 1}},
+		{"type and page", TicketQuery{TypeID: &billing.ID, Before: id(fifth.ID)}, []int{3, 1}},
+		{"opener name", TicketQuery{Search: "ALI"}, []int{1}},
+		{"type name", TicketQuery{Search: "gen"}, []int{4, 2}},
+		{"claimer name", TicketQuery{Search: "zed"}, []int{5}},
+		{"number", TicketQuery{Search: "4"}, []int{4}},
+		{"% is literal", TicketQuery{Search: "%"}, []int{4}},
+		{"_ is literal", TicketQuery{Search: "_"}, []int{3}},
+		{"no match", TicketQuery{Search: "nobody"}, []int{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := list(tt.q); !slices.Equal(got, tt.want) {
+				t.Errorf("numbers = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
