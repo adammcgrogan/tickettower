@@ -285,3 +285,47 @@ func TestListTicketsFiltersAndPages(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteTicketTypeRefusesWithOpenTickets(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	tt := newType(t, s, testGuild, "Help")
+
+	for i, status := range []string{"open", "open", "closed"} {
+		tk := Ticket{GuildID: testGuild, Number: i + 1, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+			ChannelID: snowflake.ID(8000 + i), OpenerID: 42, OpenerName: "adam"}
+		if err := s.CreateTicket(ctx, &tk); err != nil {
+			t.Fatal(err)
+		}
+		if status == "closed" {
+			if _, err := s.CloseTicket(ctx, tk.ID, 1, "staff", "done"); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	var open *ErrOpenTickets
+	err := s.DeleteTicketType(ctx, testGuild, tt.ID)
+	if !errors.As(err, &open) || open.Count != 2 {
+		t.Fatalf("delete with open tickets: %v, want ErrOpenTickets{2}", err)
+	}
+	if _, err := s.GetTicketType(ctx, testGuild, tt.ID); err != nil {
+		t.Fatalf("type should still exist: %v", err)
+	}
+
+	// Once every ticket is closed the type can go, and its closed tickets keep their history.
+	for _, ch := range []snowflake.ID{8000, 8001} {
+		if _, err := s.CloseTicketByChannel(ctx, ch, "done"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.DeleteTicketType(ctx, testGuild, tt.ID); err != nil {
+		t.Fatalf("delete after closing: %v", err)
+	}
+	var n int
+	s.pool.QueryRow(ctx, `SELECT count(*) FROM tickets WHERE guild_id = $1 AND ticket_type_id IS NULL`, int64(testGuild)).Scan(&n)
+	if n != 3 {
+		t.Errorf("tickets kept after delete = %d, want 3", n)
+	}
+}
