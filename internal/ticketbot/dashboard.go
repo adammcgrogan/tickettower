@@ -2,6 +2,7 @@ package ticketbot
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -48,12 +49,20 @@ func (d *Dashboard) Close(ctx context.Context, t store.Ticket, byID snowflake.ID
 }
 
 // Reply posts a dashboard user's message in an open ticket and returns it as
-// saved in the transcript. The bot skips its own messages when tracking
-// replies, so this records the team's first response and restarts the
-// auto-close clock itself. Once the message is posted the reply has worked,
-// so bookkeeping failures are only logged.
+// saved in the transcript. byName and avatarURL are how the member knows the
+// staff member, ideally their server nickname and avatar.
+//
+// The bot skips its own messages when tracking replies, so this records the
+// team's first response and restarts the auto-close clock itself. Once the
+// message is posted the reply has worked, so bookkeeping failures are only
+// logged.
 func (d *Dashboard) Reply(ctx context.Context, t store.Ticket, byID snowflake.ID, byName, avatarURL, text string) (store.TicketMessage, error) {
-	m, err := d.b.rest.CreateMessage(t.ChannelID, replyMessage(byName, avatarURL, text), rest.WithCtx(ctx))
+	server, serverIcon := d.b.guildName(ctx, t.GuildID), ""
+	if g, err := d.b.store.GetGuild(ctx, t.GuildID); err == nil && g.Icon != nil {
+		serverIcon = fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.png", g.ID, *g.Icon)
+	}
+	reply := replyMessage(d.b.cfg.AppName, byName, avatarURL, server, serverIcon, text)
+	m, err := d.b.rest.CreateMessage(t.ChannelID, reply, rest.WithCtx(ctx))
 	if err != nil {
 		return store.TicketMessage{}, err
 	}
@@ -77,14 +86,15 @@ func (d *Dashboard) Reply(ctx context.Context, t store.Ticket, byID snowflake.ID
 	return msg, nil
 }
 
-// replyMessage is a reply sent from the dashboard. The bot posts it, with the
-// staff member's name and avatar as the embed's author.
-func replyMessage(name, avatarURL, text string) discord.MessageCreate {
+// replyMessage is a staff reply sent from the dashboard. The bot posts it, so
+// the embed names the staff member at the top and says at the bottom that the
+// server's staff sent it, so members know it's a real reply from the team.
+func replyMessage(appName, staff, staffAvatar, server, serverIcon, text string) discord.MessageCreate {
 	return discord.NewMessageCreate().
 		WithEmbeds(discord.NewEmbed().
-			WithAuthor(name, "", avatarURL).
+			WithAuthor(staff, "", staffAvatar).
 			WithDescription(text).
 			WithColor(colorAccent).
-			WithFooterText("Sent from the dashboard")).
+			WithFooter(fmt.Sprintf("Sent by %s staff from the %s Dashboard", server, appName), serverIcon)).
 		WithAllowedMentions(&discord.AllowedMentions{})
 }
