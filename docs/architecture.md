@@ -25,7 +25,7 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
 | `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5), `auto_close_hours` |
 | `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
-| `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at`, plus auto-close state (`last_activity_at`, `waiting_on_staff`, `auto_close_warned_at`) |
+| `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at`, plus auto-close state (`last_activity_at`, `waiting_on_staff`, `auto_close_warned_at`) and `channel_cleaned_at` (when the bot deleted or archived the channel after closing) |
 | `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags) |
 | `ticket_feedback` | 1–5 rating + comment per ticket |
 | `saved_replies` | Answers a team sends often: name (unique per guild, ignoring case) and message |
@@ -50,7 +50,7 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 4. `finishClose` runs:
    - removes the channel from the cache
    - DMs the opener a rating (plus a transcript link if `PUBLIC_URL` is https)
-   - deletes the channel after 5s, or archives and locks a thread
+   - deletes the channel after 5s, or archives and locks a thread, and sets `channel_cleaned_at`. If that fails (a restart during the delay, or Manage Channels revoked), the 5-minute auto-close loop retries it for closed tickets older than 30s with `channel_cleaned_at` still NULL.
 
 Deleting a ticket channel by hand also closes the ticket.
 

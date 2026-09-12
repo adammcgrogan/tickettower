@@ -27,6 +27,9 @@ const (
 	// closeDelay gives people a moment to read the close message before a
 	// ticket channel is deleted.
 	closeDelay = 5 * time.Second
+	// cleanupGrace is how long after closing a ticket the sweep waits before
+	// retrying its channel cleanup, so it never races a close in progress.
+	cleanupGrace = 30 * time.Second
 
 	defaultWelcome = "Thanks for reaching out, {user}! Tell us what you need help with and someone from the team will be with you shortly."
 )
@@ -450,17 +453,50 @@ func (b *Bot) finishClose(t store.Ticket) {
 	b.logEvent(t.GuildID, b.closedLog(t))
 	b.notifyOpener(ctx, t)
 
+	if t.Mode != store.ModeThread {
+		time.Sleep(closeDelay)
+	}
+	b.cleanUpChannel(ctx, t)
+}
+
+// cleanUpChannel deletes a closed ticket's channel, or archives and locks
+// its thread, and records that it's done. A failure is only logged: the
+// cleanup sweep retries it, so a restart or a revoked permission never
+// leaves a channel behind for good.
+func (b *Bot) cleanUpChannel(ctx context.Context, t store.Ticket) {
 	var err error
 	switch t.Mode {
 	case store.ModeThread:
 		archived, locked := true, true
 		_, err = b.rest.UpdateChannel(t.ChannelID, discord.GuildThreadUpdate{Archived: &archived, Locked: &locked}, rest.WithCtx(ctx))
 	default:
-		time.Sleep(closeDelay)
 		err = b.rest.DeleteChannel(t.ChannelID, rest.WithCtx(ctx))
 	}
 	if err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
-		b.log.Warn("failed to clean up closed ticket", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+		b.log.Warn("failed to clean up closed ticket, will retry", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+		return
+	}
+	if err := b.store.MarkChannelCleaned(ctx, t.ID); err != nil {
+		b.log.Error("failed to mark ticket channel cleaned", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+	}
+}
+
+// cleanUpClosedTickets retries the channel cleanup of tickets that closed a
+// while ago but whose channel is still around, for instance because the bot
+// restarted during the close delay or lacked Manage Channels at the time.
+func (b *Bot) cleanUpClosedTickets(ctx context.Context, now time.Time) {
+	due, err := b.store.TicketsToCleanUp(ctx, now.Add(-cleanupGrace))
+	if err != nil {
+		if ctx.Err() == nil {
+			b.log.Error("failed to find closed tickets to clean up", slog.Any("err", err))
+		}
+		return
+	}
+	for _, t := range due {
+		b.cleanUpChannel(ctx, t)
+	}
+	if len(due) > 0 {
+		b.log.Info("retried cleanup of closed ticket channels", slog.Int("count", len(due)))
 	}
 }
 
