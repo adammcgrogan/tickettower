@@ -34,6 +34,8 @@
 
 - Moving tickets: `/ticket move` (with autocomplete) and a Move action on the Tickets page change a ticket's type. Channels move to the new category and swap support role access; threads ping the new roles in. Moving between channel and thread types isn't supported
 
+- Landing page that sells: reassurances under the hero, three setup steps, a five-step walkthrough of one ticket drawn as Discord shows it (`landing/Walkthrough.svelte`, copy mirrors the bot's real embeds), a dashboard Home demo (`landing/QueueDemo.svelte`), a 12-item feature grid, slash commands, open source and privacy, an FAQ and a closing call to action
+
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
 
 ## Not yet verified by hand

@@ -6,6 +6,9 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Logo from '$lib/components/Logo.svelte';
 	import PanelPreview from '$lib/components/PanelPreview.svelte';
+	import TicketStub from '$lib/components/TicketStub.svelte';
+	import QueueDemo from '$lib/components/landing/QueueDemo.svelte';
+	import Walkthrough from '$lib/components/landing/Walkthrough.svelte';
 
 	const GITHUB_URL = 'https://github.com/adammcgrogan/tickettower';
 
@@ -16,10 +19,27 @@
 		user = await getMe().catch(() => null);
 	});
 
+	const promises = ['Free to use', 'Open source', 'No code or config files'];
+
+	const steps = [
+		{
+			title: 'Add the bot',
+			body: 'Invite it to your server. It asks only for the permissions tickets need.'
+		},
+		{
+			title: 'Answer a few questions',
+			body: 'Quick setup asks what tickets are for and who handles them, then creates your first ticket type.'
+		},
+		{
+			title: 'Post your ticket buttons',
+			body: 'Pick a channel and publish. Members can open tickets straight away.'
+		}
+	];
+
 	const features = [
 		{
-			title: 'Live in minutes',
-			body: 'Answer a few questions and your ticket buttons are posted, as buttons or a dropdown menu.'
+			title: 'Buttons or a dropdown',
+			body: 'Design the message members click in the dashboard, with a live preview of how it looks in Discord.'
 		},
 		{
 			title: 'Channels or private threads',
@@ -31,7 +51,15 @@
 		},
 		{
 			title: 'Knows whose turn it is',
-			body: 'See which tickets are waiting on your team. Quiet ones get a reminder, then close themselves.'
+			body: 'Tickets where the member spoke last go to the top of your queue, with how long they have waited.'
+		},
+		{
+			title: 'Reply from the dashboard',
+			body: 'Answer a ticket from your browser. The reply is posted in Discord under your name and avatar.'
+		},
+		{
+			title: 'Quiet tickets close themselves',
+			body: 'When a member goes silent, they get a friendly reminder first. Any reply keeps the ticket open.'
 		},
 		{
 			title: 'Transcripts',
@@ -39,7 +67,71 @@
 		},
 		{
 			title: 'Ratings and response times',
-			body: 'Members rate their ticket when it closes, and you see how quickly your team replies.'
+			body: 'Members rate their ticket when it closes. See first response times, busiest hours and each person on your team.'
+		},
+		{
+			title: 'Finds problems before members do',
+			body: 'A setup check spots missing permissions, deleted channels and broken buttons, and links to the fix.'
+		},
+		{
+			title: 'A log of every ticket',
+			body: 'Post opened, claimed and closed events to a staff channel, with a transcript link on close.'
+		},
+		{
+			title: 'Welcome messages that fit',
+			body: 'Mention the member, the ticket number or their answers in the welcome message and the channel name.'
+		},
+		{
+			title: 'Move tickets between types',
+			body: 'Opened a billing question as general support? Move it, and the right team gets access.'
+		}
+	];
+
+	const commands = [
+		{ name: '/ticket claim', body: "Take a ticket, or hand it back if it's yours" },
+		{ name: '/ticket add', body: 'Bring someone else into the ticket' },
+		{ name: '/ticket remove', body: 'Take away their access again' },
+		{ name: '/ticket move', body: 'Change the ticket type' },
+		{ name: '/ticket rename', body: 'Give the channel a clearer name' },
+		{ name: '/close', body: 'Close the ticket, with an optional reason' }
+	];
+
+	const faqs: { q: string; a: string; link?: { href: string; label: string } }[] = [
+		{
+			q: 'Is it really free?',
+			a: 'Yes. Every feature is free today, including transcripts, analytics and replying from the dashboard. There is nothing to unlock.'
+		},
+		{
+			q: 'How long does setup take?',
+			a: 'A few minutes. Add the bot, answer the quick setup questions on the Home page and post your ticket buttons. The setup check tells you if a permission is missing.',
+			link: { href: '/help/getting-started', label: 'Read the setup guide' }
+		},
+		{
+			q: 'Should tickets open as channels or threads?',
+			a: 'Channels suit busy servers that want tickets in their own category. Private threads keep your channel list tidy. You can pick per ticket type.',
+			link: { href: '/help/channels-vs-threads', label: 'Compare them' }
+		},
+		{
+			q: 'Who can see a ticket?',
+			a: "The member who opened it, the support roles you choose for that ticket type, anyone your team adds, and your server's admins. Nobody else."
+		},
+		{
+			q: 'What does it store?',
+			a: 'Messages sent in ticket channels and threads, so it can show transcripts. Nothing from the rest of your server. You choose how long transcripts are kept.',
+			link: { href: '/privacy', label: 'Read the privacy page' }
+		},
+		{
+			q: 'How many ticket types can I have?',
+			a: 'Up to 25 ticket types and 10 sets of ticket buttons per server. Each set holds up to 25 buttons, which is as many as Discord allows in one message.'
+		},
+		{
+			q: "I'm using another ticket bot. Can I switch?",
+			a: 'Add it alongside your current bot and post new ticket buttons. Once the old tickets are finished, remove the old buttons and bot.'
+		},
+		{
+			q: 'Can I host it myself?',
+			a: `${APP_NAME} is open source under the MIT licence. The README explains how to run your own copy.`,
+			link: { href: GITHUB_URL, label: 'View on GitHub' }
 		}
 	];
 
@@ -48,22 +140,49 @@
 		{ id: 2, name: 'Billing', emoji: '💳' },
 		{ id: 3, name: 'Report a member', emoji: '🚩' }
 	] as TicketType[];
+
+	const external = (href: string) => href.startsWith('http');
 </script>
 
-<svelte:head><title>{APP_NAME} · Ticket bot for Discord</title></svelte:head>
+<svelte:head>
+	<title>{APP_NAME} · Ticket bot for Discord</title>
+	<meta
+		name="description"
+		content="{APP_NAME} is a free, open source ticket bot for Discord. Members open private tickets with one click, your team sees who is waiting, and every conversation is saved."
+	/>
+</svelte:head>
+
+{#snippet ctas(size = 'h-11 px-5')}
+	<div class="flex flex-col gap-3 sm:flex-row">
+		<a href="/api/invite" data-sveltekit-reload class="btn btn-primary {size}">
+			Add to Discord <Icon name="arrow-right" size={15} />
+		</a>
+		<a
+			href={user ? '/servers' : loginURL}
+			data-sveltekit-reload={user ? undefined : true}
+			class="btn btn-secondary {size}"
+		>
+			Open the dashboard
+		</a>
+	</div>
+{/snippet}
 
 <div class="min-h-dvh">
-	<header class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-		<Logo />
-		<nav class="flex items-center gap-1 text-sm">
-			<a href="/help" class="btn btn-ghost">Help</a>
-			<a href={GITHUB_URL} target="_blank" rel="noopener" class="btn btn-ghost">GitHub</a>
-			{#if user}
-				<a href="/servers" class="btn btn-secondary">Dashboard</a>
-			{:else}
-				<a href={loginURL} data-sveltekit-reload class="btn btn-secondary">Log in</a>
-			{/if}
-		</nav>
+	<header class="sticky top-0 z-20 border-b border-transparent bg-bg/80 backdrop-blur-md">
+		<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+			<a href="/" aria-label="{APP_NAME} home"><Logo /></a>
+			<nav class="flex items-center gap-1 text-sm">
+				<a href="#how-it-works" class="btn btn-ghost hidden md:inline-flex">How it works</a>
+				<a href="#features" class="btn btn-ghost hidden md:inline-flex">Features</a>
+				<a href="#faq" class="btn btn-ghost hidden md:inline-flex">FAQ</a>
+				<a href="/help" class="btn btn-ghost">Help</a>
+				{#if user}
+					<a href="/servers" class="btn btn-secondary">Dashboard</a>
+				{:else}
+					<a href={loginURL} data-sveltekit-reload class="btn btn-secondary">Log in</a>
+				{/if}
+			</nav>
+		</div>
 	</header>
 
 	<main>
@@ -82,20 +201,14 @@
 				</h1>
 				<p class="mt-7 max-w-lg text-lg text-pretty text-muted">
 					{APP_NAME} opens a private channel or thread for every request, shows your team who is waiting
-					for a reply, and keeps a transcript when it's done. Free and open source.
+					for a reply, and keeps a transcript when it's done.
 				</p>
-				<div class="mt-9 flex flex-col gap-3 sm:flex-row">
-					<a href="/api/invite" data-sveltekit-reload class="btn btn-primary h-11 px-5">
-						Add to Discord <Icon name="arrow-right" size={15} />
-					</a>
-					<a
-						href={user ? '/servers' : loginURL}
-						data-sveltekit-reload={user ? undefined : true}
-						class="btn btn-secondary h-11 px-5"
-					>
-						Open the dashboard
-					</a>
-				</div>
+				<div class="mt-9">{@render ctas()}</div>
+				<ul class="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
+					{#each promises as p (p)}
+						<li class="flex items-center gap-2"><Icon name="check" size={15} class="text-success" />{p}</li>
+					{/each}
+				</ul>
 			</div>
 
 			<div class="rounded-2xl border border-border bg-surface p-2" aria-label="Example ticket buttons">
@@ -106,12 +219,75 @@
 					style="buttons"
 					types={demoTypes}
 				/>
+				<div class="flex items-center gap-3 px-3 pt-3.5 pb-2" aria-label="The ticket that opens">
+					<TicketStub number={42} tone="waiting" />
+					<div class="min-w-0 flex-1">
+						<div class="truncate text-sm font-medium">Billing, opened by alex</div>
+						<div class="truncate text-xs text-accent">Waiting on your team</div>
+					</div>
+					<span class="hidden text-xs text-subtle sm:block">Just now</span>
+				</div>
+			</div>
+		</section>
+
+		<section id="how-it-works" class="scroll-mt-16 border-t border-border">
+			<div class="mx-auto max-w-6xl px-5 py-20">
+				<h2 class="font-display text-4xl font-bold">Live in a few minutes</h2>
+				<p class="mt-3 max-w-xl text-muted">
+					No config files, no commands to memorise. Everything is set up in the dashboard.
+				</p>
+				<ol class="mt-10 grid gap-x-12 gap-y-10 md:grid-cols-3">
+					{#each steps as s, i (s.title)}
+						<li class="border-t border-border pt-5">
+							<TicketStub number={i + 1} size="sm" />
+							<h3 class="mt-4 font-semibold">{s.title}</h3>
+							<p class="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
+						</li>
+					{/each}
+				</ol>
 			</div>
 		</section>
 
 		<section class="border-t border-border">
 			<div class="mx-auto max-w-6xl px-5 py-20">
-				<h2 class="font-display text-4xl font-bold">What it does</h2>
+				<h2 class="font-display text-4xl font-bold">A ticket, start to finish</h2>
+				<p class="mt-3 max-w-xl text-muted">
+					This is what your members and your team see in Discord. Pick a step to follow one along.
+				</p>
+				<div class="mt-10"><Walkthrough /></div>
+			</div>
+		</section>
+
+		<section class="border-t border-border">
+			<div class="mx-auto grid max-w-6xl items-center gap-12 px-5 py-20 lg:grid-cols-[1fr_1.6fr]">
+				<div>
+					<h2 class="font-display text-4xl font-bold text-balance">Never lose track of who's waiting</h2>
+					<p class="mt-4 text-muted">
+						The dashboard knows whose turn it is. Tickets waiting on your team are marked in amber, longest wait
+						first, so nothing slips through while everyone assumes someone else has it.
+					</p>
+					<ul class="mt-6 space-y-3 text-sm">
+						<li class="flex gap-3">
+							<Icon name="inbox" size={16} class="mt-0.5 text-muted" />
+							<span>Search every ticket by number, member, type or who claimed it.</span>
+						</li>
+						<li class="flex gap-3">
+							<Icon name="send" size={16} class="mt-0.5 text-muted" />
+							<span>Read the conversation and reply without opening Discord.</span>
+						</li>
+						<li class="flex gap-3">
+							<Icon name="chart" size={16} class="mt-0.5 text-muted" />
+							<span>See response times, busiest hours and ratings, compared with last period.</span>
+						</li>
+					</ul>
+				</div>
+				<QueueDemo />
+			</div>
+		</section>
+
+		<section id="features" class="scroll-mt-16 border-t border-border">
+			<div class="mx-auto max-w-6xl px-5 py-20">
+				<h2 class="font-display text-4xl font-bold">Everything you need, nothing you don't</h2>
 				<dl class="mt-10 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
 					{#each features as f (f.title)}
 						<div class="border-t border-border pt-5">
@@ -120,6 +296,124 @@
 						</div>
 					{/each}
 				</dl>
+			</div>
+		</section>
+
+		<section class="border-t border-border">
+			<div class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-2">
+				<div>
+					<h2 class="font-display text-4xl font-bold">Works from Discord too</h2>
+					<p class="mt-4 max-w-md text-muted">
+						Your team doesn't have to leave Discord. Every ticket has Claim and Close buttons, and slash commands
+						cover the rest.
+					</p>
+				</div>
+				<dl class="divide-y divide-border border-y border-border">
+					{#each commands as c (c.name)}
+						<div class="flex flex-col gap-1 py-3.5 sm:flex-row sm:items-baseline sm:gap-6">
+							<dt class="w-36 shrink-0 font-mono text-sm text-fg">{c.name}</dt>
+							<dd class="text-sm text-muted">{c.body}</dd>
+						</div>
+					{/each}
+				</dl>
+			</div>
+		</section>
+
+		<section class="border-t border-border">
+			<div class="mx-auto max-w-6xl px-5 py-20">
+				<h2 class="font-display text-4xl font-bold">Open, and careful with your data</h2>
+				<div class="mt-10 grid gap-x-12 gap-y-10 md:grid-cols-3">
+					<div class="border-t border-border pt-5">
+						<h3 class="font-semibold">Open source</h3>
+						<p class="mt-2 text-sm leading-relaxed text-muted">
+							Every line is on GitHub under the MIT licence. Read how it works, suggest a change or run your own
+							copy.
+						</p>
+						<a
+							href={GITHUB_URL}
+							target="_blank"
+							rel="noopener"
+							class="mt-3 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-fg"
+						>
+							View on GitHub <Icon name="external" size={13} />
+						</a>
+					</div>
+					<div class="border-t border-border pt-5">
+						<h3 class="font-semibold">Only ticket messages</h3>
+						<p class="mt-2 text-sm leading-relaxed text-muted">
+							It saves what's said in tickets, for transcripts, and ignores the rest of your server. You decide how
+							long transcripts are kept.
+						</p>
+						<a href="/privacy" class="mt-3 inline-block text-sm text-muted transition-colors hover:text-fg">
+							Read the privacy page
+						</a>
+					</div>
+					<div class="border-t border-border pt-5">
+						<h3 class="font-semibold">Private by default</h3>
+						<p class="mt-2 text-sm leading-relaxed text-muted">
+							A ticket is visible to the member, your support roles and your server's admins. So is its
+							transcript, and nobody else can find it.
+						</p>
+						<a
+							href="/help/transcripts"
+							class="mt-3 inline-block text-sm text-muted transition-colors hover:text-fg"
+						>
+							Who can read transcripts
+						</a>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section id="faq" class="scroll-mt-16 border-t border-border">
+			<div class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1fr_2fr]">
+				<div>
+					<h2 class="font-display text-4xl font-bold">Questions</h2>
+					<p class="mt-4 text-muted">
+						Something else? <a href="/help" class="text-fg underline-offset-4 hover:underline">Browse the guides</a>
+						or
+						<a href={SUPPORT_URL} target="_blank" rel="noopener" class="text-fg underline-offset-4 hover:underline"
+							>ask us</a
+						>.
+					</p>
+				</div>
+				<div class="divide-y divide-border border-y border-border">
+					{#each faqs as f (f.q)}
+						<details class="group">
+							<summary
+								class="flex cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium transition-colors hover:text-accent [&::-webkit-details-marker]:hidden"
+							>
+								{f.q}
+								<Icon name="plus" size={16} class="text-muted transition-transform group-open:rotate-45" />
+							</summary>
+							<div class="pb-5 text-sm leading-relaxed text-muted">
+								<p class="max-w-2xl">{f.a}</p>
+								{#if f.link}
+									<a
+										href={f.link.href}
+										target={external(f.link.href) ? '_blank' : undefined}
+										rel={external(f.link.href) ? 'noopener' : undefined}
+										class="mt-2 inline-flex items-center gap-1.5 text-fg underline-offset-4 hover:underline"
+									>
+										{f.link.label} <Icon name="arrow-right" size={13} />
+									</a>
+								{/if}
+							</div>
+						</details>
+					{/each}
+				</div>
+			</div>
+		</section>
+
+		<section class="border-t border-border">
+			<div class="mx-auto flex max-w-6xl flex-col items-start gap-8 px-5 py-24 lg:flex-row lg:items-end lg:justify-between">
+				<div>
+					<TicketStub number={1} tone="waiting" size="lg" />
+					<h2 class="mt-6 max-w-2xl font-display text-5xl leading-[0.95] font-extrabold text-balance sm:text-6xl">
+						Your first ticket is a few minutes away.
+					</h2>
+				</div>
+				{@render ctas()}
 			</div>
 		</section>
 	</main>
