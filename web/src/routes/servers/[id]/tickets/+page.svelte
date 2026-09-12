@@ -153,15 +153,18 @@
 		}
 	}
 
-	const shown = $derived.by(() => {
+	// Open tickets are grouped by whose turn it is: waiting on the team first,
+	// longest wait at the top, then waiting on the member, then on hold.
+	const groups = $derived.by(() => {
 		const list = tickets ?? [];
-		if (filter !== 'open') return list;
-		// Tickets waiting on the team come first, longest wait at the top;
-		// tickets on hold go last.
+		if (filter !== 'open') return [{ label: '', items: list }];
 		const waiting = list.filter((t) => t.waiting_on_staff && !t.on_hold);
 		waiting.sort((a, b) => (a.waiting_since ?? a.last_activity_at).localeCompare(b.waiting_since ?? b.last_activity_at));
-		const rest = list.filter((t) => !t.waiting_on_staff && !t.on_hold);
-		return [...waiting, ...rest, ...list.filter((t) => t.on_hold)];
+		return [
+			{ label: 'Waiting on your team', items: waiting },
+			{ label: 'Waiting on the member', items: list.filter((t) => !t.waiting_on_staff && !t.on_hold) },
+			{ label: 'On hold', items: list.filter((t) => t.on_hold) }
+		].filter((g) => g.items.length > 0);
 	});
 	const isOverdue = (t: Ticket) => {
 		const at = overdueAt(t, types);
@@ -396,9 +399,16 @@
 		replyBox?.setSelectionRange(cursor, cursor);
 	}
 
+	// --- The More menu ---
+	let moreOpen = $state(false);
+	let moreMenu = $state<HTMLElement>();
+	const menuItem =
+		'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-border/60 hover:text-fg';
+
 	// A draft belongs to the ticket it was written for.
 	$effect(() => {
 		void selectedId;
+		moreOpen = false;
 		reply = '';
 		replyError = '';
 	});
@@ -449,6 +459,15 @@
 			: { title: 'No tickets yet', body: 'Tickets show up here once members start opening them.' }
 	);
 </script>
+
+<svelte:window
+	onclick={(e) => {
+		if (moreOpen && moreMenu && !moreMenu.contains(e.target as Node)) moreOpen = false;
+	}}
+	onkeydown={(e) => {
+		if (e.key === 'Escape') moreOpen = false;
+	}}
+/>
 
 <svelte:head><title>Tickets · {guild.name} · {APP_NAME}</title></svelte:head>
 
@@ -508,7 +527,14 @@
 					? 'opacity-60'
 					: ''}"
 			>
-				{#each shown as t (t.id)}
+				{#each groups as g (g.label)}
+					{#if g.label}
+						<li class="flex items-baseline justify-between gap-2 bg-bg/50 px-4 py-2 text-xs">
+							<span class="font-medium {g.label === 'Waiting on your team' ? 'text-accent' : 'text-muted'}">{g.label}</span>
+							<span class="text-subtle tabular-nums">{g.items.length}</span>
+						</li>
+					{/if}
+				{#each g.items as t (t.id)}
 					{@const state = ticketState(t)}
 					{@const active = t.id === selectedId}
 					<li>
@@ -532,7 +558,7 @@
 								</div>
 								<div class="truncate text-sm text-muted">{t.type_name}</div>
 								<div class="mt-1 truncate text-xs {state.tone === 'waiting' ? 'text-accent' : 'text-subtle'}">
-									{#if isOverdue(t)}<span class="font-medium text-danger">Overdue</span>, {/if}{state.label}{t.claimed_by_name && t.status === 'open' ? `, claimed by ${t.claimed_by_name}` : ''}
+									{#if isOverdue(t)}<span class="font-medium text-danger">Overdue</span>{', '}{/if}{state.label}{t.claimed_by_name && t.status === 'open' ? `, claimed by ${t.claimed_by_name}` : ''}
 								</div>
 								{#if t.match}
 									<p class="mt-1.5 line-clamp-2 text-xs text-muted">
@@ -545,6 +571,7 @@
 							</div>
 						</a>
 					</li>
+				{/each}
 				{/each}
 				{#if more}
 					<li class="p-2">
@@ -593,11 +620,6 @@
 							>
 								Open in Discord <Icon name="external" size={13} />
 							</a>
-							{#if canAct && moveTargets.length > 0}
-								<button class="btn btn-secondary h-8 px-3" onclick={openMove}>
-									<Icon name="arrow-right" size={13} /> Move
-								</button>
-							{/if}
 							{#if canAct}
 								{#if t.on_hold}
 									<button class="btn btn-secondary h-8 px-3" onclick={resumeTicket} disabled={holding}>
@@ -617,9 +639,40 @@
 								<Icon name="unlock" size={13} /> {reopening ? 'Reopening…' : 'Reopen'}
 							</button>
 						{/if}
-						<a href="/transcripts/{t.id}" target="_blank" rel="noopener" class="btn btn-ghost h-8 px-3">
-							Transcript page <Icon name="external" size={13} />
-						</a>
+						<div class="relative" bind:this={moreMenu}>
+							<button
+								class="btn btn-ghost size-8 p-0"
+								onclick={() => (moreOpen = !moreOpen)}
+								aria-haspopup="menu"
+								aria-expanded={moreOpen}
+								aria-label="More actions"
+								title="More actions"
+							>
+								<Icon name="more" />
+							</button>
+							{#if moreOpen}
+								<div
+									role="menu"
+									class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-border-strong bg-elevated p-1 shadow-xl shadow-black/40"
+								>
+									{#if t.status === 'open' && canAct && moveTargets.length > 0}
+										<button
+											role="menuitem"
+											class={menuItem}
+											onclick={() => {
+												moreOpen = false;
+												openMove();
+											}}
+										>
+											<Icon name="arrow-right" size={14} /> Move to another ticket type
+										</button>
+									{/if}
+									<a role="menuitem" href="/transcripts/{t.id}" target="_blank" rel="noopener" class={menuItem}>
+										<Icon name="transcript" size={14} /> Open the transcript page
+									</a>
+								</div>
+							{/if}
+						</div>
 					{/snippet}
 				</TicketSummary>
 				<div class="mt-4">

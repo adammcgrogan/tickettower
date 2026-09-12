@@ -98,6 +98,12 @@
 						its own button, and decides where its tickets open and who handles them. A server can have
 						up to 25.
 					</p>
+					<p>
+						Its settings are split into tabs: <strong>Basics</strong> (name, where tickets open and the
+						support team) is all you need to start. The others, <strong>Button</strong>,
+						<strong>Questions and welcome</strong>, <strong>Who can open</strong>, <strong>While open</strong>
+						and <strong>Closing</strong>, have sensible defaults and are saved together.
+					</p>
 
 					<h2>Name, emoji and description</h2>
 					<p>

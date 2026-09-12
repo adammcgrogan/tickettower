@@ -77,7 +77,7 @@
 				<SetupProblems {problems} {guildId} onrecheck={checkSetup} />
 			</div>
 		{/if}
-		<TicketTypeForm {guildId} initial={type} />
+		<TicketTypeForm {guildId} initial={type} onsaved={(name) => type && (type.name = name)} />
 	{:else}
 		<div class="card h-64 animate-pulse"></div>
 	{/if}
