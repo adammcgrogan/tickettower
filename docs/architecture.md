@@ -23,7 +23,8 @@ The bot and API don't talk to each other directly. They share Postgres, and the 
 | `guilds` | Servers the bot is or was in (`left_at` set when removed; data kept for re-adds) |
 | `guild_settings` | Per-guild settings: `ticket_counter` (sequential ticket numbers), `transcript_retention_days`, `dashboard_role_ids` (extra roles allowed into the dashboard), `log_channel_id` |
 | `entitlements` | Plan tier per guild (absent means free) → `internal/entitlements.ForTier` |
-| `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5), `auto_close_hours` |
+| `ticket_types` | Name, emoji, `mode` (channel/thread), `parent_id` (category or channel), support roles, name format, welcome message, per-member limit, `questions` (JSONB form, up to 5), `auto_close_hours`, who can open it (`required_role_ids`, `blocked_role_ids`, `cooldown_minutes`) |
+| `ticket_blocks` | Members who can't open any ticket in a guild, with the reason (shown to them) and who blocked them |
 | `panels` + `panel_ticket_types` | Panel content/style, where it's published (`channel_id`, `message_id`), and its ordered ticket types |
 | `tickets` | One per ticket: number, type snapshot (`type_name`), channel, opener/claimer/closer with name snapshots, status, timestamps incl. `first_response_at`, plus auto-close state (`last_activity_at`, `waiting_on_staff`, `auto_close_warned_at`) and `channel_cleaned_at` (when the bot deleted or archived the channel after closing) |
 | `ticket_messages` | Transcript messages (content, embeds/attachments as JSONB, edit/delete flags) |
@@ -34,7 +35,7 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 
 ## Key flows
 
-**Opening a ticket.** A panel button (`/panel/open/{typeID}`) or the dropdown (`/panel/select`) triggers `ticketbot.openTicket`. If the type has questions, `formFor` first checks the member's limit and shows a modal (`/ticket-form/{source}/{typeID}/{version}`); its submit then calls `openTicket` with the answers. `version` fingerprints the questions, so answers to a form edited mid-fill are rejected rather than mismatched.
+**Opening a ticket.** A panel button (`/panel/open/{typeID}`) or the dropdown (`/panel/select`) triggers `ticketbot.openTicket`. Both it and `formFor` run the same access check first (`ticketbot/access.go`): a server-wide block (`ticket_blocks`), the type's blocked and required roles, the member's open-ticket limit and the type's cooldown since their last ticket of it closed, in that order, so a blocked member learns nothing else. Staff block and unblock with `/ticket block` and `/ticket unblock` (anyone on any type's support team, or a manager) or from Settings. If the type has questions, `formFor` shows a modal (`/ticket-form/{source}/{typeID}/{version}`); its submit then calls `openTicket` with the answers. `version` fingerprints the questions, so answers to a form edited mid-fill are rejected rather than mismatched.
 1. Lock the member, check the type exists, check their open-ticket limit, and pair any form answers with the questions.
 2. Get the next number from `guild_settings.ticket_counter`.
 3. Create the channel (with permission overwrites: deny @everyone, allow the opener, the support roles and the bot) or a private thread (and add the opener).

@@ -49,7 +49,10 @@
 			welcome_message: initial?.welcome_message ?? '',
 			max_open_per_user: initial?.max_open_per_user ?? 1,
 			questions: initial?.questions.map((q) => ({ ...q })) ?? [],
-			auto_close_hours: initial?.auto_close_hours ?? null
+			auto_close_hours: initial?.auto_close_hours ?? null,
+			required_role_ids: initial?.required_role_ids ?? [],
+			blocked_role_ids: initial?.blocked_role_ids ?? [],
+			cooldown_minutes: initial?.cooldown_minutes ?? 0
 		}))
 	);
 
@@ -60,6 +63,17 @@
 		{ value: '48', label: 'After 2 days' },
 		{ value: '72', label: 'After 3 days' },
 		{ value: '168', label: 'After 1 week' }
+	];
+
+	// Matches cooldownOptions in the API.
+	const cooldownOptions = [
+		{ value: 0, label: 'No wait' },
+		{ value: 5, label: '5 minutes' },
+		{ value: 15, label: '15 minutes' },
+		{ value: 30, label: '30 minutes' },
+		{ value: 60, label: '1 hour' },
+		{ value: 360, label: '6 hours' },
+		{ value: 1440, label: '1 day' }
 	];
 
 	const hoursLabel = (h: number) =>
@@ -372,6 +386,41 @@
 	</section>
 
 	<section class="card space-y-5 p-5">
+		<div>
+			<h2 class="font-medium">Who can open these tickets</h2>
+			<p class="hint mt-1">
+				Anyone who can see your ticket buttons, unless you narrow it down here. Members who don't
+				qualify are told why when they click.
+			</p>
+		</div>
+		<Field
+			label="Required roles"
+			for="required_roles"
+			optional
+			hint={form.required_role_ids.length
+				? 'Members need at least one of these roles.'
+				: 'Leave empty to let any member open this type.'}
+			help="ticket-types"
+			error={errors.required_role_ids}
+		>
+			<RolePicker id="required_roles" {roles} bind:value={form.required_role_ids} />
+		</Field>
+		<Field
+			label="Blocked roles"
+			for="blocked_roles"
+			optional
+			hint="Members with any of these roles can't open this type, such as a Muted role."
+			error={errors.blocked_role_ids}
+		>
+			<RolePicker id="blocked_roles" {roles} bind:value={form.blocked_role_ids} />
+		</Field>
+		<p class="hint">
+			To stop one person opening any ticket, use <code>/ticket block</code> in Discord or the blocked
+			list in <a href="/servers/{guildId}/settings" class="text-fg underline-offset-4 hover:underline">Settings</a>.
+		</p>
+	</section>
+
+	<section class="card space-y-5 p-5">
 		<div class="flex items-start justify-between gap-4">
 			<div>
 				<h2 class="font-medium">Questions</h2>
@@ -512,6 +561,18 @@
 				bind:value={form.max_open_per_user}
 				aria-invalid={!!errors.max_open_per_user}
 			/>
+		</Field>
+		<Field
+			label="Wait between tickets"
+			for="cooldown"
+			hint="How long a member waits after one of their tickets of this type closes before they can open another. Stops open, close, open again."
+			error={errors.cooldown_minutes}
+		>
+			<select id="cooldown" class="input sm:w-56" bind:value={form.cooldown_minutes} aria-invalid={!!errors.cooldown_minutes}>
+				{#each cooldownOptions as o (o.value)}
+					<option value={o.value}>{o.label}</option>
+				{/each}
+			</select>
 		</Field>
 		<Field
 			label="Close inactive tickets"

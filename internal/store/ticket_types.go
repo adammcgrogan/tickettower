@@ -67,12 +67,20 @@ type TicketType struct {
 	Questions      []Question     `json:"questions"`
 	// AutoCloseHours is how long a ticket can sit without activity before
 	// it closes itself; nil means never.
-	AutoCloseHours *int      `json:"auto_close_hours"`
-	CreatedAt      time.Time `json:"created_at"`
+	AutoCloseHours *int `json:"auto_close_hours"`
+	// RequiredRoleIDs: members need one of these to open the type (any
+	// member can when empty). BlockedRoleIDs: members with one of these
+	// can't. CooldownMinutes: how long after their last ticket of this type
+	// closes a member has to wait before opening another; 0 means no wait.
+	RequiredRoleIDs []snowflake.ID `json:"required_role_ids"`
+	BlockedRoleIDs  []snowflake.ID `json:"blocked_role_ids"`
+	CooldownMinutes int            `json:"cooldown_minutes"`
+	CreatedAt       time.Time      `json:"created_at"`
 }
 
 const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_id, support_role_ids,
-	name_format, welcome_message, max_open_per_user, questions, auto_close_hours, created_at`
+	name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
+	required_role_ids, blocked_role_ids, cooldown_minutes, created_at`
 
 func scanTicketType(row pgx.Row) (TicketType, error) {
 	var (
@@ -81,9 +89,12 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 		mode     string
 		parentID *int64
 		roles    []int64
+		required []int64
+		blocked  []int64
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Name, &t.Emoji, &t.Description, &mode, &parentID, &roles,
-		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours, &t.CreatedAt)
+		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours,
+		&required, &blocked, &t.CooldownMinutes, &t.CreatedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
@@ -91,6 +102,8 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 	t.Mode = TicketMode(mode)
 	t.ParentID = idFromNullable(parentID)
 	t.SupportRoleIDs = fromInt64s(roles)
+	t.RequiredRoleIDs = fromInt64s(required)
+	t.BlockedRoleIDs = fromInt64s(blocked)
 	t.Questions = questionsOrEmpty(t.Questions)
 	return t, nil
 }
@@ -138,11 +151,13 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 	t.Questions = questionsOrEmpty(t.Questions)
 	return s.pool.QueryRow(ctx, `
 		INSERT INTO ticket_types (guild_id, name, emoji, description, mode, parent_id, support_role_ids,
-		                          name_format, welcome_message, max_open_per_user, questions, auto_close_hours)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		                          name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
+		                          required_role_ids, blocked_role_ids, cooldown_minutes)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.AutoCloseHours,
+		toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes,
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
@@ -151,11 +166,11 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 		UPDATE ticket_types
 		SET name = $3, emoji = $4, description = $5, mode = $6, parent_id = $7, support_role_ids = $8,
 		    name_format = $9, welcome_message = $10, max_open_per_user = $11, questions = $12, auto_close_hours = $13,
-		    updated_at = now()
+		    required_role_ids = $14, blocked_role_ids = $15, cooldown_minutes = $16, updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, questionsOrEmpty(t.Questions),
-		t.AutoCloseHours)
+		t.AutoCloseHours, toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes)
 	if err != nil {
 		return err
 	}

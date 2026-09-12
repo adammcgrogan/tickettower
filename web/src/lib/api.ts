@@ -64,6 +64,12 @@ export type TicketType = {
 	questions: Question[];
 	/** Hours without activity before a ticket closes itself, or null for never. */
 	auto_close_hours: number | null;
+	/** Members need one of these roles to open this type; empty means anyone. */
+	required_role_ids: string[];
+	/** Members with one of these roles can't open this type. */
+	blocked_role_ids: string[];
+	/** Minutes a member waits after their last ticket of this type closes; 0 is no wait. */
+	cooldown_minutes: number;
 	created_at: string;
 };
 
@@ -85,6 +91,19 @@ export type Panel = {
 };
 
 export type PanelInput = Pick<Panel, 'title' | 'description' | 'color' | 'style' | 'ticket_type_ids'>;
+
+/** A member who can't open tickets in a server. */
+export type Block = {
+	guild_id: string;
+	user_id: string;
+	user_name: string;
+	reason: string;
+	blocked_by: string;
+	blocked_by_name: string;
+	created_at: string;
+};
+
+export const MAX_BLOCK_REASON = 200;
 
 /** An answer the team sends often, from the reply box or with /reply. */
 export type SavedReply = {

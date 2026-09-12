@@ -92,6 +92,10 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/panels/{panelID}", s.deletePanel)
 				r.Post("/panels/{panelID}/publish", s.publishPanel)
 
+				r.Get("/blocks", s.listBlocks)
+				r.Post("/blocks", s.createBlock)
+				r.Delete("/blocks/{userID}", s.deleteBlock)
+
 				r.Get("/saved-replies", s.listSavedReplies)
 				r.Post("/saved-replies", s.createSavedReply)
 				r.Patch("/saved-replies/{replyID}", s.updateSavedReply)
