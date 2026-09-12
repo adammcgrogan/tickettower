@@ -32,6 +32,26 @@ func testChannel(t *testing.T, id snowflake.ID, kind int, name string, denyEvery
 	return u.Channel.(discord.GuildChannel)
 }
 
+// testChannelIn builds a text channel inside a category.
+func testChannelIn(t *testing.T, id snowflake.ID, name string, category snowflake.ID) discord.GuildChannel {
+	t.Helper()
+	data := fmt.Sprintf(`{"id":"%d","type":0,"guild_id":"%d","name":%q,"position":0,"parent_id":"%d","permission_overwrites":[]}`,
+		id, checkGuild, name, category)
+	var u discord.UnmarshalChannel
+	if err := json.Unmarshal([]byte(data), &u); err != nil {
+		t.Fatal(err)
+	}
+	return u.Channel.(discord.GuildChannel)
+}
+
+// fillCategory adds n channels to a category.
+func fillCategory(t *testing.T, s *setup, category snowflake.ID, n int) {
+	t.Helper()
+	for i := range n {
+		s.channels = append(s.channels, testChannelIn(t, snowflake.ID(1000+i), fmt.Sprintf("ticket-%d", i), category))
+	}
+}
+
 func healthySetup(t *testing.T) setup {
 	category, support, logs := snowflake.ID(10), snowflake.ID(11), snowflake.ID(12)
 	panelChannel, message := snowflake.ID(13), snowflake.ID(14)
@@ -105,6 +125,17 @@ func TestSetupProblems(t *testing.T) {
 			want:   problem{Kind: "unlisted", ID: 2, Title: "Members can't choose Billing"},
 		},
 		{
+			name:   "category nearly full",
+			change: func(s *setup) { fillCategory(t, s, 10, 45) },
+			want: problem{Kind: "ticket_type", ID: 1, Title: "General tickets will stop opening soon",
+				Detail: "has 45 of the 50 channels"},
+		},
+		{
+			name:   "category full",
+			change: func(s *setup) { fillCategory(t, s, 10, 50) },
+			want:   problem{Kind: "ticket_type", ID: 1, Title: "General tickets can't open", Detail: "The Tickets category is full"},
+		},
+		{
 			name: "log channel can't be posted in",
 			change: func(s *setup) {
 				s.channels[2] = testChannel(t, 12, 0, "ticket-log", discord.PermissionSendMessages)
@@ -133,6 +164,14 @@ func TestSetupProblemsIgnoreUnpublished(t *testing.T) {
 	s := healthySetup(t)
 	// A draft doesn't make other ticket types look forgotten.
 	s.panels[0].MessageID = nil
+	if got := setupProblems(s); len(got) != 0 {
+		t.Fatalf("got %+v, want none", got)
+	}
+}
+
+func TestSetupProblemsIgnoreRoomyCategory(t *testing.T) {
+	s := healthySetup(t)
+	fillCategory(t, &s, 10, 40)
 	if got := setupProblems(s); len(got) != 0 {
 		t.Fatalf("got %+v, want none", got)
 	}

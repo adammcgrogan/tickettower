@@ -49,6 +49,20 @@ type setup struct {
 	logChannel     *snowflake.ID
 }
 
+// categoryNearlyFull is the channel count at which a category gets a warning.
+const categoryNearlyFull = discordx.MaxChannelsPerCategory - 5
+
+// childCount returns how many channels sit in a category.
+func (s setup) childCount(categoryID snowflake.ID) int {
+	n := 0
+	for _, c := range s.channels {
+		if p := c.ParentID(); p != nil && *p == categoryID {
+			n++
+		}
+	}
+	return n
+}
+
 func (s setup) channel(id snowflake.ID) discord.GuildChannel {
 	for _, c := range s.channels {
 		if c.ID() == id {
@@ -96,6 +110,19 @@ func setupProblems(s setup) []problem {
 		}
 		missing := discordx.MissingPermissions(s.perms(parent), want)
 		switch {
+		case missing == "" && t.Mode == store.ModeChannel && parent != nil:
+			// Discord caps a category at 50 channels, and busy servers reach
+			// it with open tickets alone. Warn before it stops tickets.
+			n := s.childCount(parent.ID())
+			if n >= discordx.MaxChannelsPerCategory {
+				fail(fmt.Sprintf("The %s category is full: Discord allows %d channels per category. Close some tickets, choose another category, or switch to private threads.",
+					parent.Name(), discordx.MaxChannelsPerCategory))
+			} else if n >= categoryNearlyFull {
+				out = append(out, problem{Kind: "ticket_type", ID: t.ID,
+					Title: fmt.Sprintf("%s tickets will stop opening soon", t.Name),
+					Detail: fmt.Sprintf("The %s category has %d of the %d channels Discord allows. Once it's full, new tickets fail. Close some tickets, choose another category, or switch to private threads.",
+						parent.Name(), n, discordx.MaxChannelsPerCategory)})
+			}
 		case missing == "":
 		case parent == nil:
 			fail(fmt.Sprintf("%s is missing %s in this server. Turn them on for its role in Server Settings.", s.appName, missing))
