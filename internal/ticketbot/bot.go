@@ -72,6 +72,8 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 	r.Modal(formModalPrefix+"{source}/{typeID}/{version}", b.handleFormModal)
 	r.Component(claimButtonID, b.handleClaimButton)
 	r.Component(closeButtonID, b.handleCloseButton)
+	r.Component(closeConfirmButtonID, b.handleCloseConfirm)
+	r.Component(reopenButtonPrefix+"{ticketID}", b.handleReopenButton)
 	r.Component(keepOpenButtonID, b.handleKeepOpen)
 	r.Modal(closeModalID, b.handleCloseModal)
 	r.Component(rateButtonPrefix+"{ticketID}/{rating}", b.handleRate)
@@ -93,6 +95,7 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 			bot.NewListenerFunc(b.onGuildLeave),
 			bot.NewListenerFunc(b.onChannelDelete),
 			bot.NewListenerFunc(b.onThreadDelete),
+			bot.NewListenerFunc(b.onThreadUpdate),
 			bot.NewListenerFunc(b.onMessageCreate),
 			bot.NewListenerFunc(b.onMessageUpdate),
 			bot.NewListenerFunc(b.onMessageDelete),
@@ -242,7 +245,26 @@ func (b *Bot) onGuildLeave(e *events.GuildLeave) {
 }
 
 func (b *Bot) onChannelDelete(e *events.GuildChannelDelete) { b.closeDeletedChannel(e.ChannelID) }
-func (b *Bot) onThreadDelete(e *events.ThreadDelete)        { b.closeDeletedChannel(e.ThreadID) }
+
+// onThreadUpdate tracks a ticket thread again when it's unarchived, which
+// happens when a ticket is reopened from the dashboard (a different process
+// from this cache).
+func (b *Bot) onThreadUpdate(e *events.ThreadUpdate) {
+	if e.Thread.ThreadMetadata.Archived || !e.OldThread.ThreadMetadata.Archived {
+		return
+	}
+	if _, ok := b.tickets.get(e.ThreadID); ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	t, err := b.store.GetTicketByChannel(ctx, e.ThreadID)
+	if err != nil || t.Status != store.StatusOpen {
+		return
+	}
+	b.tickets.put(store.TicketRef{ID: t.ID, ChannelID: t.ChannelID, OpenerID: t.OpenerID, HasFirstResponse: t.FirstResponseAt != nil})
+}
+func (b *Bot) onThreadDelete(e *events.ThreadDelete) { b.closeDeletedChannel(e.ThreadID) }
 
 // closeDeletedChannel closes the ticket for a channel someone deleted by hand.
 func (b *Bot) closeDeletedChannel(channelID snowflake.ID) {

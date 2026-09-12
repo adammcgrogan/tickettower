@@ -53,6 +53,20 @@ func (d *Dashboard) Close(ctx context.Context, t store.Ticket, byID snowflake.ID
 	return true, nil
 }
 
+// Reopen reopens a closed thread ticket for a dashboard user and posts the
+// reopen message in the thread. The bot picks the thread up again when it
+// sees it unarchived.
+func (d *Dashboard) Reopen(ctx context.Context, t store.Ticket, byID snowflake.ID) (store.Ticket, error) {
+	t, err := d.b.reopenTicket(ctx, t, byID, nil)
+	if err != nil {
+		return t, err
+	}
+	if _, err := d.b.rest.CreateMessage(t.ChannelID, reopenedMessage(byID), rest.WithCtx(ctx)); err != nil {
+		d.b.log.Warn("failed to post reopen message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+	}
+	return t, nil
+}
+
 // Move moves an open ticket to another ticket type for a dashboard user, as
 // /ticket move does, and returns the updated ticket.
 func (d *Dashboard) Move(ctx context.Context, t store.Ticket, typeID int64, byID snowflake.ID) (store.Ticket, error) {

@@ -167,6 +167,19 @@ func (s *Store) CloseTicketByChannel(ctx context.Context, channelID snowflake.ID
 	return tag.RowsAffected() == 1, err
 }
 
+// ReopenTicket reopens a closed thread ticket. It reports false if the
+// ticket is open, or is a channel ticket (its channel is gone). The ticket
+// starts as waiting on the team, with any auto-close warning forgotten.
+func (s *Store) ReopenTicket(ctx context.Context, id int64, now time.Time) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE tickets
+		SET status = 'open', closed_by = NULL, closed_by_name = NULL, close_reason = '', closed_at = NULL,
+		    auto_closed = false, channel_cleaned_at = NULL, auto_close_warned_at = NULL,
+		    waiting_on_staff = true, last_activity_at = $2, reopened_at = $2
+		WHERE id = $1 AND status = 'closed' AND mode = 'thread'`, id, now)
+	return tag.RowsAffected() == 1, err
+}
+
 // TicketsToCleanUp returns closed tickets whose channel the bot hasn't
 // finished with yet (deleted, or archived for threads), closed before the
 // given time so a close still in progress isn't picked up.

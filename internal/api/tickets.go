@@ -107,6 +107,24 @@ func (s *Server) moveTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
+// reopenTicket reopens a closed thread ticket from the dashboard.
+func (s *Server) reopenTicket(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.guildTicket(w, r)
+	if !ok {
+		return
+	}
+	user := auth.FromContext(r.Context()).User
+	t, err := s.dashboard.Reopen(r.Context(), t, user.ID)
+	if msg, ok := ticketbot.UserMessage(err); ok {
+		s.writeFailure(w, invalid("", msg))
+		return
+	} else if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
 type replyInput struct {
 	Content string `json:"content"`
 }

@@ -48,6 +48,8 @@
 
 - Rating controls: per ticket type, turn the closing rating request off or reword it (`{staff}` and friends); ratings and comments are posted to the log channel as they arrive, and Analytics says "Not asked" for types that don't ask
 
+- Reopen: closed thread tickets can be reopened from the close message, the closing DM or the Tickets page (the thread is unarchived and tracked again; channel tickets can't be, since the channel is gone). Members typing `/close` on their own ticket without a reason are asked to confirm
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.
@@ -55,7 +57,7 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 ## Next up (suggested order)
 
 1. **Deploy to Railway**: set up the services and env vars, set a real `PUBLIC_URL` (which enables transcript links in DMs), unset `DEV_GUILD_ID`, and add the production OAuth redirect. Reset the bot token/secret first (they were shared in a chat).
-2. **Reopen**: reopen threads within a grace window (channels are deleted, so reopening them would need a delay or archiving instead).
+2. **Reopen channel tickets**: threads reopen today; channels are deleted on close, so reopening them would need a delay or a closed category instead.
 3. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
 4. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile. The auto-close job is already safe to run in several processes.
 5. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.

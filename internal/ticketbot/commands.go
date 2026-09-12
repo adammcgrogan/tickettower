@@ -2,7 +2,9 @@ package ticketbot
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -16,9 +18,11 @@ import (
 )
 
 const (
-	claimButtonID = "/ticket-btn/claim"
-	closeButtonID = "/ticket-btn/close"
-	closeModalID  = "/ticket-modal/close"
+	claimButtonID        = "/ticket-btn/claim"
+	closeButtonID        = "/ticket-btn/close"
+	closeConfirmButtonID = "/ticket-btn/close-confirm"
+	closeModalID         = "/ticket-modal/close"
+	reopenButtonPrefix   = "/ticket-btn/reopen/" // + {ticketID}
 )
 
 var guildOnly = []discord.InteractionContextType{discord.InteractionContextTypeGuild}
@@ -298,9 +302,94 @@ func (b *Bot) handleCloseModal(e *handler.ModalEvent) error {
 	return b.close(e.Ctx, e, e.Channel().ID(), e.Member(), e.Data.Text("reason"))
 }
 
+// handleCloseCommand closes the ticket. A member closing their own ticket
+// without a reason is asked to confirm first, since channel tickets are
+// deleted seconds later and a mistyped command shouldn't end the conversation.
 func (b *Bot) handleCloseCommand(e *handler.CommandEvent) error {
 	reason, _ := e.SlashCommandInteractionData().OptString("reason")
+	if strings.TrimSpace(reason) == "" {
+		ctx, cancel := timeout(e.Ctx)
+		defer cancel()
+		t, tt, err := b.loadTicket(ctx, e.Channel().ID())
+		if err != nil {
+			return e.CreateMessage(ephemeral(b.describe(err)))
+		}
+		if m := e.Member(); m != nil && m.User.ID == t.OpenerID && !isStaff(m, tt) {
+			return e.CreateMessage(discord.NewMessageCreate().
+				WithContent("Close this ticket? " + closeWarning(t)).
+				WithEphemeral(true).
+				AddActionRow(
+					discord.NewDangerButton("Close ticket", closeConfirmButtonID).WithEmoji(discord.ComponentEmoji{Name: "🔒"}),
+				))
+		}
+	}
 	return b.close(e.Ctx, e, e.Channel().ID(), e.Member(), reason)
+}
+
+// closeWarning says what closing means for this kind of ticket.
+func closeWarning(t store.Ticket) string {
+	if t.Mode == store.ModeThread {
+		return "You can reopen it later if you need to."
+	}
+	return "This channel will be deleted, though the transcript is kept."
+}
+
+// handleCloseConfirm answers the confirmation shown to a member who typed
+// /close on their own ticket.
+func (b *Bot) handleCloseConfirm(e *handler.ComponentEvent) error {
+	// The confirmation is ephemeral, so the close message goes in the
+	// channel separately and the confirmation is tidied away.
+	ctx, cancel := timeout(e.Ctx)
+	defer cancel()
+	t, msg, err := b.closeTicket(ctx, e.Channel().ID(), e.Member(), "")
+	if err != nil {
+		return e.UpdateMessage(discord.NewMessageUpdate().WithContent(b.describe(err)).ClearComponents())
+	}
+	if _, err := b.rest.CreateMessage(t.ChannelID, msg, rest.WithCtx(ctx)); err != nil {
+		b.log.Warn("failed to post close message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+	}
+	go b.finishClose(t)
+	return e.UpdateMessage(discord.NewMessageUpdate().WithContent("Ticket closed.").ClearComponents())
+}
+
+// --- Reopening ---
+
+// handleReopenButton reopens a closed thread ticket from the close message
+// in the thread, or from the opener's DM.
+func (b *Bot) handleReopenButton(e *handler.ComponentEvent) error {
+	id, err := strconv.ParseInt(e.Vars["ticketID"], 10, 64)
+	if err != nil {
+		return e.CreateMessage(ephemeral("This button is out of date."))
+	}
+	if err := e.DeferCreateMessage(true); err != nil {
+		return err
+	}
+	ctx, cancel := timeout(e.Ctx)
+	defer cancel()
+	t, err := b.store.GetTicket(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
+		err = userErr("This ticket no longer exists.")
+	}
+	if err == nil {
+		// In the thread, the opener or staff may reopen. From the DM there's
+		// no member, and only the opener ever got that button.
+		member, userID := e.Member(), e.User().ID
+		t, err = b.reopenTicket(ctx, t, userID, func(tt *store.TicketType) bool {
+			if member == nil {
+				return userID == t.OpenerID
+			}
+			return canClose(t, tt, member)
+		})
+	}
+	if err != nil {
+		_, err = e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent(b.describe(err)))
+		return err
+	}
+	if _, err := b.rest.CreateMessage(t.ChannelID, reopenedMessage(e.User().ID), rest.WithCtx(ctx)); err != nil {
+		b.log.Warn("failed to post reopen message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+	}
+	_, err = e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent("Ticket reopened: " + discord.ChannelMention(t.ChannelID)))
+	return err
 }
 
 func (b *Bot) close(ctx context.Context, r responder, channelID snowflake.ID, m *discord.ResolvedMember, reason string) error {

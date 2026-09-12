@@ -205,6 +205,31 @@
 	let closeError = $state('');
 	let closing = $state(false);
 
+	// --- Reopening (thread tickets only: channels are deleted on close) ---
+	let reopening = $state(false);
+
+	async function reopenTicket() {
+		if (!detail || reopening) return;
+		const t = detail.ticket;
+		reopening = true;
+		try {
+			const updated = await api<Ticket>(`/guilds/${guild.id}/tickets/${t.id}/reopen`, send('POST', {}));
+			closedCache.delete(t.id);
+			detail = { ...detail, ticket: updated };
+			if (tickets) {
+				tickets =
+					filter === 'closed'
+						? tickets.filter((x) => x.id !== updated.id)
+						: tickets.map((x) => (x.id === updated.id ? updated : x));
+			}
+			toast(`Ticket #${t.number} reopened`);
+		} catch (e) {
+			toast(errorMessage(e), 'error');
+		} finally {
+			reopening = false;
+		}
+	}
+
 	function openClose() {
 		closeReason = '';
 		closeError = '';
@@ -512,6 +537,10 @@
 							{/if}
 							<button class="btn btn-secondary h-8 px-3" onclick={openClose}>
 								<Icon name="lock" size={13} /> Close ticket
+							</button>
+						{:else if t.mode === 'thread'}
+							<button class="btn btn-secondary h-8 px-3" onclick={reopenTicket} disabled={reopening}>
+								<Icon name="unlock" size={13} /> {reopening ? 'Reopening…' : 'Reopen'}
 							</button>
 						{/if}
 						<a href="/transcripts/{t.id}" target="_blank" rel="noopener" class="btn btn-ghost h-8 px-3">

@@ -380,3 +380,56 @@ func TestTicketsToCleanUp(t *testing.T) {
 		t.Errorf("after marking cleaned = %d, want 0", len(got))
 	}
 }
+
+func TestReopenTicket(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	tt := newType(t, s, testGuild, "Support")
+
+	thread := Ticket{GuildID: testGuild, Number: 1, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeThread,
+		ChannelID: 7001, OpenerID: 42, OpenerName: "member"}
+	channel := Ticket{GuildID: testGuild, Number: 2, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+		ChannelID: 7002, OpenerID: 42, OpenerName: "member"}
+	for _, tk := range []*Ticket{&thread, &channel} {
+		if err := s.CreateTicket(ctx, tk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now()
+
+	// Open tickets can't be reopened.
+	if ok, err := s.ReopenTicket(ctx, thread.ID, now); err != nil || ok {
+		t.Fatalf("reopen open ticket = %v, %v", ok, err)
+	}
+	for _, tk := range []Ticket{thread, channel} {
+		if _, err := s.CloseTicket(ctx, tk.ID, 100, "staff", "done"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MarkChannelCleaned(ctx, tk.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Channel tickets stay closed: their channel is gone.
+	if ok, err := s.ReopenTicket(ctx, channel.ID, now); err != nil || ok {
+		t.Fatalf("reopen channel ticket = %v, %v", ok, err)
+	}
+	ok, err := s.ReopenTicket(ctx, thread.ID, now)
+	if err != nil || !ok {
+		t.Fatalf("reopen thread ticket = %v, %v", ok, err)
+	}
+	got, err := s.GetTicket(ctx, thread.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusOpen || got.ClosedAt != nil || got.ClosedBy != nil || got.CloseReason != "" || !got.WaitingOnStaff {
+		t.Errorf("reopened ticket = %+v", got)
+	}
+	// It closes again like any open ticket, and is no longer owed a cleanup.
+	if due, _ := s.TicketsToCleanUp(ctx, now.Add(time.Hour)); len(due) != 0 {
+		t.Errorf("reopened ticket listed for cleanup: %+v", due)
+	}
+	if ok, _ := s.CloseTicket(ctx, thread.ID, 42, "member", ""); !ok {
+		t.Error("could not close the reopened ticket")
+	}
+}
