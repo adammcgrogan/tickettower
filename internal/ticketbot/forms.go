@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strconv"
+	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
@@ -31,25 +32,26 @@ type formAnswer struct {
 }
 
 // formFor returns the form to show before opening a ticket of this type, or
-// nil if it has no questions. Members already at their open ticket limit get
-// that error now, rather than after filling in the form.
-func (b *Bot) formFor(ctx context.Context, guildID *snowflake.ID, user discord.User, typeID int64, source string) (*discord.ModalCreate, error) {
-	if guildID == nil {
+// nil if it has no questions. Members who can't open one (blocked, missing a
+// role, at their limit) get that error now, rather than after filling in the
+// form.
+func (b *Bot) formFor(ctx context.Context, guildID *snowflake.ID, m *discord.ResolvedMember, typeID int64, source string) (*discord.ModalCreate, error) {
+	if guildID == nil || m == nil {
 		return nil, nil
 	}
 	tt, err := b.store.GetTicketType(ctx, *guildID, typeID)
 	if err != nil || len(tt.Questions) == 0 {
 		return nil, nil // openTicket reports a missing type
 	}
-	open, err := b.store.OpenTicketChannels(ctx, *guildID, tt.ID, user.ID)
+	st, err := b.loadOpener(ctx, *guildID, m.User.ID, m.RoleIDs, tt)
 	if err != nil {
 		return nil, err
 	}
-	if err := limitErr(tt, open); err != nil {
+	if err := accessErr(tt, st, time.Now()); err != nil {
 		return nil, err
 	}
-	m := formModal(fmt.Sprintf("%s%s/%d/%s", formModalPrefix, source, tt.ID, formVersion(tt.Questions)), tt)
-	return &m, nil
+	modal := formModal(fmt.Sprintf("%s%s/%d/%s", formModalPrefix, source, tt.ID, formVersion(tt.Questions)), tt)
+	return &modal, nil
 }
 
 func formModal(customID string, tt store.TicketType) discord.ModalCreate {

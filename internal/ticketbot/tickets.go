@@ -71,8 +71,9 @@ func (b *Bot) lockMember(guildID, userID snowflake.ID) func() {
 }
 
 // openTicket creates a ticket channel or thread for user and returns its ID.
+// roles are the member's roles, for types that restrict who can open them.
 // form holds the member's answers if the type has questions.
-func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord.User, typeID int64, form *formSubmission) (snowflake.ID, error) {
+func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord.User, roles []snowflake.ID, typeID int64, form *formSubmission) (snowflake.ID, error) {
 	defer b.lockMember(guildID, user.ID)()
 
 	tt, err := b.store.GetTicketType(ctx, guildID, typeID)
@@ -82,11 +83,11 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 		return 0, err
 	}
 
-	open, err := b.store.OpenTicketChannels(ctx, guildID, tt.ID, user.ID)
+	st, err := b.loadOpener(ctx, guildID, user.ID, roles, tt)
 	if err != nil {
 		return 0, err
 	}
-	if err := limitErr(tt, open); err != nil {
+	if err := accessErr(tt, st, time.Now()); err != nil {
 		return 0, err
 	}
 	if tt.Mode == store.ModeThread && tt.ParentID == nil {
@@ -165,15 +166,6 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	b.log.Info("ticket opened",
 		slog.String("guild_id", guildID.String()), slog.Int("number", number), slog.String("mode", string(tt.Mode)))
 	return channelID, nil
-}
-
-// limitErr reports whether a member already has as many open tickets of a
-// type as they're allowed.
-func limitErr(tt store.TicketType, open []snowflake.ID) error {
-	if len(open) >= tt.MaxOpenPerUser {
-		return userErr("You already have an open %s ticket: %s", tt.Name, discord.ChannelMention(open[len(open)-1]))
-	}
-	return nil
 }
 
 func channelOverwrites(guildID, botID, openerID snowflake.ID, supportRoles []snowflake.ID) []discord.PermissionOverwrite {

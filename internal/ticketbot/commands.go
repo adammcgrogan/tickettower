@@ -80,6 +80,25 @@ var commands = []discord.ApplicationCommandCreate{
 					discord.ApplicationCommandOptionString{Name: "name", Description: "The new name", Required: true},
 				},
 			},
+			discord.ApplicationCommandOptionSubCommand{
+				Name:        "block",
+				Description: "Stop someone opening tickets in this server",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionUser{Name: "user", Description: "Who to block", Required: true},
+					discord.ApplicationCommandOptionString{
+						Name:        "reason",
+						Description: "Shown to them if they try to open a ticket",
+						MaxLength:   ptr(store.MaxBlockReason),
+					},
+				},
+			},
+			discord.ApplicationCommandOptionSubCommand{
+				Name:        "unblock",
+				Description: "Let someone open tickets again",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionUser{Name: "user", Description: "Who to unblock", Required: true},
+				},
+			},
 		},
 	},
 	discord.SlashCommandCreate{
@@ -137,7 +156,7 @@ func (b *Bot) handleOpenButton(e *handler.ComponentEvent) error {
 		return e.CreateMessage(ephemeral("This button is out of date."))
 	}
 	ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
-	modal, err := b.formFor(ctx, e.GuildID(), e.User(), typeID, formFromButton)
+	modal, err := b.formFor(ctx, e.GuildID(), e.Member(), typeID, formFromButton)
 	cancel()
 	if err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
@@ -149,7 +168,7 @@ func (b *Bot) handleOpenButton(e *handler.ComponentEvent) error {
 	if err := e.DeferCreateMessage(true); err != nil {
 		return err
 	}
-	content := b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID, nil)
+	content := b.openForUser(e.Ctx, e.GuildID(), e.Member(), typeID, nil)
 	_, err = e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent(content))
 	return err
 }
@@ -167,7 +186,7 @@ func (b *Bot) handleOpenSelect(e *handler.ComponentEvent) error {
 	var formErr error
 	if parseErr == nil {
 		ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
-		modal, formErr = b.formFor(ctx, e.GuildID(), e.User(), typeID, formFromSelect)
+		modal, formErr = b.formFor(ctx, e.GuildID(), e.Member(), typeID, formFromSelect)
 		cancel()
 	}
 	if modal != nil && formErr == nil {
@@ -185,7 +204,7 @@ func (b *Bot) handleOpenSelect(e *handler.ComponentEvent) error {
 	case formErr != nil:
 		content = b.describe(formErr)
 	default:
-		content = b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID, nil)
+		content = b.openForUser(e.Ctx, e.GuildID(), e.Member(), typeID, nil)
 	}
 	_, err := e.CreateFollowupMessage(ephemeral(content))
 	return err
@@ -220,16 +239,16 @@ func (b *Bot) handleFormModal(e *handler.ModalEvent) error {
 	for i := range store.MaxQuestions {
 		form.values = append(form.values, strings.TrimSpace(e.Data.Text(fmt.Sprintf("q%d", i))))
 	}
-	return reply(b.openForUser(e.Ctx, e.GuildID(), e.User(), typeID, form))
+	return reply(b.openForUser(e.Ctx, e.GuildID(), e.Member(), typeID, form))
 }
 
-func (b *Bot) openForUser(ctx context.Context, guildID *snowflake.ID, user discord.User, typeID int64, form *formSubmission) string {
-	if guildID == nil {
+func (b *Bot) openForUser(ctx context.Context, guildID *snowflake.ID, m *discord.ResolvedMember, typeID int64, form *formSubmission) string {
+	if guildID == nil || m == nil {
 		return "Tickets can only be opened in a server."
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	channelID, err := b.openTicket(ctx, *guildID, user, typeID, form)
+	channelID, err := b.openTicket(ctx, *guildID, m.User, m.RoleIDs, typeID, form)
 	if err != nil {
 		return b.describe(err)
 	}
@@ -340,3 +359,41 @@ func (b *Bot) handleRenameCommand(e *handler.CommandEvent) error {
 	_, err := e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent(content))
 	return err
 }
+
+// --- Blocking members ---
+
+func (b *Bot) handleBlockCommand(e *handler.CommandEvent) error {
+	data := e.SlashCommandInteractionData()
+	target := data.User("user")
+	var targetMember *discord.ResolvedMember
+	if rm, ok := data.OptMember("user"); ok {
+		targetMember = &rm
+	}
+	reason, _ := data.OptString("reason")
+	if e.GuildID() == nil {
+		return e.CreateMessage(ephemeral("Members can only be blocked in a server."))
+	}
+	ctx, cancel := timeout(e.Ctx)
+	defer cancel()
+	msg, err := b.blockMember(ctx, *e.GuildID(), e.Member(), target, targetMember, reason)
+	if err != nil {
+		return e.CreateMessage(ephemeral(b.describe(err)))
+	}
+	return e.CreateMessage(ephemeral(msg))
+}
+
+func (b *Bot) handleUnblockCommand(e *handler.CommandEvent) error {
+	target := e.SlashCommandInteractionData().User("user")
+	if e.GuildID() == nil {
+		return e.CreateMessage(ephemeral("Members can only be unblocked in a server."))
+	}
+	ctx, cancel := timeout(e.Ctx)
+	defer cancel()
+	msg, err := b.unblockMember(ctx, *e.GuildID(), e.Member(), target)
+	if err != nil {
+		return e.CreateMessage(ephemeral(b.describe(err)))
+	}
+	return e.CreateMessage(ephemeral(msg))
+}
+
+func ptr[T any](v T) *T { return &v }

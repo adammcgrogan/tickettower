@@ -14,6 +14,7 @@ import (
 const (
 	CodeUnknownChannel     = 10003
 	CodeUnknownMember      = 10007
+	CodeUnknownUser        = 10013
 	CodeUnknownMessage     = 10008
 	CodeMaxChannels        = 30013
 	CodeInvalidFormBody    = 50035

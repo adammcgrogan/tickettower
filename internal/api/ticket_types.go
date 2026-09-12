@@ -24,18 +24,25 @@ const maxSupportRoles = 10
 // autoCloseOptions are the inactivity windows offered in the dashboard.
 var autoCloseOptions = []int{12, 24, 48, 72, 168}
 
+// cooldownOptions are the waits (in minutes) between a member's tickets of
+// a type offered in the dashboard; 0 is no wait.
+var cooldownOptions = []int{0, 5, 15, 30, 60, 360, 1440}
+
 type ticketTypeInput struct {
-	Name           string           `json:"name"`
-	Emoji          string           `json:"emoji"`
-	Description    string           `json:"description"`
-	Mode           store.TicketMode `json:"mode"`
-	ParentID       *snowflake.ID    `json:"parent_id"`
-	SupportRoleIDs []snowflake.ID   `json:"support_role_ids"`
-	NameFormat     string           `json:"name_format"`
-	WelcomeMessage string           `json:"welcome_message"`
-	MaxOpenPerUser int              `json:"max_open_per_user"`
-	Questions      []store.Question `json:"questions"`
-	AutoCloseHours *int             `json:"auto_close_hours"`
+	Name            string           `json:"name"`
+	Emoji           string           `json:"emoji"`
+	Description     string           `json:"description"`
+	Mode            store.TicketMode `json:"mode"`
+	ParentID        *snowflake.ID    `json:"parent_id"`
+	SupportRoleIDs  []snowflake.ID   `json:"support_role_ids"`
+	NameFormat      string           `json:"name_format"`
+	WelcomeMessage  string           `json:"welcome_message"`
+	MaxOpenPerUser  int              `json:"max_open_per_user"`
+	Questions       []store.Question `json:"questions"`
+	AutoCloseHours  *int             `json:"auto_close_hours"`
+	RequiredRoleIDs []snowflake.ID   `json:"required_role_ids"`
+	BlockedRoleIDs  []snowflake.ID   `json:"blocked_role_ids"`
+	CooldownMinutes int              `json:"cooldown_minutes"`
 }
 
 func (in ticketTypeInput) apply(t *store.TicketType) {
@@ -50,6 +57,9 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.MaxOpenPerUser = in.MaxOpenPerUser
 	t.Questions = in.Questions
 	t.AutoCloseHours = in.AutoCloseHours
+	t.RequiredRoleIDs = in.RequiredRoleIDs
+	t.BlockedRoleIDs = in.BlockedRoleIDs
+	t.CooldownMinutes = in.CooldownMinutes
 }
 
 // validateQuestions normalises a ticket type's form questions.
@@ -133,6 +143,9 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	if h := in.AutoCloseHours; h != nil && !slices.Contains(autoCloseOptions, *h) {
 		return invalid("auto_close_hours", "Choose one of the listed auto-close times.")
 	}
+	if !slices.Contains(cooldownOptions, in.CooldownMinutes) {
+		return invalid("cooldown_minutes", "Choose one of the listed waits.")
+	}
 
 	if in.ParentID != nil && *in.ParentID == 0 {
 		in.ParentID = nil
@@ -161,18 +174,40 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	}
 
 	in.SupportRoleIDs = normaliseIDs(in.SupportRoleIDs)
-	if len(in.SupportRoleIDs) > maxSupportRoles {
-		return invalid("support_role_ids", fmt.Sprintf("Choose up to %d support roles.", maxSupportRoles))
+	in.RequiredRoleIDs = normaliseIDs(in.RequiredRoleIDs)
+	in.BlockedRoleIDs = normaliseIDs(in.BlockedRoleIDs)
+	roleFields := []struct {
+		field string
+		ids   []snowflake.ID
+		limit string
+	}{
+		{"support_role_ids", in.SupportRoleIDs, fmt.Sprintf("Choose up to %d support roles.", maxSupportRoles)},
+		{"required_role_ids", in.RequiredRoleIDs, fmt.Sprintf("Choose up to %d required roles.", maxSupportRoles)},
+		{"blocked_role_ids", in.BlockedRoleIDs, fmt.Sprintf("Choose up to %d blocked roles.", maxSupportRoles)},
 	}
-	if len(in.SupportRoleIDs) > 0 {
-		roles, err := s.guildRoles(ctx, guildID)
-		if err != nil {
-			return err
+	var roles []roleResponse
+	for _, f := range roleFields {
+		if len(f.ids) > maxSupportRoles {
+			return invalid(f.field, f.limit)
 		}
-		for _, id := range in.SupportRoleIDs {
-			if !slices.ContainsFunc(roles, func(r roleResponse) bool { return r.ID == id }) {
-				return invalid("support_role_ids", "One of the selected roles no longer exists.")
+		if len(f.ids) == 0 {
+			continue
+		}
+		if roles == nil {
+			if roles, err = s.guildRoles(ctx, guildID); err != nil {
+				return err
 			}
+		}
+		for _, id := range f.ids {
+			if !slices.ContainsFunc(roles, func(r roleResponse) bool { return r.ID == id }) {
+				return invalid(f.field, "One of the selected roles no longer exists.")
+			}
+		}
+	}
+	// A role that's both required and blocked could never open a ticket.
+	for _, id := range in.RequiredRoleIDs {
+		if slices.Contains(in.BlockedRoleIDs, id) {
+			return invalid("blocked_role_ids", "A role can't be both required and blocked.")
 		}
 	}
 	return nil

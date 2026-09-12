@@ -47,6 +47,7 @@
 		const out = [n === 0 ? 'Managers only' : `${n} support role${n === 1 ? '' : 's'}`];
 		if (t.questions.length) out.push(`${t.questions.length} question${t.questions.length === 1 ? '' : 's'}`);
 		if (t.auto_close_hours) out.push(`Auto-closes after ${hoursLabel(t.auto_close_hours)}`);
+		if (t.required_role_ids.length) out.push('Some roles only');
 		return out;
 	}
 </script>

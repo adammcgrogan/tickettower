@@ -4,16 +4,21 @@
 		api,
 		ApiError,
 		errorMessage,
+		MAX_BLOCK_REASON,
 		send,
+		type Block,
 		type Channel,
 		type Guild,
 		type GuildSettings,
 		type Role
 	} from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
+	import { timeAgo } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
 	import ChannelSelect from '$lib/components/ChannelSelect.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
 	import Field from '$lib/components/Field.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import RolePicker from '$lib/components/RolePicker.svelte';
 
@@ -59,16 +64,65 @@
 	async function load() {
 		loadError = '';
 		try {
-			const [s, r, c] = await Promise.all([
+			const [s, r, c, b] = await Promise.all([
 				api<GuildSettings>(`/guilds/${guild.id}/settings`),
 				api<Role[]>(`/guilds/${guild.id}/roles`),
-				api<Channel[]>(`/guilds/${guild.id}/channels`)
+				api<Channel[]>(`/guilds/${guild.id}/channels`),
+				api<Block[]>(`/guilds/${guild.id}/blocks`)
 			]);
 			roles = r;
 			channels = c;
+			blocks = b;
 			reset(s);
 		} catch (e) {
 			loadError = errorMessage(e);
+		}
+	}
+
+	// --- Blocked members ---
+	let blocks = $state<Block[]>([]);
+	let blockOpen = $state(false);
+	let blockForm = $state({ user_id: '', reason: '' });
+	let blockErrors = $state<Record<string, string>>({});
+	let blocking = $state(false);
+	let unblocking = $state<string | null>(null);
+
+	function openBlock() {
+		blockForm = { user_id: '', reason: '' };
+		blockErrors = {};
+		blockOpen = true;
+	}
+
+	async function block(e: SubmitEvent) {
+		e.preventDefault();
+		blocking = true;
+		blockErrors = {};
+		try {
+			const created = await api<Block>(
+				`/guilds/${guild.id}/blocks`,
+				send('POST', { user_id: blockForm.user_id.trim(), reason: blockForm.reason })
+			);
+			blocks = [created, ...blocks.filter((b) => b.user_id !== created.user_id)];
+			blockOpen = false;
+			toast(`${created.user_name} can no longer open tickets`);
+		} catch (err) {
+			if (err instanceof ApiError && err.field) blockErrors = { [err.field]: err.message };
+			else blockErrors = { other: errorMessage(err) };
+		} finally {
+			blocking = false;
+		}
+	}
+
+	async function unblock(b: Block) {
+		unblocking = b.user_id;
+		try {
+			await api(`/guilds/${guild.id}/blocks/${b.user_id}`, send('DELETE'));
+			blocks = blocks.filter((x) => x.user_id !== b.user_id);
+			toast(`${b.user_name} can open tickets again`);
+		} catch (err) {
+			toast(errorMessage(err), 'error');
+		} finally {
+			unblocking = null;
 		}
 	}
 
@@ -206,4 +260,96 @@
 			</button>
 		</div>
 	</form>
+
+	<section class="card mt-5 max-w-3xl space-y-5 p-5">
+		<div class="flex items-start justify-between gap-4">
+			<div>
+				<h2 class="font-medium">Blocked members</h2>
+				<p class="hint mt-1">
+					People who can't open tickets here, for spam or abuse. Staff can also use
+					<code>/ticket block</code> and <code>/ticket unblock</code> in Discord.
+				</p>
+			</div>
+			<button class="btn btn-secondary h-8 shrink-0 px-3" onclick={openBlock}>
+				<Icon name="plus" size={14} /> Block a member
+			</button>
+		</div>
+		{#if blocks.length === 0}
+			<p class="text-sm text-muted">Nobody is blocked.</p>
+		{:else}
+			<ul class="divide-y divide-border rounded-xl border border-border">
+				{#each blocks as b (b.user_id)}
+					<li class="flex items-start gap-4 px-4 py-3">
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm font-medium">{b.user_name}</p>
+							<p class="mt-0.5 text-sm text-muted">
+								Blocked by {b.blocked_by_name} {timeAgo(b.created_at)}{b.reason ? `: ${b.reason}` : ''}
+							</p>
+						</div>
+						<button
+							class="btn btn-ghost h-8 shrink-0 px-3"
+							onclick={() => unblock(b)}
+							disabled={unblocking === b.user_id}
+						>
+							{unblocking === b.user_id ? 'Unblocking…' : 'Unblock'}
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
 {/if}
+
+<Dialog
+	bind:open={blockOpen}
+	title="Block a member"
+	description="They won't be able to open any ticket until they're unblocked. Tickets they already have stay open."
+>
+	<form id="block-member" onsubmit={block} class="space-y-4">
+		{#if blockErrors.other}<p class="text-sm text-danger">{blockErrors.other}</p>{/if}
+		<Field
+			label="User ID"
+			for="block-user"
+			hint="In Discord, right-click the member and choose Copy User ID. You may need Developer Mode on in Advanced settings."
+			error={blockErrors.user_id}
+		>
+			<input
+				id="block-user"
+				class="input font-mono text-[13px]"
+				inputmode="numeric"
+				pattern="[0-9]*"
+				bind:value={blockForm.user_id}
+				placeholder="e.g. 123456789012345678"
+				aria-invalid={!!blockErrors.user_id}
+				required
+			/>
+		</Field>
+		<Field
+			label="Reason"
+			for="block-reason"
+			optional
+			hint="Shown to the member if they try to open a ticket."
+			error={blockErrors.reason}
+		>
+			<input
+				id="block-reason"
+				class="input"
+				maxlength={MAX_BLOCK_REASON}
+				bind:value={blockForm.reason}
+				placeholder="e.g. Repeated spam tickets"
+				aria-invalid={!!blockErrors.reason}
+			/>
+		</Field>
+	</form>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (blockOpen = false)}>Cancel</button>
+		<button
+			type="submit"
+			form="block-member"
+			class="btn btn-danger"
+			disabled={blocking || !blockForm.user_id.trim()}
+		>
+			{blocking ? 'Blocking…' : 'Block member'}
+		</button>
+	{/snippet}
+</Dialog>

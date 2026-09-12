@@ -146,6 +146,29 @@
 						your support roles are still pinged once when the ticket opens.
 					</p>
 
+					<h2>Who can open these tickets</h2>
+					<p>
+						By default, anyone who can see your ticket buttons can open any type. Each type can narrow
+						that down:
+					</p>
+					<ul>
+						<li>
+							<strong>Required roles</strong>: members need at least one of them, for example Verified for
+							a Partnership type. Members without one are told which role they need.
+						</li>
+						<li><strong>Blocked roles</strong>: members with any of them can't open the type, such as a Muted role.</li>
+						<li>
+							<strong>Wait between tickets</strong>: how long a member waits after one of their tickets of
+							this type closes before they can open another, so nobody can open, close and open again all
+							day.
+						</li>
+					</ul>
+					<p>
+						To stop one person opening any ticket at all, staff can use <code>/ticket block</code> (with an
+						optional reason, which the member sees) and <code>/ticket unblock</code>, or the blocked list in
+						Settings. Blocking doesn't close tickets they already have.
+					</p>
+
 					<h2>Open tickets per member</h2>
 					<p>
 						How many tickets of this type one member can have open at once, from 1 to 10. Members at
@@ -211,6 +234,10 @@
 						support team (and category, for channels). You can also move tickets from the Tickets page.
 					</li>
 						<li><code>/reply</code>: send one of your <a href="/help/saved-replies">saved replies</a></li>
+						<li>
+							<code>/ticket block</code> and <code>/ticket unblock</code>: stop someone opening tickets in
+							the server, or let them again. These work anywhere, not just inside a ticket.
+						</li>
 					</ul>
 
 					<h2>If your team can't see tickets</h2>
