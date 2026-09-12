@@ -292,6 +292,12 @@
 						<li>View Channels, Create Private Threads and Manage Threads</li>
 						<li>Send Messages in Threads, Embed Links and Read Message History</li>
 					</ul>
+					<p>
+						Staff are brought into each private thread by the bot mentioning their support role. Discord
+						only lets it mention a role that isn't set to "Allow anyone to @mention this role" if the bot
+						has <strong>Mention @everyone, @here and All Roles</strong>, so keep that on, or make your
+						support roles mentionable. The setup check on Home tells you if either is missing.
+					</p>
 
 					<h2>For the ticket log</h2>
 					<p>View Channels, Send Messages and Embed Links in the log channel.</p>

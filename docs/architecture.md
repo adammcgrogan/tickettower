@@ -58,6 +58,7 @@ Tickets can also be closed from the dashboard (`POST …/tickets/{id}/close`). T
 
 **Setup check.** `GET …/setup-check` (`api/checks.go`) looks for problems that would stop tickets working, before a member hits them:
 - permissions the bot lacks where a ticket type opens tickets, worked out from its roles and the channel's overwrites (`discordx.Permissions`)
+- support roles the bot can't ping: roles that aren't mentionable when the bot lacks Mention Everyone there. In thread mode that ping is what adds staff to the thread, so it's reported as tickets not opening
 - categories and channels that were deleted
 - categories that are full or nearly full (Discord allows 50 channels per category; the bot also explains this when a ticket fails to open)
 - published ticket buttons whose channel is gone or that have no ticket types

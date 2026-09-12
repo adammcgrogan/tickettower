@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
@@ -51,6 +52,33 @@ type setup struct {
 
 // categoryNearlyFull is the channel count at which a category gets a warning.
 const categoryNearlyFull = discordx.MaxChannelsPerCategory - 5
+
+// unpingable names the support roles of a ticket type that the bot can't
+// mention where its tickets open: roles that aren't mentionable, when the
+// bot lacks Mention Everyone there.
+func (s setup) unpingable(where discord.GuildChannel, t store.TicketType) []string {
+	if s.perms(where).Has(discord.PermissionMentionEveryone) {
+		return nil
+	}
+	var names []string
+	for _, id := range t.SupportRoleIDs {
+		for _, r := range s.roles {
+			if r.ID == id && !r.Mentionable {
+				names = append(names, r.Name)
+			}
+		}
+	}
+	return names
+}
+
+// roleList words a list of role names: "the Helpers role", "the Helpers and
+// Mods roles".
+func roleList(names []string) string {
+	if len(names) == 1 {
+		return "the " + names[0] + " role"
+	}
+	return "the " + strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1] + " roles"
+}
 
 // childCount returns how many channels sit in a category.
 func (s setup) childCount(categoryID snowflake.ID) int {
@@ -110,6 +138,19 @@ func setupProblems(s setup) []problem {
 		}
 		missing := discordx.MissingPermissions(s.perms(parent), want)
 		switch {
+		case missing == "" && len(s.unpingable(parent, t)) > 0:
+			// Discord only pings a role that isn't mentionable when the author
+			// can mention all roles. That ping is what brings staff into a
+			// private thread, so without it they never see the ticket.
+			roles := roleList(s.unpingable(parent, t))
+			fix := fmt.Sprintf("In Server Settings → Roles, turn on \"Allow anyone to @mention this role\", or give %s the Mention @everyone, @here and All Roles permission.", s.appName)
+			if t.Mode == store.ModeThread {
+				fail(fmt.Sprintf("Support staff won't be added to its threads: %s can't be mentioned. %s", roles, fix))
+			} else {
+				out = append(out, problem{Kind: "ticket_type", ID: t.ID,
+					Title:  fmt.Sprintf("%s tickets won't ping the team", t.Name),
+					Detail: fmt.Sprintf("%s can't be mentioned, so staff aren't notified of new tickets. %s", "T"+roles[1:], fix)})
+			}
 		case missing == "" && t.Mode == store.ModeChannel && parent != nil:
 			// Discord caps a category at 50 channels, and busy servers reach
 			// it with open tickets alone. Warn before it stops tickets.

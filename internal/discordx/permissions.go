@@ -57,6 +57,7 @@ var permissionNames = []struct {
 	{discord.PermissionEmbedLinks, "Embed Links"},
 	{discord.PermissionAttachFiles, "Attach Files"},
 	{discord.PermissionReadMessageHistory, "Read Message History"},
+	{discord.PermissionMentionEveryone, "Mention @everyone, @here and All Roles"},
 }
 
 // MissingPermissions lists, by name, which of want aren't in have, e.g.

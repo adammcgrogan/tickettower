@@ -125,6 +125,24 @@ func TestSetupProblems(t *testing.T) {
 			want:   problem{Kind: "unlisted", ID: 2, Title: "Members can't choose Billing"},
 		},
 		{
+			name: "thread support role isn't mentionable",
+			change: func(s *setup) {
+				s.roles = append(s.roles, discord.Role{ID: 20, Name: "Helpers", Mentionable: false})
+				s.types[1].SupportRoleIDs = []snowflake.ID{20}
+			},
+			want: problem{Kind: "ticket_type", ID: 2, Title: "Billing tickets can't open",
+				Detail: "Support staff won't be added to its threads: the Helpers role can't be mentioned"},
+		},
+		{
+			name: "channel support roles aren't mentionable",
+			change: func(s *setup) {
+				s.roles = append(s.roles, discord.Role{ID: 20, Name: "Helpers"}, discord.Role{ID: 21, Name: "Mods"})
+				s.types[0].SupportRoleIDs = []snowflake.ID{20, 21}
+			},
+			want: problem{Kind: "ticket_type", ID: 1, Title: "General tickets won't ping the team",
+				Detail: "The Helpers and Mods roles can't be mentioned"},
+		},
+		{
 			name:   "category nearly full",
 			change: func(s *setup) { fillCategory(t, s, 10, 45) },
 			want: problem{Kind: "ticket_type", ID: 1, Title: "General tickets will stop opening soon",
@@ -174,5 +192,20 @@ func TestSetupProblemsIgnoreRoomyCategory(t *testing.T) {
 	fillCategory(t, &s, 10, 40)
 	if got := setupProblems(s); len(got) != 0 {
 		t.Fatalf("got %+v, want none", got)
+	}
+}
+
+func TestSetupProblemsIgnorePingableRoles(t *testing.T) {
+	s := healthySetup(t)
+	s.roles = append(s.roles, discord.Role{ID: 20, Name: "Helpers", Mentionable: true}, discord.Role{ID: 21, Name: "Mods"})
+	s.types[1].SupportRoleIDs = []snowflake.ID{20}
+	if got := setupProblems(s); len(got) != 0 {
+		t.Fatalf("mentionable role: got %+v, want none", got)
+	}
+	// A role that isn't mentionable is fine when the bot can mention all roles.
+	s.types[1].SupportRoleIDs = []snowflake.ID{21}
+	s.roles[1].Permissions = s.roles[1].Permissions.Add(discord.PermissionMentionEveryone)
+	if got := setupProblems(s); len(got) != 0 {
+		t.Fatalf("bot can mention all roles: got %+v, want none", got)
 	}
 }

@@ -23,7 +23,10 @@ const BotPermissions = discord.PermissionViewChannel |
 	discord.PermissionEmbedLinks |
 	discord.PermissionAttachFiles |
 	discord.PermissionReadMessageHistory |
-	discord.PermissionUseExternalEmojis
+	discord.PermissionUseExternalEmojis |
+	// Lets the bot ping support roles that aren't mentionable, which is also
+	// what adds them to private thread tickets.
+	discord.PermissionMentionEveryone
 
 type Config struct {
 	AppName string
