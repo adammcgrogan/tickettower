@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { getContext, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
 		api,
@@ -8,6 +8,7 @@
 		MAX_QUESTIONS,
 		send,
 		type Channel,
+		type Guild,
 		type Panel,
 		type QuestionStyle,
 		type Role,
@@ -15,10 +16,18 @@
 		type TicketType,
 		type TicketTypeInput
 	} from '$lib/api';
+	import {
+		answerPlaceholders,
+		fillPlaceholders,
+		namePlaceholders,
+		slug,
+		welcomePlaceholders
+	} from '$lib/placeholders';
 	import { toast } from '$lib/toast.svelte';
 	import ChannelSelect from './ChannelSelect.svelte';
 	import Field from './Field.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
+	import PlaceholderChips from './PlaceholderChips.svelte';
 	import RolePicker from './RolePicker.svelte';
 	import Segmented from './Segmented.svelte';
 	import WelcomePreview from './WelcomePreview.svelte';
@@ -154,12 +163,23 @@
 		form.parent_id = null;
 	}
 
-	const formatHint = $derived(
-		'Use {number} and {username}. Preview: ' +
-			(form.name_format || 'ticket-{number}')
-				.replaceAll('{number}', '0042')
-				.replaceAll('{username}', 'adam')
-				.replaceAll('{user}', 'adam')
+	const getGuild = getContext<() => Guild | null>('guild');
+
+	let nameInput = $state<HTMLInputElement>();
+	let welcomeInput = $state<HTMLTextAreaElement>();
+	const answerTokens = $derived(answerPlaceholders(form.questions));
+
+	// Matches the bot's channelName: text is slugged and stray hyphens trimmed.
+	const namePreview = $derived(
+		fillPlaceholders(form.name_format || 'ticket-{number}', {
+			number: '0042',
+			username: 'member',
+			user: 'member',
+			type: slug(form.name) || 'support',
+			...Object.fromEntries(
+				form.questions.map((q, i) => [`answer${i + 1}`, slug(q.placeholder) || `answer-${i + 1}`])
+			)
+		}).replace(/^[\s-]+|[\s-]+$/g, '') || 'ticket-0042'
 	);
 
 	async function save(e: SubmitEvent) {
@@ -309,16 +329,22 @@
 		<Field
 			label={form.mode === 'channel' ? 'Channel name' : 'Thread name'}
 			for="name_format"
-			hint={formatHint}
+			hint="Preview: {namePreview}"
 			help="ticket-types"
 			error={errors.name_format}
 		>
 			<input
 				id="name_format"
 				class="input font-mono text-[13px]"
+				bind:this={nameInput}
 				bind:value={form.name_format}
 				maxlength="90"
 				aria-invalid={!!errors.name_format}
+			/>
+			<PlaceholderChips
+				items={[...namePlaceholders, ...answerTokens]}
+				target={nameInput}
+				bind:value={form.name_format}
 			/>
 		</Field>
 	</section>
@@ -451,7 +477,7 @@
 			label="Welcome message"
 			for="welcome"
 			optional
-			hint={'Posted when the ticket opens. Use {user} to mention the member.'}
+			hint="Posted when the ticket opens. Click a placeholder to add it; mentions here don't ping anyone."
 			help="ticket-types"
 			error={errors.welcome_message}
 		>
@@ -459,11 +485,17 @@
 				id="welcome"
 				class="input"
 				rows="4"
+				bind:this={welcomeInput}
 				bind:value={form.welcome_message}
 				maxlength="2000"
 				placeholder={DEFAULT_WELCOME}
 				aria-invalid={!!errors.welcome_message}
 			></textarea>
+			<PlaceholderChips
+				items={[...welcomePlaceholders, ...answerTokens]}
+				target={welcomeInput}
+				bind:value={form.welcome_message}
+			/>
 		</Field>
 		<Field
 			label="Open tickets per member"
@@ -555,6 +587,7 @@
 		welcome={form.welcome_message}
 		fallback={DEFAULT_WELCOME}
 		questions={form.questions}
+		server={getGuild()?.name ?? 'your server'}
 		supportRoles={form.support_role_ids
 			.map((id) => roles.find((r) => r.id === id))
 			.filter((r): r is Role => !!r)}

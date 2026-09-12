@@ -30,6 +30,8 @@
 
 - Help: short guides at `/help` (public, no login), linked from the sidebar, the landing page, "Learn more" on form hints (`Field`'s `help` prop) and setup check problems, plus a "Get support" link (`VITE_SUPPORT_URL`, defaulting to GitHub issues)
 
+- Placeholders: welcome messages take `{user}`, `{username}`, `{number}`, `{type}`, `{server}`, `{support}` and `{answer1}`–`{answer5}`; channel and thread names take `{number}`, `{username}`, `{type}` and the answers (slugged). The editor lists them as clickable chips and fills them in the previews
+
 - Tickets page search and pagination: search (number, member, claimer, type), the status and ticket type filters run in the database, and "Load older tickets" pages back through every ticket
 
 ## Not yet verified by hand

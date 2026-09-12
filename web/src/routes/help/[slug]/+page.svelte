@@ -109,15 +109,39 @@
 
 					<h2>Channel and thread names</h2>
 					<p>
-						New tickets are named from a pattern, <code>ticket-{'{number}'}</code> by default.
-						<code>{'{number}'}</code> is the ticket number with leading zeros (<code>0042</code>) and
-						<code>{'{username}'}</code> is the member's username.
+						New tickets are named from a pattern, <code>ticket-{'{number}'}</code> by default. Click a
+						placeholder under the field to add it:
 					</p>
+					<ul>
+						<li><code>{'{number}'}</code>: the ticket number with leading zeros (<code>0042</code>)</li>
+						<li><code>{'{username}'}</code>: the member's username</li>
+						<li>
+							<code>{'{type}'}</code>: the ticket type's name in lowercase with hyphens, so
+							<code>{'{type}'}-{'{number}'}</code> gives <code>billing-0042</code>
+						</li>
+						<li>
+							<code>{'{answer1}'}</code> to <code>{'{answer5}'}</code>: the member's answer to that
+							question, in the same lowercase style
+						</li>
+					</ul>
 
 					<h2>Welcome message</h2>
 					<p>
-						Posted at the top of every new ticket, with Claim and Close buttons. Use
-						<code>{'{user}'}</code> to mention the member. Answers to any questions are added below it.
+						Posted at the top of every new ticket, with Claim and Close buttons. Answers to any
+						questions are added below it. You can use these placeholders:
+					</p>
+					<ul>
+						<li><code>{'{user}'}</code>: mentions the member</li>
+						<li><code>{'{username}'}</code>: the member's name, without a mention</li>
+						<li><code>{'{number}'}</code>: the ticket number (<code>0042</code>)</li>
+						<li><code>{'{type}'}</code>: the ticket type's name</li>
+						<li><code>{'{server}'}</code>: your server's name</li>
+						<li><code>{'{support}'}</code>: mentions your support roles, or says "the team" if there are none</li>
+						<li><code>{'{answer1}'}</code> to <code>{'{answer5}'}</code>: the member's answer to that question</li>
+					</ul>
+					<p>
+						Mentions in the welcome message show who they mean but don't notify anyone. The member and
+						your support roles are still pinged once when the ticket opens.
 					</p>
 
 					<h2>Open tickets per member</h2>

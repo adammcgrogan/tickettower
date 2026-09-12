@@ -21,7 +21,11 @@ const PLACEHOLDER = /\u0000(\d+)\u0000/g;
 const link = (url: string, text: string) =>
 	`<a href="${url}" target="_blank" rel="noopener noreferrer nofollow" class="md-link">${text}</a>`;
 
-export function renderMarkdown(src: string, users: Map<string, string> = new Map()): string {
+export function renderMarkdown(
+	src: string,
+	users: Map<string, string> = new Map(),
+	roles: Map<string, string> = new Map()
+): string {
 	const stash: string[] = [];
 	const keep = (html: string) => `\u0000${stash.push(html) - 1}\u0000`;
 
@@ -36,7 +40,9 @@ export function renderMarkdown(src: string, users: Map<string, string> = new Map
 		.replace(/&lt;@!?(\d+)&gt;/g, (_, id: string) =>
 			keep(`<span class="md-mention">@${escapeHTML(users.get(id) ?? 'unknown-user')}</span>`)
 		)
-		.replace(/&lt;@&amp;\d+&gt;/g, () => keep('<span class="md-mention">@role</span>'))
+		.replace(/&lt;@&amp;(\d+)&gt;/g, (_, id: string) =>
+			keep(`<span class="md-mention">@${escapeHTML(roles.get(id) ?? 'role')}</span>`)
+		)
 		.replace(/&lt;#\d+&gt;/g, () => keep('<span class="md-mention">#channel</span>'))
 		.replace(/&lt;a?:(\w+):\d+&gt;/g, ':$1:')
 		.replace(/&lt;t:(\d+)(?::[a-zA-Z])?&gt;/g, (_, ts: string) =>

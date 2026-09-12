@@ -2,6 +2,7 @@
 	import type { Question, Role } from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { renderMarkdown } from '$lib/markdown';
+	import { fillPlaceholders } from '$lib/placeholders';
 
 	/** A close approximation of the welcome message the bot posts in a ticket. */
 	let {
@@ -9,12 +10,32 @@
 		welcome,
 		fallback,
 		questions,
-		supportRoles
-	}: { name: string; welcome: string; fallback: string; questions: Question[]; supportRoles: Role[] } =
-		$props();
+		supportRoles,
+		server
+	}: {
+		name: string;
+		welcome: string;
+		fallback: string;
+		questions: Question[];
+		supportRoles: Role[];
+		server: string;
+	} = $props();
 
 	const users = new Map([['1', 'member']]);
-	const text = $derived((welcome.trim() || fallback).replaceAll('{user}', '<@1>'));
+	const roles = $derived(new Map(supportRoles.map((r) => [r.id, r.name])));
+	const text = $derived(
+		fillPlaceholders(welcome.trim() || fallback, {
+			user: '<@1>',
+			username: 'member',
+			number: '0042',
+			type: name || 'Ticket type',
+			server,
+			support: supportRoles.length ? supportRoles.map((r) => `<@&${r.id}>`).join(' ') : 'the team',
+			...Object.fromEntries(
+				questions.map((q, i) => [`answer${i + 1}`, q.placeholder.trim() || 'their answer'])
+			)
+		})
+	);
 </script>
 
 <div class="rounded-xl bg-[#313338] p-4 font-[system-ui] text-[15px] leading-snug text-[#dbdee1]">
@@ -39,7 +60,7 @@
 				<div class="font-semibold break-words text-white">{name || 'Ticket type'} · #42</div>
 				<div class="mt-1.5 text-sm break-words whitespace-pre-wrap">
 					<!-- Safe: renderMarkdown escapes all input before formatting. -->
-					{@html renderMarkdown(text, users)}
+					{@html renderMarkdown(text, users, roles)}
 				</div>
 				{#each questions as q, i (i)}
 					<div class="mt-2 text-sm">
