@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
@@ -163,13 +164,37 @@ func (s *Store) CloseTicketByChannel(ctx context.Context, channelID snowflake.ID
 	return tag.RowsAffected() == 1, err
 }
 
-// ListTickets returns the guild's most recent tickets, optionally filtered by
-// status.
-func (s *Store) ListTickets(ctx context.Context, guildID snowflake.ID, status TicketStatus, limit int) ([]Ticket, error) {
+// TicketQuery picks which of a guild's tickets ListTickets returns.
+type TicketQuery struct {
+	Status TicketStatus // "" for any
+	TypeID *int64
+	// Search matches the ticket number and the opener, claimer and type names.
+	Search string
+	// Before continues the list after this ticket, for paging.
+	Before *int64
+	Limit  int
+}
+
+// likeEscaper makes a search term match literally in a LIKE pattern.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// ListTickets returns the guild's tickets matching q, newest first.
+func (s *Store) ListTickets(ctx context.Context, guildID snowflake.ID, q TicketQuery) ([]Ticket, error) {
+	pattern := ""
+	if q.Search != "" {
+		pattern = "%" + likeEscaper.Replace(q.Search) + "%"
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+ticketColumns+` FROM tickets
-		WHERE guild_id = $1 AND ($2 = '' OR status = $2)
-		ORDER BY opened_at DESC LIMIT $3`, int64(guildID), string(status), limit)
+		WHERE guild_id = $1
+		  AND ($2 = '' OR status = $2)
+		  AND ($3::bigint IS NULL OR ticket_type_id = $3)
+		  AND ($4 = '' OR number::text LIKE $4 OR opener_name ILIKE $4 OR type_name ILIKE $4
+		       OR claimed_by_name ILIKE $4)
+		  AND ($5::bigint IS NULL
+		       OR (opened_at, id) < (SELECT opened_at, id FROM tickets WHERE guild_id = $1 AND id = $5))
+		ORDER BY opened_at DESC, id DESC LIMIT $6`,
+		int64(guildID), string(q.Status), q.TypeID, pattern, q.Before, q.Limit)
 	if err != nil {
 		return nil, err
 	}

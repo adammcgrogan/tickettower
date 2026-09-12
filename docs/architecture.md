@@ -95,7 +95,7 @@ Editing a ticket type re-renders every published panel that uses it.
 Public: `/healthz`, `/api/config`, `/api/invite`, `/api/auth/{login,callback,logout}`
 
 Authenticated: `/api/me`, `/api/guilds`, `/api/transcripts/{ticketID}`, and under `/api/guilds/{guildID}`:
-- `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=`, `tickets/{id}/close` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
+- `channels`, `roles`, `stats`, `setup-check`, `analytics?days=7|30|90|365|all&type={ticketTypeID}`, `tickets?status=open|closed&type={ticketTypeID}&q={search}&before={ticketID}&limit=` (newest first, at most 200 per page; `before` pages past a ticket), `tickets/{id}/close` (POST), `settings` (GET/PATCH; PATCH is partial, so omitted fields are kept)
 - `ticket-types` (GET/POST), `ticket-types/{id}` (PATCH/DELETE)
 - `panels` (GET/POST), `panels/{id}` (PATCH/DELETE), `panels/{id}/publish` (POST)
 
