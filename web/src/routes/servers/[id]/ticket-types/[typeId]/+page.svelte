@@ -86,7 +86,7 @@
 <Dialog
 	bind:open={confirmDelete}
 	title="Delete this ticket type?"
-	description="Its button will be removed from any ticket buttons messages. Existing tickets stay open and keep their history."
+	description="Its button will be removed from any ticket buttons messages. Closed tickets keep their history. A type with open tickets can't be deleted: close them or move them to another type first."
 >
 	{#snippet footer()}
 		<button class="btn btn-ghost" onclick={() => (confirmDelete = false)}>Cancel</button>

@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
@@ -163,13 +165,39 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 	return nil
 }
 
+// ErrOpenTickets is returned by DeleteTicketType when the type still has open
+// tickets. Deleting it would leave them without support roles or auto-close.
+type ErrOpenTickets struct{ Count int }
+
+func (e *ErrOpenTickets) Error() string {
+	return fmt.Sprintf("ticket type has %d open tickets", e.Count)
+}
+
+// DeleteTicketType deletes a type that has no open tickets. It returns
+// *ErrOpenTickets (with the count) if some are still open, so the check and
+// the delete can't race with a ticket opening in between.
 func (s *Store) DeleteTicketType(ctx context.Context, guildID snowflake.ID, id int64) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM ticket_types WHERE guild_id = $1 AND id = $2`, int64(guildID), id)
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM ticket_types
+		WHERE guild_id = $1 AND id = $2
+		  AND NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_type_id = $2 AND status = 'open')`, int64(guildID), id)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	var open int
+	err = s.pool.QueryRow(ctx, `
+		SELECT count(t.id) FROM ticket_types tt
+		LEFT JOIN tickets t ON t.ticket_type_id = tt.id AND t.status = 'open'
+		WHERE tt.guild_id = $1 AND tt.id = $2
+		GROUP BY tt.id`, int64(guildID), id).Scan(&open)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	return &ErrOpenTickets{Count: open}
 }

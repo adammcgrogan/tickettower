@@ -255,8 +255,12 @@ func (s *Server) deleteTicketType(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, err)
 		return
 	}
+	var open *store.ErrOpenTickets
 	if err := s.store.DeleteTicketType(r.Context(), g.ID, id); errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "ticket type not found")
+		return
+	} else if errors.As(err, &open) {
+		writeError(w, http.StatusConflict, openTicketsMessage(open.Count))
 		return
 	} else if err != nil {
 		s.writeFailure(w, err)
@@ -308,4 +312,13 @@ func (s *Server) syncPanelMessage(ctx context.Context, p store.Panel, types []st
 		return s.store.SetPanelMessage(ctx, p.GuildID, p.ID, nil, nil)
 	}
 	return err
+}
+
+// openTicketsMessage explains why a ticket type with open tickets can't be
+// deleted.
+func openTicketsMessage(n int) string {
+	if n == 1 {
+		return "This ticket type still has 1 open ticket. Close it first, or move it to another type, then delete the type."
+	}
+	return fmt.Sprintf("This ticket type still has %d open tickets. Close them first, or move them to another type, then delete the type.", n)
 }
