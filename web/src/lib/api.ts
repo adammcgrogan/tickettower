@@ -70,8 +70,14 @@ export type TicketType = {
 	blocked_role_ids: string[];
 	/** Minutes a member waits after their last ticket of this type closes; 0 is no wait. */
 	cooldown_minutes: number;
+	/** Whether the opener is asked to rate the ticket when it closes. */
+	ask_rating: boolean;
+	/** The wording of that request; empty uses the default. */
+	rating_prompt: string;
 	created_at: string;
 };
+
+export const MAX_RATING_PROMPT = 300;
 
 export type TicketTypeInput = Omit<TicketType, 'id' | 'guild_id' | 'created_at'>;
 
@@ -260,6 +266,8 @@ export type Analytics = {
 		resolution_median_seconds: number | null;
 		rating_avg: number | null;
 		rating_count: number;
+		/** False for types that don't ask for ratings. */
+		asks_rating: boolean;
 	}[];
 	staff: {
 		user_id: string;

@@ -46,6 +46,8 @@
 
 - Who can open tickets: per ticket type, required roles, blocked roles and a wait between a member's tickets of that type; plus a server-wide block list (`/ticket block` with a reason the member sees, `/ticket unblock`, and a Blocked members section in Settings)
 
+- Rating controls: per ticket type, turn the closing rating request off or reword it (`{staff}` and friends); ratings and comments are posted to the log channel as they arrive, and Analytics says "Not asked" for types that don't ask
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.

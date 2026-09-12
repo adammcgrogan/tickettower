@@ -79,3 +79,30 @@ func TestKeepsAccess(t *testing.T) {
 		t.Errorf("support role: %v", err)
 	}
 }
+
+func TestClosedDM(t *testing.T) {
+	claimer := "Sam"
+	tk := store.Ticket{Number: 7, TypeName: "Billing", CloseReason: "Refunded", ClaimedByName: &claimer, OpenerName: "jo"}
+
+	desc, ask := closedDM(tk, nil, "Acme")
+	if !ask || !strings.Contains(desc, "**Reason:** Refunded") || !strings.HasSuffix(desc, defaultRatingPrompt) {
+		t.Errorf("deleted type: ask=%v desc=%q", ask, desc)
+	}
+	desc, ask = closedDM(tk, &store.TicketType{AskRating: true}, "Acme")
+	if !ask || !strings.HasSuffix(desc, defaultRatingPrompt) {
+		t.Errorf("default prompt: ask=%v desc=%q", ask, desc)
+	}
+	desc, ask = closedDM(tk, &store.TicketType{AskRating: false, RatingPrompt: "ignored"}, "Acme")
+	if ask || strings.Contains(desc, "ignored") || !strings.HasSuffix(desc, "**Reason:** Refunded") {
+		t.Errorf("ratings off: ask=%v desc=%q", ask, desc)
+	}
+	desc, ask = closedDM(tk, &store.TicketType{AskRating: true, RatingPrompt: "How did {staff} do with #{number} in {server}?"}, "Acme")
+	if !ask || !strings.HasSuffix(desc, "How did Sam do with #0007 in Acme?") {
+		t.Errorf("custom prompt: ask=%v desc=%q", ask, desc)
+	}
+	tk.ClaimedByName = nil
+	desc, _ = closedDM(tk, &store.TicketType{AskRating: true, RatingPrompt: "Rate {staff}"}, "Acme")
+	if !strings.HasSuffix(desc, "Rate the team") {
+		t.Errorf("unclaimed staff placeholder: %q", desc)
+	}
+}

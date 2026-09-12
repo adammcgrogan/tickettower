@@ -48,3 +48,11 @@ export const replyPlaceholders: Placeholder[] = [
 	{ token: '{server}', label: 'Server name' },
 	{ token: '{staff}', label: 'Your name' }
 ];
+
+export const ratingPlaceholders: Placeholder[] = [
+	{ token: '{staff}', label: 'Who handled it' },
+	{ token: '{username}', label: "Member's name" },
+	{ token: '{number}', label: 'Ticket number' },
+	{ token: '{type}', label: 'Ticket type' },
+	{ token: '{server}', label: 'Server name' }
+];

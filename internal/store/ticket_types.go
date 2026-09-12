@@ -75,12 +75,20 @@ type TicketType struct {
 	RequiredRoleIDs []snowflake.ID `json:"required_role_ids"`
 	BlockedRoleIDs  []snowflake.ID `json:"blocked_role_ids"`
 	CooldownMinutes int            `json:"cooldown_minutes"`
-	CreatedAt       time.Time      `json:"created_at"`
+	// AskRating is whether the opener is asked to rate a ticket when it
+	// closes. RatingPrompt is the wording of that request; "" uses the
+	// default.
+	AskRating    bool      `json:"ask_rating"`
+	RatingPrompt string    `json:"rating_prompt"`
+	CreatedAt    time.Time `json:"created_at"`
 }
+
+// MaxRatingPrompt keeps a custom rating request short enough to read in a DM.
+const MaxRatingPrompt = 300
 
 const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_id, support_role_ids,
 	name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
-	required_role_ids, blocked_role_ids, cooldown_minutes, created_at`
+	required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt, created_at`
 
 func scanTicketType(row pgx.Row) (TicketType, error) {
 	var (
@@ -94,7 +102,7 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Name, &t.Emoji, &t.Description, &mode, &parentID, &roles,
 		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours,
-		&required, &blocked, &t.CooldownMinutes, &t.CreatedAt)
+		&required, &blocked, &t.CooldownMinutes, &t.AskRating, &t.RatingPrompt, &t.CreatedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
@@ -152,12 +160,12 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 	return s.pool.QueryRow(ctx, `
 		INSERT INTO ticket_types (guild_id, name, emoji, description, mode, parent_id, support_role_ids,
 		                          name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
-		                          required_role_ids, blocked_role_ids, cooldown_minutes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		                          required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.AutoCloseHours,
-		toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes,
+		toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating, t.RatingPrompt,
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
@@ -166,11 +174,13 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 		UPDATE ticket_types
 		SET name = $3, emoji = $4, description = $5, mode = $6, parent_id = $7, support_role_ids = $8,
 		    name_format = $9, welcome_message = $10, max_open_per_user = $11, questions = $12, auto_close_hours = $13,
-		    required_role_ids = $14, blocked_role_ids = $15, cooldown_minutes = $16, updated_at = now()
+		    required_role_ids = $14, blocked_role_ids = $15, cooldown_minutes = $16, ask_rating = $17,
+		    rating_prompt = $18, updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, questionsOrEmpty(t.Questions),
-		t.AutoCloseHours, toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes)
+		t.AutoCloseHours, toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating,
+		t.RatingPrompt)
 	if err != nil {
 		return err
 	}

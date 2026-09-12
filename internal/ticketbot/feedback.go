@@ -78,6 +78,7 @@ func (b *Bot) handleRate(e *handler.ComponentEvent) error {
 	if err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
 	}
+	go b.logEvent(t.GuildID, ratedLog(t, rating, ""))
 
 	rows := append([]discord.LayoutComponent{discord.NewActionRow(
 		discord.NewSecondaryButton("Add a comment", fmt.Sprintf("%s%d", commentButtonPrefix, t.ID)).
@@ -104,16 +105,20 @@ func (b *Bot) handleCommentButton(e *handler.ComponentEvent) error {
 func (b *Bot) handleCommentModal(e *handler.ModalEvent) error {
 	ctx, cancel := context.WithTimeout(e.Ctx, 10*time.Second)
 	defer cancel()
+	comment := strings.TrimSpace(e.Data.Text("comment"))
 	t, err := b.feedbackTicket(ctx, e.Vars["ticketID"], e.User().ID)
 	if err == nil {
 		var ok bool
-		ok, err = b.store.SetFeedbackComment(ctx, t.ID, strings.TrimSpace(e.Data.Text("comment")))
+		ok, err = b.store.SetFeedbackComment(ctx, t.ID, comment)
 		if err == nil && !ok {
 			err = userErr("Please choose a rating first.")
 		}
 	}
 	if err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
+	}
+	if f, err := b.store.GetFeedback(ctx, t.ID); err == nil {
+		go b.logEvent(t.GuildID, ratedLog(t, f.Rating, comment))
 	}
 	return e.UpdateMessage(discord.NewMessageUpdate().
 		WithContent("Thanks for your feedback! Your comment has been passed on to the team.").
