@@ -95,3 +95,53 @@ func TestCustomEmojiID(t *testing.T) {
 		}
 	}
 }
+
+func TestButtonStylesLabelsAndImages(t *testing.T) {
+	p := store.Panel{Title: "Help", Color: 1, TicketTypeIDs: []int64{1, 2, 3}, ImageURL: "https://x/banner.png", ThumbnailURL: "https://x/logo.png"}
+	types := []store.TicketType{
+		{ID: 1, Name: "General support", ButtonLabel: "Get help", ButtonStyle: store.ButtonSuccess},
+		{ID: 2, Name: "Report", ButtonStyle: store.ButtonDanger},
+		{ID: 3, Name: "Other"}, // no style saved: primary
+	}
+	msg := Create("App", p, types)
+	row := msg.Components[0].(discord.ActionRowComponent)
+	got := []struct {
+		label string
+		style discord.ButtonStyle
+	}{}
+	for _, c := range row.Components {
+		b := c.(discord.ButtonComponent)
+		got = append(got, struct {
+			label string
+			style discord.ButtonStyle
+		}{b.Label, b.Style})
+	}
+	want := []struct {
+		label string
+		style discord.ButtonStyle
+	}{
+		{"Get help", discord.ButtonStyleSuccess},
+		{"Report", discord.ButtonStyleDanger},
+		{"Other", discord.ButtonStylePrimary},
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("button %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	e := msg.Embeds[0]
+	if e.Image == nil || e.Image.URL != p.ImageURL || e.Thumbnail == nil || e.Thumbnail.URL != p.ThumbnailURL {
+		t.Errorf("embed images = %+v / %+v", e.Image, e.Thumbnail)
+	}
+
+	p.Style, p.Placeholder = store.PanelDropdown, "What do you need?"
+	menu := Create("App", p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
+	if menu.Placeholder != "What do you need?" || menu.Options[0].Label != "Get help" {
+		t.Errorf("dropdown = %q, first option %q", menu.Placeholder, menu.Options[0].Label)
+	}
+	p.Placeholder = ""
+	menu = Create("App", p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
+	if menu.Placeholder != DefaultPlaceholder {
+		t.Errorf("default placeholder = %q", menu.Placeholder)
+	}
+}

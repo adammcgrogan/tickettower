@@ -5,9 +5,11 @@
 		api,
 		ApiError,
 		errorMessage,
+		MAX_BUTTON_LABEL,
 		MAX_QUESTIONS,
 		MAX_RATING_PROMPT,
 		send,
+		type ButtonStyle,
 		type Channel,
 		type Guild,
 		type Panel,
@@ -58,7 +60,9 @@
 			blocked_role_ids: initial?.blocked_role_ids ?? [],
 			cooldown_minutes: initial?.cooldown_minutes ?? 0,
 			ask_rating: initial?.ask_rating ?? true,
-			rating_prompt: initial?.rating_prompt ?? ''
+			rating_prompt: initial?.rating_prompt ?? '',
+			button_style: initial?.button_style ?? 'primary',
+			button_label: initial?.button_label ?? ''
 		}))
 	);
 
@@ -92,6 +96,14 @@
 		const lead = Math.min(h / 4, 24);
 		return `Only when your team is waiting on the member. They're reminded ${hoursLabel(lead)} before, and any message keeps the ticket open.`;
 	});
+
+	// Discord's button colours, named as members see them.
+	const buttonStyles: { value: ButtonStyle; label: string; swatch: string }[] = [
+		{ value: 'primary', label: 'Blurple', swatch: '#5865f2' },
+		{ value: 'secondary', label: 'Grey', swatch: '#4e5058' },
+		{ value: 'success', label: 'Green', swatch: '#248046' },
+		{ value: 'danger', label: 'Red', swatch: '#da373c' }
+	];
 
 	const answerStyles: { value: QuestionStyle; label: string }[] = [
 		{ value: 'short', label: 'Short answer' },
@@ -276,6 +288,60 @@
 				aria-invalid={!!errors.description}
 			/>
 		</Field>
+	</section>
+
+	<section class="card space-y-5 p-5">
+		<div>
+			<h2 class="font-medium">The button</h2>
+			<p class="hint mt-1">How this type looks on your ticket buttons message.</p>
+		</div>
+		<div class="grid gap-5 sm:grid-cols-[1fr_auto]">
+			<Field
+				label="Button label"
+				for="button_label"
+				optional
+				hint="Leave empty to use the name."
+				error={errors.button_label}
+			>
+				<input
+					id="button_label"
+					class="input"
+					bind:value={form.button_label}
+					maxlength={MAX_BUTTON_LABEL}
+					placeholder={form.name || 'e.g. Get help'}
+					aria-invalid={!!errors.button_label}
+				/>
+			</Field>
+			<Field label="Button colour" for="button_style" error={errors.button_style}>
+				<div class="flex gap-2" role="radiogroup" id="button_style" aria-label="Button colour">
+					{#each buttonStyles as b (b.value)}
+						{@const on = form.button_style === b.value}
+						<button
+							type="button"
+							role="radio"
+							aria-checked={on}
+							title={b.label}
+							aria-label={b.label}
+							onclick={() => (form.button_style = b.value)}
+							class="grid h-9 w-11 place-items-center rounded-lg border transition-colors {on
+								? 'border-fg'
+								: 'border-border hover:border-border-strong'}"
+						>
+							<span class="h-4 w-6 rounded-sm" style="background:{b.swatch}"></span>
+						</button>
+					{/each}
+				</div>
+			</Field>
+		</div>
+		<div class="rounded-xl bg-[#313338] p-4">
+			<span
+				class="inline-flex items-center gap-1.5 rounded px-4 py-1.5 text-sm font-medium text-white"
+				style="background:{buttonStyles.find((b) => b.value === form.button_style)?.swatch}"
+			>
+				{#if form.emoji}<span>{form.emoji.replace(/^<a?:(\w+):\d+>$/, ':$1:')}</span>{/if}
+				{form.button_label || form.name || 'Ticket type'}
+			</span>
+		</div>
 	</section>
 
 	<section class="card space-y-5 p-5">

@@ -74,8 +74,15 @@ export type TicketType = {
 	ask_rating: boolean;
 	/** The wording of that request; empty uses the default. */
 	rating_prompt: string;
+	/** The colour of this type's button on ticket buttons. */
+	button_style: ButtonStyle;
+	/** Replaces the type's name on the button when set. */
+	button_label: string;
 	created_at: string;
 };
+
+export type ButtonStyle = 'primary' | 'secondary' | 'success' | 'danger';
+export const MAX_BUTTON_LABEL = 80;
 
 export const MAX_RATING_PROMPT = 300;
 
@@ -90,13 +97,24 @@ export type Panel = {
 	description: string;
 	color: number;
 	style: PanelStyle;
+	/** Optional https images on the message. */
+	image_url: string;
+	thumbnail_url: string;
+	/** The dropdown's prompt; empty uses the default. */
+	placeholder: string;
 	channel_id: string | null;
 	message_id: string | null;
 	ticket_type_ids: number[];
 	created_at: string;
 };
 
-export type PanelInput = Pick<Panel, 'title' | 'description' | 'color' | 'style' | 'ticket_type_ids'>;
+export type PanelInput = Pick<
+	Panel,
+	'title' | 'description' | 'color' | 'style' | 'image_url' | 'thumbnail_url' | 'placeholder' | 'ticket_type_ids'
+>;
+
+/** Matches DefaultPlaceholder in the bot. */
+export const DEFAULT_DROPDOWN_PLACEHOLDER = 'Choose a topic…';
 
 /** A member who can't open tickets in a server. */
 export type Block = {

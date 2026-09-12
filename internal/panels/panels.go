@@ -92,12 +92,42 @@ func Ordered(p store.Panel, types []store.TicketType) []store.TicketType {
 	return out
 }
 
+// DefaultPlaceholder is the dropdown's prompt when a panel doesn't set one.
+const DefaultPlaceholder = "Choose a topic…"
+
 func embed(appName string, p store.Panel) discord.Embed {
 	e := discord.NewEmbed().WithTitle(p.Title).WithColor(p.Color).WithFooterText("Powered by " + appName)
 	if p.Description != "" {
 		e = e.WithDescription(p.Description)
 	}
+	if p.ImageURL != "" {
+		e = e.WithImage(p.ImageURL)
+	}
+	if p.ThumbnailURL != "" {
+		e = e.WithThumbnail(p.ThumbnailURL)
+	}
 	return e
+}
+
+// button renders a ticket type's button in its chosen colour.
+func button(t store.TicketType) discord.ButtonComponent {
+	id := OpenButtonPrefix + strconv.FormatInt(t.ID, 10)
+	label := truncate(t.Label(), 80)
+	var b discord.ButtonComponent
+	switch t.ButtonStyle {
+	case store.ButtonSecondary:
+		b = discord.NewSecondaryButton(label, id)
+	case store.ButtonSuccess:
+		b = discord.NewSuccessButton(label, id)
+	case store.ButtonDanger:
+		b = discord.NewDangerButton(label, id)
+	default:
+		b = discord.NewPrimaryButton(label, id)
+	}
+	if e := ParseEmoji(t.Emoji); e != nil {
+		b = b.WithEmoji(*e)
+	}
+	return b
 }
 
 func components(p store.Panel, all []store.TicketType) []discord.LayoutComponent {
@@ -112,7 +142,7 @@ func components(p store.Panel, all []store.TicketType) []discord.LayoutComponent
 	if p.Style == store.PanelDropdown {
 		options := make([]discord.StringSelectMenuOption, 0, len(types))
 		for _, t := range types {
-			o := discord.NewStringSelectMenuOption(truncate(t.Name, 100), strconv.FormatInt(t.ID, 10))
+			o := discord.NewStringSelectMenuOption(truncate(t.Label(), 100), strconv.FormatInt(t.ID, 10))
 			if t.Description != "" {
 				o = o.WithDescription(truncate(t.Description, 100))
 			}
@@ -121,19 +151,19 @@ func components(p store.Panel, all []store.TicketType) []discord.LayoutComponent
 			}
 			options = append(options, o)
 		}
+		placeholder := p.Placeholder
+		if placeholder == "" {
+			placeholder = DefaultPlaceholder
+		}
 		return []discord.LayoutComponent{
-			discord.NewActionRow(discord.NewStringSelectMenu(OpenSelectID, "Choose a topic…", options...)),
+			discord.NewActionRow(discord.NewStringSelectMenu(OpenSelectID, truncate(placeholder, 150), options...)),
 		}
 	}
 
 	var rows []discord.LayoutComponent
 	var row []discord.InteractiveComponent
 	for i, t := range types {
-		b := discord.NewPrimaryButton(truncate(t.Name, 80), OpenButtonPrefix+strconv.FormatInt(t.ID, 10))
-		if e := ParseEmoji(t.Emoji); e != nil {
-			b = b.WithEmoji(*e)
-		}
-		row = append(row, b)
+		row = append(row, button(t))
 		if len(row) == 5 || i == len(types)-1 {
 			rows = append(rows, discord.NewActionRow(row...))
 			row = nil
