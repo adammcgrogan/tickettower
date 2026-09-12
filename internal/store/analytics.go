@@ -24,6 +24,21 @@ func (s *Store) SetFeedbackComment(ctx context.Context, ticketID int64, comment 
 	return tag.RowsAffected() == 1, err
 }
 
+// Feedback is the opener's rating and comment for a ticket.
+type Feedback struct {
+	Rating  int
+	Comment string
+}
+
+// GetFeedback returns a ticket's feedback, or ErrNotFound if it hasn't been
+// rated.
+func (s *Store) GetFeedback(ctx context.Context, ticketID int64) (Feedback, error) {
+	var f Feedback
+	err := s.pool.QueryRow(ctx, `SELECT rating, comment FROM ticket_feedback WHERE ticket_id = $1`, ticketID).
+		Scan(&f.Rating, &f.Comment)
+	return f, notFound(err)
+}
+
 // AnalyticsQuery picks the reporting window and, optionally, one ticket type.
 type AnalyticsQuery struct {
 	Days   int    // 0 means all time
@@ -65,6 +80,9 @@ type TypeStat struct {
 	ResolutionMedianSec    *float64 `json:"resolution_median_seconds"`
 	RatingAvg              *float64 `json:"rating_avg"`
 	RatingCount            int      `json:"rating_count"`
+	// AsksRating is false for types that don't ask for ratings, so a blank
+	// rating can be explained. Deleted types count as asking.
+	AsksRating bool `json:"asks_rating"`
 }
 
 type StaffStat struct {
@@ -275,7 +293,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 		           FILTER (WHERE t.first_response_at IS NOT NULL),
 		       percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.closed_at - t.opened_at))
 		           FILTER (WHERE t.closed_at IS NOT NULL),
-		       avg(f.rating)::float8, count(f.rating)
+		       avg(f.rating)::float8, count(f.rating), COALESCE(bool_or(tt.ask_rating), true)
 		FROM tickets t
 		LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id
 		LEFT JOIN ticket_feedback f ON f.ticket_id = t.id
@@ -285,7 +303,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 	err = eachRow(rows, err, func() error {
 		var ts TypeStat
 		err := rows.Scan(&ts.TypeID, &ts.Name, &ts.Emoji, &ts.Opened, &ts.FirstResponseMedianSec,
-			&ts.ResolutionMedianSec, &ts.RatingAvg, &ts.RatingCount)
+			&ts.ResolutionMedianSec, &ts.RatingAvg, &ts.RatingCount, &ts.AsksRating)
 		a.ByType = append(a.ByType, ts)
 		return err
 	})

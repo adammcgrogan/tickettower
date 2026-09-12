@@ -382,7 +382,7 @@
 									<td class="px-3 py-2.5 text-right tabular-nums">{formatDuration(t.first_response_median_seconds)}</td>
 									<td class="px-3 py-2.5 text-right tabular-nums">{formatDuration(t.resolution_median_seconds)}</td>
 									<td class="px-5 py-2.5 text-right tabular-nums {t.rating_avg == null ? 'text-subtle' : ''}">
-										{t.rating_avg != null ? t.rating_avg.toFixed(1) : '—'}
+										{t.rating_avg != null ? t.rating_avg.toFixed(1) : t.asks_rating ? '—' : 'Not asked'}
 									</td>
 								</tr>
 							{/each}

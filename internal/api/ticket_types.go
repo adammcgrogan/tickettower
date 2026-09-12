@@ -43,6 +43,10 @@ type ticketTypeInput struct {
 	RequiredRoleIDs []snowflake.ID   `json:"required_role_ids"`
 	BlockedRoleIDs  []snowflake.ID   `json:"blocked_role_ids"`
 	CooldownMinutes int              `json:"cooldown_minutes"`
+	// AskRating is a pointer so a client that doesn't send it (the setup
+	// templates) keeps the default of asking.
+	AskRating    *bool  `json:"ask_rating"`
+	RatingPrompt string `json:"rating_prompt"`
 }
 
 func (in ticketTypeInput) apply(t *store.TicketType) {
@@ -60,6 +64,8 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.RequiredRoleIDs = in.RequiredRoleIDs
 	t.BlockedRoleIDs = in.BlockedRoleIDs
 	t.CooldownMinutes = in.CooldownMinutes
+	t.AskRating = in.AskRating == nil || *in.AskRating
+	t.RatingPrompt = in.RatingPrompt
 }
 
 // validateQuestions normalises a ticket type's form questions.
@@ -145,6 +151,10 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	}
 	if !slices.Contains(cooldownOptions, in.CooldownMinutes) {
 		return invalid("cooldown_minutes", "Choose one of the listed waits.")
+	}
+	in.RatingPrompt = strings.TrimSpace(in.RatingPrompt)
+	if utf8.RuneCountInString(in.RatingPrompt) > store.MaxRatingPrompt {
+		return invalid("rating_prompt", fmt.Sprintf("Keep the rating request to %d characters or fewer.", store.MaxRatingPrompt))
 	}
 
 	if in.ParentID != nil && *in.ParentID == 0 {

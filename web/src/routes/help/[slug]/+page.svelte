@@ -174,6 +174,18 @@
 						How many tickets of this type one member can have open at once, from 1 to 10. Members at
 						their limit are pointed to the ticket they already have.
 					</p>
+
+					<h2>When a ticket closes</h2>
+					<p>
+						The member gets a direct message saying their ticket was closed, with the reason and a link
+						to the transcript. By default it also asks them to rate the ticket from one to five stars,
+						with an optional comment. Ratings appear in Analytics and, if you have one, your log channel.
+					</p>
+					<p>
+						Turn <strong>Ask for a rating</strong> off for types where it would feel wrong, such as
+						reporting a member. You can also reword the request, with <code>{'{staff}'}</code> for whoever
+						claimed the ticket (or "the team").
+					</p>
 				{:else if guide.slug === 'channels-vs-threads'}
 					<p>Each ticket type opens its tickets in one of two ways. Both are private to the member and your team.</p>
 
@@ -389,7 +401,7 @@
 						<li>Any message, or that button, keeps the ticket open and restarts the clock.</li>
 						<li>
 							Otherwise the ticket closes as usual, with the reason "No activity", and the member is
-							asked to rate it.
+							told (and asked to rate it, if the type asks for ratings).
 						</li>
 					</ol>
 					<p>For example, with 1 day chosen, the member is reminded after 18 quiet hours and the ticket closes 6 hours later.</p>

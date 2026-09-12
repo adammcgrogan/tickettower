@@ -6,6 +6,7 @@
 		ApiError,
 		errorMessage,
 		MAX_QUESTIONS,
+		MAX_RATING_PROMPT,
 		send,
 		type Channel,
 		type Guild,
@@ -20,6 +21,7 @@
 		answerPlaceholders,
 		fillPlaceholders,
 		namePlaceholders,
+		ratingPlaceholders,
 		slug,
 		welcomePlaceholders
 	} from '$lib/placeholders';
@@ -36,6 +38,8 @@
 
 	const DEFAULT_WELCOME =
 		'Thanks for reaching out, {user}! Tell us what you need help with and someone from the team will be with you shortly.';
+	// Matches defaultRatingPrompt in the bot.
+	const DEFAULT_RATING_PROMPT = 'How did we do? Rate your experience below.';
 
 	let form = $state<TicketTypeInput>(
 		untrack(() => ({
@@ -52,7 +56,9 @@
 			auto_close_hours: initial?.auto_close_hours ?? null,
 			required_role_ids: initial?.required_role_ids ?? [],
 			blocked_role_ids: initial?.blocked_role_ids ?? [],
-			cooldown_minutes: initial?.cooldown_minutes ?? 0
+			cooldown_minutes: initial?.cooldown_minutes ?? 0,
+			ask_rating: initial?.ask_rating ?? true,
+			rating_prompt: initial?.rating_prompt ?? ''
 		}))
 	);
 
@@ -181,6 +187,7 @@
 
 	let nameInput = $state<HTMLInputElement>();
 	let welcomeInput = $state<HTMLTextAreaElement>();
+	let ratingInput = $state<HTMLTextAreaElement>();
 	const answerTokens = $derived(answerPlaceholders(form.questions));
 
 	// Matches the bot's channelName: text is slugged and stray hyphens trimmed.
@@ -518,6 +525,47 @@
 			</ol>
 		{/if}
 		{#if errors.questions}<p class="text-xs text-danger">{errors.questions}</p>{/if}
+	</section>
+
+	<section class="card space-y-5 p-5">
+		<div>
+			<h2 class="font-medium">When a ticket closes</h2>
+			<p class="hint mt-1">
+				The member gets a message saying their ticket was closed, with a link to the transcript.
+			</p>
+		</div>
+		<label class="flex cursor-pointer items-start gap-3 text-sm">
+			<input type="checkbox" class="mt-0.5 size-4 accent-accent" bind:checked={form.ask_rating} />
+			<span>
+				<span class="block font-medium">Ask for a rating</span>
+				<span class="mt-0.5 block text-xs text-muted">
+					One to five stars, with an optional comment. Ratings show up in Analytics{form.ask_rating
+						? ' and in your log channel'
+						: ''}. Turn this off for types where it would feel wrong, like reporting someone.
+				</span>
+			</span>
+		</label>
+		{#if form.ask_rating}
+			<Field
+				label="Rating request"
+				for="rating_prompt"
+				optional
+				hint="The question under the closing message. Leave empty for the default."
+				error={errors.rating_prompt}
+			>
+				<textarea
+					id="rating_prompt"
+					class="input"
+					rows="2"
+					bind:this={ratingInput}
+					bind:value={form.rating_prompt}
+					maxlength={MAX_RATING_PROMPT}
+					placeholder={DEFAULT_RATING_PROMPT}
+					aria-invalid={!!errors.rating_prompt}
+				></textarea>
+				<PlaceholderChips items={ratingPlaceholders} target={ratingInput} bind:value={form.rating_prompt} />
+			</Field>
+		{/if}
 	</section>
 
 	<section class="card space-y-5 p-5">

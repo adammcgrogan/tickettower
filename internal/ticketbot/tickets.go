@@ -497,17 +497,56 @@ func (b *Bot) notifyOpener(ctx context.Context, t store.Ticket) {
 	if err != nil {
 		return
 	}
-	desc := fmt.Sprintf("Your **%s** ticket (#%d) in **%s** has been closed.", t.TypeName, t.Number, b.guildName(ctx, t.GuildID))
-	if t.CloseReason != "" {
-		desc += "\n**Reason:** " + t.CloseReason
+	var tt *store.TicketType
+	if t.TicketTypeID != nil {
+		if v, err := b.store.GetTicketType(ctx, t.GuildID, *t.TicketTypeID); err == nil {
+			tt = &v
+		}
 	}
-	desc += "\n\nHow did we do? Rate your experience below."
+	desc, ask := closedDM(t, tt, b.guildName(ctx, t.GuildID))
 	embed := discord.NewEmbed().WithTitle("Ticket closed").WithDescription(desc).WithColor(colorMuted)
-	msg := discord.NewMessageCreate().WithEmbeds(embed).WithComponents(b.feedbackComponents(t.ID)...)
+	msg := discord.NewMessageCreate().WithEmbeds(embed)
+	if ask {
+		msg = msg.WithComponents(b.feedbackComponents(t.ID)...)
+	} else {
+		msg = msg.WithComponents(b.transcriptRow(t.ID)...)
+	}
 	_, err = b.rest.CreateMessage(dm.ID(), msg, rest.WithCtx(ctx))
 	if err != nil && !discordx.IsCode(err, discordx.CodeCannotDMUser) {
 		b.log.Warn("failed to DM ticket opener", slog.Any("err", err))
 	}
+}
+
+// defaultRatingPrompt asks for a rating when a ticket type has no wording
+// of its own.
+const defaultRatingPrompt = "How did we do? Rate your experience below."
+
+// closedDM is the text of the DM an opener gets when their ticket closes,
+// and whether it asks for a rating. tt is nil when the type was deleted, in
+// which case the rating is asked for as usual.
+func closedDM(t store.Ticket, tt *store.TicketType, server string) (string, bool) {
+	desc := fmt.Sprintf("Your **%s** ticket (#%d) in **%s** has been closed.", t.TypeName, t.Number, server)
+	if t.CloseReason != "" {
+		desc += "\n**Reason:** " + t.CloseReason
+	}
+	if tt != nil && !tt.AskRating {
+		return desc, false
+	}
+	prompt := defaultRatingPrompt
+	if tt != nil && strings.TrimSpace(tt.RatingPrompt) != "" {
+		staff := "the team"
+		if t.ClaimedByName != nil && *t.ClaimedByName != "" {
+			staff = *t.ClaimedByName
+		}
+		prompt = strings.NewReplacer(
+			"{staff}", staff,
+			"{server}", server,
+			"{type}", t.TypeName,
+			"{number}", fmt.Sprintf("%04d", t.Number),
+			"{username}", t.OpenerName,
+		).Replace(tt.RatingPrompt)
+	}
+	return desc + "\n\n" + prompt, true
 }
 
 // guildName prefers the gateway cache, which the dashboard doesn't have.

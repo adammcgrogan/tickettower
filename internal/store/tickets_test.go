@@ -24,7 +24,7 @@ func newType(t *testing.T, s *Store, guildID snowflake.ID, name string) TicketTy
 	parent := snowflake.ID(555)
 	tt := TicketType{
 		GuildID: guildID, Name: name, Mode: ModeChannel, ParentID: &parent,
-		SupportRoleIDs: []snowflake.ID{10, 20}, NameFormat: "ticket-{number}", MaxOpenPerUser: 1,
+		SupportRoleIDs: []snowflake.ID{10, 20}, NameFormat: "ticket-{number}", MaxOpenPerUser: 1, AskRating: true,
 	}
 	if err := s.CreateTicketType(context.Background(), &tt); err != nil {
 		t.Fatal(err)
