@@ -7,10 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"time"
 
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/auth"
+	"github.com/adammcgrogan/tickettower/internal/discordx"
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
@@ -56,6 +59,7 @@ func (s *Server) getTranscript(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, err)
 		return
 	}
+	s.refreshAttachments(r.Context(), messages)
 	guild := transcriptGuild{ID: t.GuildID, CanManage: dashboard}
 	if g, err := s.store.GetGuild(r.Context(), t.GuildID); err == nil {
 		guild.Name = g.Name
@@ -82,4 +86,64 @@ func (s *Server) isSupportStaff(ctx context.Context, userID snowflake.ID, t stor
 		return false
 	}
 	return slices.ContainsFunc(roles, func(id snowflake.ID) bool { return slices.Contains(tt.SupportRoleIDs, id) })
+}
+
+// attachmentRefreshLead is how close to expiry an attachment link is renewed,
+// so a transcript open in a tab keeps working for a while.
+const attachmentRefreshLead = time.Hour
+
+// refreshAttachments swaps expired or expiring Discord CDN links in a
+// transcript for freshly signed ones, since Discord's attachment links stop
+// working after a day or so. Fresh links are cached by their original URL.
+// Best effort: if Discord won't refresh a link, the stored one is kept.
+func (s *Server) refreshAttachments(ctx context.Context, messages []store.TicketMessage) {
+	refresh := func(urls []string) (map[string]string, error) {
+		return discordx.RefreshAttachmentURLs(s.discord, urls, rest.WithCtx(ctx))
+	}
+	if err := renewAttachmentLinks(messages, time.Now(), s.cache, refresh); err != nil {
+		s.log.Warn("failed to refresh transcript attachment links", slog.Any("err", err))
+	}
+}
+
+// renewAttachmentLinks is refreshAttachments without the server, so it can
+// be tested with a fake refresh call.
+func renewAttachmentLinks(messages []store.TicketMessage, now time.Time, cache *ttlCache,
+	refresh func([]string) (map[string]string, error)) error {
+	cutoff := now.Add(attachmentRefreshLead)
+	fresh := map[string]string{}
+	var stale []string
+	for _, m := range messages {
+		for _, a := range m.Attachments {
+			exp := discordx.AttachmentExpiry(a.URL)
+			if exp.IsZero() || exp.After(cutoff) {
+				continue
+			}
+			if v, ok := cache.get("attachment:" + a.URL); ok {
+				fresh[a.URL] = v.(string)
+			} else if _, seen := fresh[a.URL]; !seen {
+				stale = append(stale, a.URL)
+				fresh[a.URL] = "" // placeholder so each URL is requested once
+			}
+		}
+	}
+	var err error
+	if len(stale) > 0 {
+		var renewed map[string]string
+		renewed, err = refresh(stale)
+		for orig, u := range renewed {
+			fresh[orig] = u
+			ttl := time.Until(discordx.AttachmentExpiry(u)) - attachmentRefreshLead
+			if ttl > 0 {
+				cache.set("attachment:"+orig, u, ttl)
+			}
+		}
+	}
+	for i := range messages {
+		for j, a := range messages[i].Attachments {
+			if u := fresh[a.URL]; u != "" {
+				messages[i].Attachments[j].URL = u
+			}
+		}
+	}
+	return err
 }

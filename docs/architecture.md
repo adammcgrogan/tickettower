@@ -43,6 +43,8 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 
 **Transcripts.** `onMessageCreate/Update/Delete` only act on channels in `ticketCache`, which is loaded from open tickets at startup, so normal server traffic costs nothing. The first non-bot message from someone other than the opener sets `first_response_at`. `purgeTranscripts` runs hourly to apply retention.
 
+Attachment links are Discord CDN URLs, which are signed and expire after about a day. When a transcript is viewed, `refreshAttachments` (`api/transcripts.go`) asks Discord's `POST /attachments/refresh-urls` for fresh links for any that expire within the hour, caches them until shortly before they expire again, and keeps the stored link if Discord won't renew it. Nothing is downloaded or stored.
+
 **Closing a ticket.**
 1. The Close button opens a reason modal; `/close` and `/ticket close` close directly.
 2. `store.CloseTicket` is conditional, so it only closes once.
