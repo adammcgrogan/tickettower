@@ -160,7 +160,12 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 
 	welcome := welcomeMessage(ticket, tt, answers, b.guildName(ctx, guildID))
 	if _, err := b.rest.CreateMessage(channelID, welcome, rest.WithCtx(ctx)); err != nil {
-		b.log.Warn("failed to send welcome message", slog.Any("err", err))
+		b.log.Warn("failed to send welcome message", slog.Int64("ticket_id", ticket.ID), slog.Any("err", err))
+		// Whatever Discord disliked about it, the ticket still needs its
+		// pings and buttons.
+		if _, err := b.rest.CreateMessage(channelID, welcomeFallback(ticket, tt), rest.WithCtx(ctx)); err != nil {
+			b.log.Error("failed to send fallback welcome message", slog.Int64("ticket_id", ticket.ID), slog.Any("err", err))
+		}
 	}
 	go b.logEvent(guildID, openedLog(ticket))
 	b.log.Info("ticket opened",
@@ -238,8 +243,12 @@ func channelName(format string, number int, user discord.User, typeName string, 
 	return name
 }
 
-// embedLimit is Discord's cap on the total text in a message's embeds.
-const embedLimit = 6000
+// Discord's caps on an embed: the total text across a message's embeds, one
+// description, and one field's value.
+const (
+	embedLimit           = 6000
+	embedFieldValueLimit = 1024
+)
 
 // welcomeText fills in the placeholders in a ticket type's welcome message.
 // Mentions inside an embed are shown but don't ping anyone.
@@ -271,12 +280,6 @@ func welcomeText(t store.Ticket, tt store.TicketType, answers []formAnswer, serv
 func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer, server string) discord.MessageCreate {
 	text := welcomeText(t, tt, answers, server)
 
-	// Mentioning support roles also adds them to private threads.
-	mentions := []string{discord.UserMention(t.OpenerID)}
-	for _, id := range tt.SupportRoleIDs {
-		mentions = append(mentions, discord.RoleMention(id))
-	}
-
 	title := fmt.Sprintf("%s · #%d", tt.Name, t.Number)
 	const footer = "Staff can claim this ticket. Either side can close it when you're done."
 	embed := discord.NewEmbed().
@@ -286,27 +289,48 @@ func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer, s
 
 	budget := embedLimit - utf8.RuneCountInString(title) - utf8.RuneCountInString(footer)
 	for _, a := range answers {
-		value := a.answer
+		value := truncate(a.answer, embedFieldValueLimit)
 		if strings.TrimSpace(value) == "" {
 			value = "*No answer*"
 		}
 		embed = embed.AddField(a.question, value, false)
 		budget -= utf8.RuneCountInString(a.question) + utf8.RuneCountInString(value)
 	}
-	// Long answers win over a long welcome message if both can't fit.
-	embed = embed.WithDescription(truncate(text, budget))
+	// Long answers win over a long welcome message if both can't fit, and
+	// the description has a cap of its own, which placeholders such as
+	// {answer1} can push the text past.
+	embed = embed.WithDescription(truncate(text, min(budget, embedDescriptionLimit)))
 
-	return discord.NewMessageCreate().
-		WithContent(strings.Join(mentions, " ")).
-		WithEmbeds(embed).
-		AddActionRow(
-			discord.NewSecondaryButton("Claim", claimButtonID).WithEmoji(discord.ComponentEmoji{Name: "🙋"}),
-			discord.NewDangerButton("Close", closeButtonID).WithEmoji(discord.ComponentEmoji{Name: "🔒"}),
-		).
-		WithAllowedMentions(&discord.AllowedMentions{
-			Users: []snowflake.ID{t.OpenerID},
-			Roles: tt.SupportRoleIDs,
-		})
+	return ticketMentions(discord.NewMessageCreate().WithEmbeds(embed).AddActionRow(ticketControls()...), t, tt)
+}
+
+// ticketControls are the Claim and Close buttons under a ticket's welcome.
+func ticketControls() []discord.InteractiveComponent {
+	return []discord.InteractiveComponent{
+		discord.NewSecondaryButton("Claim", claimButtonID).WithEmoji(discord.ComponentEmoji{Name: "🙋"}),
+		discord.NewDangerButton("Close", closeButtonID).WithEmoji(discord.ComponentEmoji{Name: "🔒"}),
+	}
+}
+
+// ticketMentions pings the opener and the support roles in a message's
+// content, which also adds the roles to a private thread.
+func ticketMentions(msg discord.MessageCreate, t store.Ticket, tt store.TicketType) discord.MessageCreate {
+	mentions := []string{discord.UserMention(t.OpenerID)}
+	for _, id := range tt.SupportRoleIDs {
+		mentions = append(mentions, discord.RoleMention(id))
+	}
+	return msg.WithContent(strings.Join(mentions, " ")).
+		WithAllowedMentions(&discord.AllowedMentions{Users: []snowflake.ID{t.OpenerID}, Roles: tt.SupportRoleIDs})
+}
+
+// welcomeFallback is posted if Discord rejects the welcome message, so the
+// ticket still pings everyone and has its buttons.
+func welcomeFallback(t store.Ticket, tt store.TicketType) discord.MessageCreate {
+	embed := discord.NewEmbed().
+		WithTitle(fmt.Sprintf("%s · #%d", tt.Name, t.Number)).
+		WithDescription("Thanks for reaching out! Someone from the team will be with you shortly.").
+		WithColor(colorAccent)
+	return ticketMentions(discord.NewMessageCreate().WithEmbeds(embed).AddActionRow(ticketControls()...), t, tt)
 }
 
 // cleanupChannel deletes a half-created ticket channel after a failure.

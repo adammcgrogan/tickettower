@@ -3,6 +3,7 @@ package ticketbot
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
@@ -104,5 +105,38 @@ func TestClosedDM(t *testing.T) {
 	desc, _ = closedDM(tk, &store.TicketType{AskRating: true, RatingPrompt: "Rate {staff}"}, "Acme")
 	if !strings.HasSuffix(desc, "Rate the team") {
 		t.Errorf("unclaimed staff placeholder: %q", desc)
+	}
+}
+
+// A welcome message with long answers substituted in stays within Discord's
+// limits: 4,096 characters of description, 1,024 per field and 6,000 in all.
+func TestWelcomeMessageFitsEmbedLimits(t *testing.T) {
+	long := strings.Repeat("x", store.MaxParagraphAnswer)
+	ticket := store.Ticket{Number: 7, OpenerID: 1, OpenerName: "Adam"}
+	tt := store.TicketType{Name: "Support", WelcomeMessage: strings.Repeat("w", 2000) + " {answer1} {answer2} {answer3}"}
+	answers := []formAnswer{{"One", long}, {"Two", long}, {"Three", long + "extra"}}
+
+	msg := welcomeMessage(ticket, tt, answers, "HQ")
+	embed := msg.Embeds[0]
+	total := utf8.RuneCountInString(embed.Title) + utf8.RuneCountInString(embed.Description) + utf8.RuneCountInString(embed.Footer.Text)
+	if n := utf8.RuneCountInString(embed.Description); n > embedDescriptionLimit {
+		t.Errorf("description is %d characters", n)
+	}
+	for _, f := range embed.Fields {
+		if n := utf8.RuneCountInString(f.Value); n > embedFieldValueLimit {
+			t.Errorf("field %q is %d characters", f.Name, n)
+		}
+		total += utf8.RuneCountInString(f.Name) + utf8.RuneCountInString(f.Value)
+	}
+	if total > embedLimit {
+		t.Errorf("embed totals %d characters", total)
+	}
+	if len(msg.Components) != 1 {
+		t.Errorf("components = %d, want the Claim/Close row", len(msg.Components))
+	}
+
+	fb := welcomeFallback(ticket, tt)
+	if len(fb.Components) != 1 || fb.Content == "" {
+		t.Errorf("fallback has no buttons or mentions: %+v", fb)
 	}
 }
