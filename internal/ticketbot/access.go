@@ -75,6 +75,18 @@ func accessErr(tt store.TicketType, st openerState, now time.Time) error {
 	return nil
 }
 
+// onBehalfErr reports why staff can't open a ticket of a type for a member,
+// or nil if they can. The type's rules on who can open it are for members
+// choosing for themselves, so staff aren't held to them, but the member's
+// open ticket limit still applies: the ticket staff want is usually open.
+func onBehalfErr(tt store.TicketType, st openerState, memberID snowflake.ID) error {
+	if len(st.open) >= tt.MaxOpenPerUser {
+		return userErr("%s already has an open %s ticket: %s",
+			discord.UserMention(memberID), tt.Name, discord.ChannelMention(st.open[len(st.open)-1]))
+	}
+	return nil
+}
+
 func hasAny(have, want []snowflake.ID) bool {
 	return slices.ContainsFunc(have, func(id snowflake.ID) bool { return slices.Contains(want, id) })
 }

@@ -68,6 +68,8 @@
 
 - Data deletion: server managers can delete everything stored for their server from Settings (typed confirmation, only once every ticket is closed; published ticket buttons are removed from Discord too), and the data of servers the bot has left is purged after 30 days (`leftGuildRetention`, run with the hourly transcript purge). `/privacy` says so
 
+- Open with a slash command: `/ticket open` (types autocomplete; the form comes first when there is one) for members who can't find the buttons, offering only the types on ticket buttons they can see. Staff add `for` to open one for a member: no form, the type's rules on who can open it are skipped apart from the member's open ticket limit, the staff member is added, and the welcome message and log entry say who opened it
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.

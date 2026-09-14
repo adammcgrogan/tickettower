@@ -37,13 +37,17 @@ func ticketTitle(t store.Ticket, action string) string {
 	return fmt.Sprintf("%s #%d %s", t.TypeName, t.Number, action)
 }
 
-func openedLog(t store.Ticket) discord.MessageCreate {
-	embed := discord.NewEmbed().
-		WithTitle(ticketTitle(t, "opened")).
-		WithColor(colorAccent).
-		AddField("Opened by", discord.UserMention(t.OpenerID), true).
-		AddField("Ticket", discord.ChannelMention(t.ChannelID), true).
-		WithTimestamp(t.OpenedAt)
+// openedLog announces a new ticket. by is the staff member who opened it for
+// the member, if anyone.
+func openedLog(t store.Ticket, by *snowflake.ID) discord.MessageCreate {
+	embed := discord.NewEmbed().WithTitle(ticketTitle(t, "opened")).WithColor(colorAccent)
+	if by != nil {
+		embed = embed.AddField("Opened by", discord.UserMention(*by), true).
+			AddField("For", discord.UserMention(t.OpenerID), true)
+	} else {
+		embed = embed.AddField("Opened by", discord.UserMention(t.OpenerID), true)
+	}
+	embed = embed.AddField("Ticket", discord.ChannelMention(t.ChannelID), true).WithTimestamp(t.OpenedAt)
 	return discord.NewMessageCreate().WithEmbeds(embed)
 }
 

@@ -88,6 +88,7 @@
 	];
 
 	const commands = [
+		{ name: '/ticket open', body: 'Open a ticket without the buttons, or one for a member' },
 		{ name: '/ticket claim', body: "Take a ticket, or hand it back if it's yours" },
 		{ name: '/ticket add', body: 'Bring someone else into the ticket' },
 		{ name: '/ticket remove', body: 'Take away their access again' },

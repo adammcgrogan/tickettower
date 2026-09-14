@@ -48,6 +48,22 @@ func TestAccessErr(t *testing.T) {
 	}
 }
 
+func TestOnBehalfErr(t *testing.T) {
+	now := time.Now()
+	tt := store.TicketType{Name: "Billing", MaxOpenPerUser: 1, RequiredRoleIDs: []snowflake.ID{10}, BlockedRoleIDs: []snowflake.ID{99}, CooldownMinutes: 60}
+
+	// The rules for members choosing for themselves don't hold staff back.
+	st := openerState{roles: []snowflake.ID{99}, block: &store.Block{Reason: "spam"}, lastClosed: &now}
+	if err := onBehalfErr(tt, st, 3); err != nil {
+		t.Errorf("blocked member in a cooldown: %v", err)
+	}
+	// The member's open ticket limit does.
+	err := onBehalfErr(tt, openerState{open: []snowflake.ID{5}}, 3)
+	if err == nil || err.Error() != "<@3> already has an open Billing ticket: <#5>" {
+		t.Errorf("at the limit: %v", err)
+	}
+}
+
 func TestRoleList(t *testing.T) {
 	if got := roleList([]snowflake.ID{1}); got != "the <@&1> role" {
 		t.Errorf("one role = %q", got)

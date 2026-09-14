@@ -39,9 +39,22 @@ var commands = []discord.ApplicationCommandCreate{
 	},
 	discord.SlashCommandCreate{
 		Name:        "ticket",
-		Description: "Manage the current ticket",
+		Description: "Open and manage tickets",
 		Contexts:    guildOnly,
 		Options: []discord.ApplicationCommandOption{
+			discord.ApplicationCommandOptionSubCommand{
+				Name:        "open",
+				Description: "Open a ticket, or open one for a member if you're staff",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionString{
+						Name:         "type",
+						Description:  "The kind of ticket to open",
+						Required:     true,
+						Autocomplete: true,
+					},
+					discord.ApplicationCommandOptionUser{Name: "for", Description: "Staff only: open it for this member"},
+				},
+			},
 			discord.ApplicationCommandOptionSubCommand{
 				Name:        "close",
 				Description: "Close this ticket",
@@ -283,7 +296,7 @@ func (b *Bot) openForUser(ctx context.Context, guildID *snowflake.ID, m *discord
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	channelID, err := b.openTicket(ctx, *guildID, m.User, m.RoleIDs, typeID, form)
+	channelID, err := b.openTicket(ctx, *guildID, m.User, m.RoleIDs, typeID, form, nil)
 	if err != nil {
 		return b.describe(err)
 	}

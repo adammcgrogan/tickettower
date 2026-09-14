@@ -186,16 +186,14 @@ func (b *Bot) moveFromDiscord(ctx context.Context, channelID snowflake.ID, m *di
 	if err != nil {
 		return "", err
 	}
-	i := slices.IndexFunc(types, func(tt store.TicketType) bool {
-		return strconv.FormatInt(tt.ID, 10) == value || strings.EqualFold(tt.Name, strings.TrimSpace(value))
-	})
-	if i < 0 {
+	to, ok := typeByValue(types, value)
+	if !ok {
 		return "", userErr("There's no ticket type called %q. Pick one from the list.", value)
 	}
-	if _, err := b.moveTicket(ctx, t, from, types[i], m.User.ID); err != nil {
+	if _, err := b.moveTicket(ctx, t, from, to, m.User.ID); err != nil {
 		return "", err
 	}
-	return types[i].Name, nil
+	return to.Name, nil
 }
 
 func (b *Bot) handleMoveAutocomplete(e *handler.AutocompleteEvent) error {

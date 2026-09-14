@@ -1,6 +1,7 @@
 package ticketbot
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -116,7 +117,7 @@ func TestWelcomeMessageFitsEmbedLimits(t *testing.T) {
 	tt := store.TicketType{Name: "Support", WelcomeMessage: strings.Repeat("w", 2000) + " {answer1} {answer2} {answer3}"}
 	answers := []formAnswer{{"One", long}, {"Two", long}, {"Three", long + "extra"}}
 
-	msg := welcomeMessage(ticket, tt, answers, "HQ")
+	msg := welcomeMessage(ticket, tt, answers, "HQ", nil)
 	embed := msg.Embeds[0]
 	total := utf8.RuneCountInString(embed.Title) + utf8.RuneCountInString(embed.Description) + utf8.RuneCountInString(embed.Footer.Text)
 	if n := utf8.RuneCountInString(embed.Description); n > embedDescriptionLimit {
@@ -135,8 +136,33 @@ func TestWelcomeMessageFitsEmbedLimits(t *testing.T) {
 		t.Errorf("components = %d, want the Claim/Close row", len(msg.Components))
 	}
 
-	fb := welcomeFallback(ticket, tt)
+	fb := welcomeFallback(ticket, tt, nil)
 	if len(fb.Components) != 1 || fb.Content == "" {
 		t.Errorf("fallback has no buttons or mentions: %+v", fb)
+	}
+}
+
+func TestWelcomeMessageOnBehalf(t *testing.T) {
+	ticket := store.Ticket{Number: 7, OpenerID: 1, OpenerName: "Adam"}
+	staff := snowflake.ID(2)
+	note := "<@2> opened this ticket for you and will explain what it's about here."
+
+	// The default welcome thanks the member for reaching out, which they didn't.
+	tt := store.TicketType{Name: "Support", SupportRoleIDs: []snowflake.ID{10}}
+	msg := welcomeMessage(ticket, tt, nil, "HQ", &staff)
+	if got := msg.Embeds[0].Description; got != note {
+		t.Errorf("default welcome = %q", got)
+	}
+	// The member and the support roles are pinged as usual.
+	if !slices.Equal(msg.AllowedMentions.Users, []snowflake.ID{1}) || !slices.Equal(msg.AllowedMentions.Roles, []snowflake.ID{10}) {
+		t.Errorf("allowed mentions = %+v", msg.AllowedMentions)
+	}
+	// A type's own welcome follows the note.
+	tt.WelcomeMessage = "Hi {user}, this is about {type}."
+	if got := welcomeMessage(ticket, tt, nil, "HQ", &staff).Embeds[0].Description; got != note+"\n\nHi <@1>, this is about Support." {
+		t.Errorf("custom welcome = %q", got)
+	}
+	if got := welcomeFallback(ticket, tt, &staff).Embeds[0].Description; got != note {
+		t.Errorf("fallback = %q", got)
 	}
 }

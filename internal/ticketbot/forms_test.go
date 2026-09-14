@@ -51,7 +51,7 @@ func TestWelcomeMessageFitsEmbedLimit(t *testing.T) {
 	}
 	answers[1].answer = "  "
 
-	msg := welcomeMessage(store.Ticket{Number: 9999}, tt, answers, "")
+	msg := welcomeMessage(store.Ticket{Number: 9999}, tt, answers, "", nil)
 	e := msg.Embeds[0]
 	total := utf8.RuneCountInString(e.Title) + utf8.RuneCountInString(e.Description) + utf8.RuneCountInString(e.Footer.Text)
 	for _, f := range e.Fields {
@@ -68,7 +68,7 @@ func TestWelcomeMessageFitsEmbedLimit(t *testing.T) {
 	}
 
 	// Without answers the welcome message is left alone.
-	if msg := welcomeMessage(store.Ticket{}, tt, nil, ""); msg.Embeds[0].Description != tt.WelcomeMessage {
+	if msg := welcomeMessage(store.Ticket{}, tt, nil, "", nil); msg.Embeds[0].Description != tt.WelcomeMessage {
 		t.Error("welcome message changed without answers")
 	}
 }

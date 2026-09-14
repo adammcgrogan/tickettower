@@ -17,8 +17,9 @@ const (
 	formModalPrefix = "/ticket-form/" // + {source}/{typeID}/{version}
 
 	// Where a form was opened from: panel dropdowns are reset on submit.
-	formFromButton = "b"
-	formFromSelect = "s"
+	formFromButton  = "b"
+	formFromSelect  = "s"
+	formFromCommand = "c" // /ticket open
 )
 
 // formSubmission is what a member typed into a ticket type's form.

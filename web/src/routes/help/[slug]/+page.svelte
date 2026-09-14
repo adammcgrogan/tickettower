@@ -54,8 +54,8 @@
 			>
 				{#if guide.slug === 'getting-started'}
 					<p>
-						Members open tickets by clicking a button in your server. This guide gets you from nothing
-						to working ticket buttons in about a minute.
+						Members open tickets by clicking a button in your server, or with <code>/ticket open</code>.
+						This guide gets you from nothing to working ticket buttons in about a minute.
 					</p>
 					<ol>
 						<li>
@@ -182,8 +182,8 @@
 
 					<h2>Who can open these tickets</h2>
 					<p>
-						By default, anyone who can see your ticket buttons can open any type. Each type can narrow
-						that down:
+						By default, anyone who can see your ticket buttons can open any type, from the buttons or with
+						<code>/ticket open</code>. Each type can narrow that down:
 					</p>
 					<ul>
 						<li>
@@ -279,6 +279,11 @@
 							the channel is deleted when they close.
 						</li>
 						<li><strong>Add or remove</strong> people, and <strong>rename</strong> the ticket.</li>
+						<li>
+							<strong>Open</strong> a ticket for a member, for example to follow up on a report. They're
+							pinged into it, you're added to it, and the welcome message says you opened it. The type's
+							rules on who can open it don't apply, though the member's limit of open tickets does.
+						</li>
 					</ul>
 					<p>The same actions are available as slash commands inside a ticket:</p>
 					<ul>
@@ -303,6 +308,11 @@
 						<li>
 							<code>/ticket block</code> and <code>/ticket unblock</code>: stop someone opening tickets in
 							the server, or let them again. These work anywhere, not just inside a ticket.
+						</li>
+						<li>
+							<code>/ticket open</code> with <code>for</code>: open a ticket for a member, from anywhere in
+							the server. Members can use <code>/ticket open</code> too, for the types on ticket buttons
+							they can see.
 						</li>
 					</ul>
 

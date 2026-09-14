@@ -68,8 +68,9 @@ func (b *Bot) lockMember(guildID, userID snowflake.ID) func() {
 
 // openTicket creates a ticket channel or thread for user and returns its ID.
 // roles are the member's roles, for types that restrict who can open them.
-// form holds the member's answers if the type has questions.
-func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord.User, roles []snowflake.ID, typeID int64, form *formSubmission) (snowflake.ID, error) {
+// form holds the member's answers if the type has questions. by is the staff
+// member opening it for them, or nil when members open their own.
+func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord.User, roles []snowflake.ID, typeID int64, form *formSubmission, by *discord.User) (snowflake.ID, error) {
 	defer b.lockMember(guildID, user.ID)()
 
 	tt, err := b.store.GetTicketType(ctx, guildID, typeID)
@@ -83,7 +84,12 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	if err != nil {
 		return 0, err
 	}
-	if err := accessErr(tt, st, time.Now()); err != nil {
+	if by == nil {
+		err = accessErr(tt, st, time.Now())
+	} else {
+		err = onBehalfErr(tt, st, user.ID)
+	}
+	if err != nil {
 		return 0, err
 	}
 	if tt.Mode == store.ModeThread && tt.ParentID == nil {
@@ -99,6 +105,10 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 		return 0, err
 	}
 	name := channelName(tt.NameFormat, number, user, tt.Name, answers)
+	var byID *snowflake.ID
+	if by != nil {
+		byID = &by.ID
+	}
 
 	var channelID snowflake.ID
 	switch tt.Mode {
@@ -117,11 +127,23 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 			b.cleanupChannel(channelID)
 			return 0, err
 		}
+		// Staff who open a ticket for a member may not have a support role.
+		if by != nil {
+			if err := b.rest.AddThreadMember(channelID, by.ID, rest.WithCtx(ctx)); err != nil {
+				b.log.Warn("failed to add staff member to ticket thread", slog.Any("err", err))
+			}
+		}
 	default:
 		create := discord.GuildTextChannelCreate{
 			Name:                 name,
 			Topic:                fmt.Sprintf("%s ticket #%d opened by %s", tt.Name, number, user.Username),
 			PermissionOverwrites: channelOverwrites(guildID, b.client.ApplicationID, user.ID, tt.SupportRoleIDs),
+		}
+		if by != nil {
+			create.Topic = fmt.Sprintf("%s ticket #%d opened for %s by %s", tt.Name, number, user.Username, by.Username)
+			// Staff who open a ticket for a member may not have a support role.
+			create.PermissionOverwrites = append(create.PermissionOverwrites,
+				discord.MemberPermissionOverwrite{UserID: by.ID, Allow: ticketMemberPerms})
 		}
 		if tt.ParentID != nil {
 			create.ParentID = *tt.ParentID
@@ -154,16 +176,16 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	// captured in the transcript.
 	b.tickets.put(store.TicketRef{ID: ticket.ID, GuildID: guildID, ChannelID: channelID, OpenerID: user.ID})
 
-	welcome := welcomeMessage(ticket, tt, answers, b.guildName(ctx, guildID))
+	welcome := welcomeMessage(ticket, tt, answers, b.guildName(ctx, guildID), byID)
 	if _, err := b.rest.CreateMessage(channelID, welcome, rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to send welcome message", slog.Int64("ticket_id", ticket.ID), slog.Any("err", err))
 		// Whatever Discord disliked about it, the ticket still needs its
 		// pings and buttons.
-		if _, err := b.rest.CreateMessage(channelID, welcomeFallback(ticket, tt), rest.WithCtx(ctx)); err != nil {
+		if _, err := b.rest.CreateMessage(channelID, welcomeFallback(ticket, tt, byID), rest.WithCtx(ctx)); err != nil {
 			b.log.Error("failed to send fallback welcome message", slog.Int64("ticket_id", ticket.ID), slog.Any("err", err))
 		}
 	}
-	go b.logEvent(guildID, openedLog(ticket))
+	go b.logEvent(guildID, openedLog(ticket, byID))
 	b.log.Info("ticket opened",
 		slog.String("guild_id", guildID.String()), slog.Int("number", number), slog.String("mode", string(tt.Mode)))
 	return channelID, nil
@@ -273,8 +295,19 @@ func welcomeText(t store.Ticket, tt store.TicketType, answers []formAnswer, serv
 	return strings.NewReplacer(pairs...).Replace(text)
 }
 
-func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer, server string) discord.MessageCreate {
+// welcomeMessage is posted at the top of a new ticket. by is the staff
+// member who opened it for the member, if anyone.
+func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer, server string, by *snowflake.ID) discord.MessageCreate {
 	text := welcomeText(t, tt, answers, server)
+	if by != nil {
+		// The default welcome thanks the member for reaching out, which they
+		// didn't; a type's own welcome still says what its tickets are for.
+		if strings.TrimSpace(tt.WelcomeMessage) == "" {
+			text = onBehalfNote(*by)
+		} else {
+			text = onBehalfNote(*by) + "\n\n" + text
+		}
+	}
 
 	title := fmt.Sprintf("%s · #%d", tt.Name, t.Number)
 	const footer = "Staff can claim this ticket. Either side can close it when you're done."
@@ -321,12 +354,21 @@ func ticketMentions(msg discord.MessageCreate, t store.Ticket, tt store.TicketTy
 
 // welcomeFallback is posted if Discord rejects the welcome message, so the
 // ticket still pings everyone and has its buttons.
-func welcomeFallback(t store.Ticket, tt store.TicketType) discord.MessageCreate {
+func welcomeFallback(t store.Ticket, tt store.TicketType, by *snowflake.ID) discord.MessageCreate {
+	desc := "Thanks for reaching out! Someone from the team will be with you shortly."
+	if by != nil {
+		desc = onBehalfNote(*by)
+	}
 	embed := discord.NewEmbed().
 		WithTitle(fmt.Sprintf("%s · #%d", tt.Name, t.Number)).
-		WithDescription("Thanks for reaching out! Someone from the team will be with you shortly.").
+		WithDescription(desc).
 		WithColor(colorAccent)
 	return ticketMentions(discord.NewMessageCreate().WithEmbeds(embed).AddActionRow(ticketControls()...), t, tt)
+}
+
+// onBehalfNote starts the welcome of a ticket staff opened for a member.
+func onBehalfNote(by snowflake.ID) string {
+	return discord.UserMention(by) + " opened this ticket for you and will explain what it's about here."
 }
 
 // cleanupChannel deletes a half-created ticket channel after a failure.
