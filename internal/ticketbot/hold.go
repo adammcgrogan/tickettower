@@ -141,6 +141,6 @@ func (d *Dashboard) Resume(ctx context.Context, t store.Ticket, byID snowflake.I
 
 func (d *Dashboard) post(ctx context.Context, t store.Ticket, msg discord.MessageCreate) {
 	if _, err := d.b.rest.CreateMessage(t.ChannelID, msg, rest.WithCtx(ctx)); err != nil {
-		d.b.log.Warn("failed to post hold message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+		d.b.log.Warn("failed to post message in ticket", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
 	}
 }

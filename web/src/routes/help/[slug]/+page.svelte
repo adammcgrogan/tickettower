@@ -278,7 +278,10 @@
 							the member's closing DM, or from the Tickets page. Channel tickets can't be reopened, since
 							the channel is deleted when they close.
 						</li>
-						<li><strong>Add or remove</strong> people, and <strong>rename</strong> the ticket.</li>
+						<li>
+							<strong>Add or remove</strong> people, and <strong>rename</strong> the ticket, in Discord or from
+							the More menu on the Tickets page.
+						</li>
 						<li>
 							<strong>Open</strong> a ticket for a member, for example to follow up on a report. They're
 							pinged into it, you're added to it, and the welcome message says you opened it. The type's

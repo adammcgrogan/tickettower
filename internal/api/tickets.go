@@ -95,7 +95,7 @@ func (s *Server) moveTicket(w http.ResponseWriter, r *http.Request) {
 	user := auth.FromContext(r.Context()).User
 	t, err := s.dashboard.Move(r.Context(), t, in.TypeID, user.ID)
 	if errors.Is(err, ticketbot.ErrChannelDeleted) {
-		writeError(w, http.StatusConflict, "This ticket's channel was deleted in Discord, so the ticket has been closed.")
+		writeError(w, http.StatusConflict, channelDeleted)
 		return
 	} else if msg, ok := ticketbot.UserMessage(err); ok {
 		s.writeFailure(w, invalid("type_id", msg))
@@ -211,7 +211,7 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	msg, err := s.dashboard.Reply(r.Context(), t, user.ID, name, avatar, in.Content)
 	if errors.Is(err, ticketbot.ErrChannelDeleted) {
-		writeError(w, http.StatusConflict, "This ticket's channel was deleted in Discord, so the ticket has been closed.")
+		writeError(w, http.StatusConflict, channelDeleted)
 		return
 	} else if err != nil {
 		s.writeFailure(w, err)

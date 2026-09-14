@@ -74,7 +74,8 @@ func (s *Server) unclaimTicket(w http.ResponseWriter, r *http.Request) {
 	s.writeTicketAction(w, t, err)
 }
 
-type assigneeResponse struct {
+// memberResponse is a server member found by a search.
+type memberResponse struct {
 	ID        snowflake.ID `json:"id"`
 	Name      string       `json:"name"`
 	AvatarURL string       `json:"avatar_url"`
@@ -92,7 +93,7 @@ func (s *Server) listAssignees(w http.ResponseWriter, r *http.Request) {
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
-		writeJSON(w, http.StatusOK, []assigneeResponse{})
+		writeJSON(w, http.StatusOK, []memberResponse{})
 		return
 	}
 	// Discord matches name prefixes; ask for more than shown since staff
@@ -102,12 +103,12 @@ func (s *Server) listAssignees(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, err)
 		return
 	}
-	out := []assigneeResponse{}
+	out := []memberResponse{}
 	for _, m := range members {
 		if m.User.Bot || !s.canHandle(r, t, m) {
 			continue
 		}
-		out = append(out, assigneeResponse{ID: m.User.ID, Name: m.EffectiveName(), AvatarURL: m.EffectiveAvatarURL()})
+		out = append(out, memberResponse{ID: m.User.ID, Name: m.EffectiveName(), AvatarURL: m.EffectiveAvatarURL()})
 		if len(out) == maxAssignees {
 			break
 		}

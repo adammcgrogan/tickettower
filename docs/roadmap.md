@@ -70,6 +70,8 @@
 
 - Open with a slash command: `/ticket open` (types autocomplete; the form comes first when there is one) for members who can't find the buttons, offering only the types on ticket buttons they can see. Staff add `for` to open one for a member: no form, the type's rules on who can open it are skipped apart from the member's open ticket limit, the staff member is added, and the welcome message and log entry say who opened it
 
+- Add, remove and rename from the dashboard: Add someone (a member search by name or pasted user ID), Remove someone (a channel's added people or a thread's members, the opener marked) and Rename in the Tickets page's More menu, with the same rules and notices as `/ticket add`, `/ticket remove` and `/ticket rename` (`…/tickets/{id}/members`, `…/tickets/{id}/rename`, `…/members?q=`)
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.

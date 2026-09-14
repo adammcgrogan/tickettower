@@ -86,6 +86,11 @@ func (s *Server) Handler() http.Handler {
 				r.Group(func(r chi.Router) {
 					r.Use(requireLevel(store.LevelSupport))
 					r.Get("/tickets/{ticketID}/assignees", s.listAssignees)
+					r.Get("/members", s.searchMembers)
+					r.Get("/tickets/{ticketID}/members", s.listTicketMembers)
+					r.Post("/tickets/{ticketID}/members", s.addTicketMember)
+					r.Delete("/tickets/{ticketID}/members/{userID}", s.removeTicketMember)
+					r.Post("/tickets/{ticketID}/rename", s.renameTicket)
 					r.Post("/tickets/{ticketID}/claim", s.claimTicket)
 					r.Post("/tickets/{ticketID}/unclaim", s.unclaimTicket)
 					r.Post("/tickets/{ticketID}/close", s.closeTicket)

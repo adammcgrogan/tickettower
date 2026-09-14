@@ -11,10 +11,11 @@
 		overdueAt,
 		send,
 		snippetParts,
-		type Assignee,
 		type Guild,
+		type Member,
 		type SavedReply,
 		type Ticket,
+		type TicketMember,
 		type TicketType,
 		type Transcript
 	} from '$lib/api';
@@ -278,7 +279,7 @@
 	let claiming = $state(false);
 	let assignOpen = $state(false);
 	let assignQuery = $state('');
-	let assignees = $state<Assignee[]>([]);
+	let assignees = $state<Member[]>([]);
 	let assignSearching = $state(false);
 	let assignError = $state('');
 	let assigning = $state<string | null>(null);
@@ -332,7 +333,7 @@
 		const timer = setTimeout(async () => {
 			assignSearching = true;
 			try {
-				const found = await api<Assignee[]>(
+				const found = await api<Member[]>(
 					`/guilds/${guild.id}/tickets/${t.id}/assignees?q=${encodeURIComponent(q)}`
 				);
 				if (req === assignSeq) assignees = found;
@@ -345,7 +346,7 @@
 		return () => clearTimeout(timer);
 	});
 
-	async function assignTo(a: Assignee) {
+	async function assignTo(a: Member) {
 		if (!detail || assigning) return;
 		const t = detail.ticket;
 		assigning = a.id;
@@ -360,6 +361,149 @@
 			assignError = errorMessage(e);
 		} finally {
 			assigning = null;
+		}
+	}
+
+	// --- Adding and removing people, and renaming ---
+	let addOpen = $state(false);
+	let addQuery = $state('');
+	let addResults = $state<Member[]>([]);
+	let addSearching = $state(false);
+	let addError = $state('');
+	let adding = $state<string | null>(null);
+	let addSeq = 0;
+
+	let removeOpen = $state(false);
+	let members = $state<TicketMember[] | null>(null);
+	let membersError = $state('');
+	let removing = $state<string | null>(null);
+
+	let renameOpen = $state(false);
+	let renameTo = $state('');
+	let renameError = $state('');
+	let renaming = $state(false);
+
+	function openAdd() {
+		addQuery = '';
+		addResults = [];
+		addError = '';
+		addOpen = true;
+	}
+
+	// Searches the server's members as the lead types, keeping only the latest result.
+	$effect(() => {
+		const q = addQuery.trim();
+		if (!addOpen) return;
+		if (!q) {
+			addResults = [];
+			return;
+		}
+		const req = ++addSeq;
+		const timer = setTimeout(async () => {
+			addSearching = true;
+			try {
+				const found = await api<Member[]>(`/guilds/${guild.id}/members?q=${encodeURIComponent(q)}`);
+				if (req === addSeq) {
+					addResults = found;
+					addError = '';
+				}
+			} catch (e) {
+				if (req === addSeq) addError = errorMessage(e);
+			} finally {
+				if (req === addSeq) addSearching = false;
+			}
+		}, 250);
+		return () => clearTimeout(timer);
+	});
+
+	async function addMember(m: Member) {
+		if (!detail || adding) return;
+		const t = detail.ticket;
+		adding = m.id;
+		addError = '';
+		try {
+			await api(`/guilds/${guild.id}/tickets/${t.id}/members`, send('POST', { user_id: m.id }));
+			addOpen = false;
+			toast(`${m.name} added to ticket #${t.number}`);
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				addOpen = false;
+				toast(err.message, 'info');
+				await refreshClosed(t.id);
+			} else addError = errorMessage(err);
+		} finally {
+			adding = null;
+		}
+	}
+
+	async function openRemove() {
+		if (!detail) return;
+		const t = detail.ticket;
+		members = null;
+		membersError = '';
+		removeOpen = true;
+		try {
+			const list = await api<TicketMember[]>(`/guilds/${guild.id}/tickets/${t.id}/members`);
+			if (detail?.ticket.id === t.id) members = list;
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				removeOpen = false;
+				toast(err.message, 'info');
+				await refreshClosed(t.id);
+			} else membersError = errorMessage(err);
+		}
+	}
+
+	async function removeMember(m: TicketMember) {
+		if (!detail || removing) return;
+		const t = detail.ticket;
+		removing = m.id;
+		membersError = '';
+		try {
+			await api(`/guilds/${guild.id}/tickets/${t.id}/members/${m.id}`, send('DELETE'));
+			members = members?.filter((x) => x.id !== m.id) ?? null;
+			toast(m.name ? `${m.name} removed from ticket #${t.number}` : `Removed from ticket #${t.number}`);
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				removeOpen = false;
+				toast(err.message, 'info');
+				await refreshClosed(t.id);
+			} else membersError = errorMessage(err);
+		} finally {
+			removing = null;
+		}
+	}
+
+	function openRename() {
+		const t = detail?.ticket;
+		// A channel's current name is known; a thread's isn't.
+		renameTo = (t && detail?.channels[t.channel_id]) || '';
+		renameError = '';
+		renameOpen = true;
+	}
+
+	async function renameTicket(e?: SubmitEvent) {
+		e?.preventDefault();
+		if (!detail || renaming || !renameTo.trim()) return;
+		const t = detail.ticket;
+		renaming = true;
+		renameError = '';
+		try {
+			await api(`/guilds/${guild.id}/tickets/${t.id}/rename`, send('POST', { name: renameTo }));
+			renameOpen = false;
+			toast(`Ticket #${t.number} renamed`);
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				renameOpen = false;
+				toast(err.message, 'info');
+				await refreshClosed(t.id);
+			} else if (err instanceof ApiError && err.field) renameError = err.message;
+			else {
+				renameOpen = false;
+				toast(errorMessage(err), 'error');
+			}
+		} finally {
+			renaming = false;
 		}
 	}
 
@@ -780,6 +924,36 @@
 										>
 											<Icon name="user" size={14} /> Assign to someone
 										</button>
+										<button
+											role="menuitem"
+											class={menuItem}
+											onclick={() => {
+												moreOpen = false;
+												openAdd();
+											}}
+										>
+											<Icon name="user-plus" size={14} /> Add someone
+										</button>
+										<button
+											role="menuitem"
+											class={menuItem}
+											onclick={() => {
+												moreOpen = false;
+												openRemove();
+											}}
+										>
+											<Icon name="user-minus" size={14} /> Remove someone
+										</button>
+										<button
+											role="menuitem"
+											class={menuItem}
+											onclick={() => {
+												moreOpen = false;
+												openRename();
+											}}
+										>
+											<Icon name="pencil" size={14} /> Rename
+										</button>
 									{/if}
 									{#if t.status === 'open' && canAct && moveTargets.length > 0}
 										<button
@@ -937,6 +1111,140 @@
 	</div>
 	{#snippet footer()}
 		<button class="btn btn-ghost" onclick={() => (assignOpen = false)}>Cancel</button>
+	{/snippet}
+</Dialog>
+
+<Dialog
+	bind:open={addOpen}
+	title="Add someone to ticket #{detail?.ticket.number ?? ''}"
+	description="They can read and reply in the ticket, and a note in it mentions them so they find it."
+>
+	<div class="space-y-3">
+		<Field label="Search by name or user ID" for="add-search" error={addError}>
+			<input
+				id="add-search"
+				class="input"
+				bind:value={addQuery}
+				placeholder="Start typing a name…"
+				autocomplete="off"
+				aria-invalid={!!addError}
+			/>
+		</Field>
+		{#if addQuery.trim()}
+			{#if addResults.length === 0}
+				<p class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">
+					{addSearching ? 'Searching…' : 'Nobody in the server matches that.'}
+				</p>
+			{:else}
+				<ul class="divide-y divide-border rounded-lg border border-border" aria-busy={addSearching}>
+					{#each addResults as m (m.id)}
+						<li>
+							<button
+								class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated disabled:opacity-60"
+								onclick={() => addMember(m)}
+								disabled={!!adding}
+							>
+								<img src={m.avatar_url} alt="" class="size-7 shrink-0 rounded-full bg-elevated" />
+								<span class="min-w-0 flex-1 truncate font-medium">{m.name}</span>
+								<span class="shrink-0 text-xs text-subtle">{adding === m.id ? 'Adding…' : 'Add'}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{/if}
+	</div>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (addOpen = false)}>Cancel</button>
+	{/snippet}
+</Dialog>
+
+<Dialog
+	bind:open={removeOpen}
+	title="Remove someone from ticket #{detail?.ticket.number ?? ''}"
+	description={detail?.ticket.mode === 'thread'
+		? "They're taken out of the thread, and a note in the ticket says so."
+		: 'They lose access to the channel, and a note in the ticket says so. Your support team sees it through its roles, so only people added one by one are listed.'}
+>
+	<div class="space-y-3">
+		{#if membersError}<p class="text-sm text-danger">{membersError}</p>{/if}
+		{#if members === null}
+			{#if !membersError}
+				<div class="space-y-px overflow-hidden rounded-lg border border-border" aria-busy="true">
+					{#each Array(2) as _, i (i)}<div class="h-11 animate-pulse bg-elevated/60"></div>{/each}
+				</div>
+			{/if}
+		{:else}
+			{#if members.length > 0}
+				<ul class="divide-y divide-border rounded-lg border border-border">
+					{#each members as m (m.id)}
+						<li class="flex items-center gap-3 px-3 py-2 text-sm">
+							{#if m.avatar_url}
+								<img src={m.avatar_url} alt="" class="size-7 shrink-0 rounded-full bg-elevated" />
+							{:else}
+								<span class="size-7 shrink-0 rounded-full bg-elevated"></span>
+							{/if}
+							<span class="min-w-0 flex-1 truncate font-medium {m.name ? '' : 'text-muted'}">
+								{m.name || 'Someone who left the server'}
+							</span>
+							{#if m.opener}
+								<span class="shrink-0 text-xs text-subtle">Opened the ticket</span>
+							{:else}
+								<button
+									class="btn btn-ghost h-7 shrink-0 px-2.5 text-xs"
+									onclick={() => removeMember(m)}
+									disabled={!!removing}
+								>
+									{removing === m.id ? 'Removing…' : 'Remove'}
+								</button>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if !members.some((m) => !m.opener)}
+				<div class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">
+					Nobody else has been added to this ticket.
+					<button
+						class="text-fg underline-offset-4 hover:underline"
+						onclick={() => {
+							removeOpen = false;
+							openAdd();
+						}}
+					>
+						Add someone
+					</button>
+				</div>
+			{/if}
+		{/if}
+	</div>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (removeOpen = false)}>Done</button>
+	{/snippet}
+</Dialog>
+
+<Dialog
+	bind:open={renameOpen}
+	title="Rename ticket #{detail?.ticket.number ?? ''}"
+	description="Changes the name of its {detail?.ticket.mode === 'thread' ? 'thread' : 'channel'} in Discord."
+>
+	<form id="rename-form" onsubmit={renameTicket}>
+		<Field label="Name" for="rename-to" hint="Discord allows two renames every 10 minutes." error={renameError}>
+			<input
+				id="rename-to"
+				class="input"
+				bind:value={renameTo}
+				maxlength="100"
+				placeholder="e.g. refund-order-1234"
+				aria-invalid={!!renameError}
+			/>
+		</Field>
+	</form>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (renameOpen = false)}>Cancel</button>
+		<button type="submit" form="rename-form" class="btn btn-primary" disabled={renaming || !renameTo.trim()}>
+			{renaming ? 'Renaming…' : 'Rename'}
+		</button>
 	{/snippet}
 </Dialog>
 

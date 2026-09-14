@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
@@ -231,4 +233,135 @@ func replyMessage(appName, staff, staffAvatar, server, serverIcon, text string) 
 			WithColor(colorAccent).
 			WithFooter(footer, serverIcon)).
 		WithAllowedMentions(&discord.AllowedMentions{})
+}
+
+// TicketMember is someone with their own access to a ticket.
+type TicketMember struct {
+	ID        snowflake.ID `json:"id"`
+	Name      string       `json:"name"`
+	AvatarURL string       `json:"avatar_url"`
+	// Opener is whoever opened the ticket, who can't be removed from it.
+	Opener bool `json:"opener"`
+}
+
+const (
+	// maxThreadMembers is the most members Discord lists in one request.
+	maxThreadMembers = 100
+	// maxChannelMembers caps the member lookups for a channel's list. A
+	// ticket rarely has more than a few people added.
+	maxChannelMembers = 25
+)
+
+// Members lists who has their own access to an open ticket, the opener
+// first: for a channel, the people in its permissions (the support team sees
+// it through its roles, so only people added one by one are listed); for a
+// thread, its members. The bot is left out.
+func (d *Dashboard) Members(ctx context.Context, t store.Ticket) ([]TicketMember, error) {
+	out := []TicketMember{}
+	if t.Mode == store.ModeThread {
+		page := d.b.rest.GetThreadMembersPage(t.ChannelID, 0, maxThreadMembers, rest.WithCtx(ctx))
+		if !page.Next() && !errors.Is(page.Err, rest.ErrNoMorePages) {
+			return nil, d.channelErr(t, page.Err)
+		}
+		for _, tm := range page.Items {
+			if tm.UserID == d.b.botID() {
+				continue
+			}
+			m := TicketMember{ID: tm.UserID, Opener: tm.UserID == t.OpenerID}
+			if tm.Member != nil {
+				m.Name, m.AvatarURL = tm.Member.EffectiveName(), tm.Member.EffectiveAvatarURL()
+			}
+			out = append(out, m)
+		}
+	} else {
+		ch, err := d.b.rest.GetChannel(t.ChannelID, rest.WithCtx(ctx))
+		if err != nil {
+			return nil, d.channelErr(t, err)
+		}
+		gc, ok := ch.(discord.GuildChannel)
+		if !ok {
+			return nil, fmt.Errorf("ticket channel %s isn't a server channel", t.ChannelID)
+		}
+		ids := channelMemberIDs(gc.PermissionOverwrites(), d.b.botID())
+		for _, id := range ids[:min(len(ids), maxChannelMembers)] {
+			m := TicketMember{ID: id, Opener: id == t.OpenerID}
+			// People who have left the server keep their permissions, unnamed.
+			if mem, err := d.b.rest.GetMember(t.GuildID, id, rest.WithCtx(ctx)); err == nil {
+				m.Name, m.AvatarURL = mem.EffectiveName(), mem.EffectiveAvatarURL()
+			}
+			out = append(out, m)
+		}
+	}
+	for i := range out {
+		if out[i].Opener && out[i].Name == "" {
+			out[i].Name = t.OpenerName
+		}
+	}
+	sortMembers(out)
+	return out, nil
+}
+
+// channelMemberIDs returns who has a ticket channel's own permission to see
+// it, apart from the bot: its opener and the people added to it.
+func channelMemberIDs(overwrites discord.PermissionOverwrites, botID snowflake.ID) []snowflake.ID {
+	var ids []snowflake.ID
+	for _, o := range overwrites {
+		if mo, ok := o.(discord.MemberPermissionOverwrite); ok && mo.UserID != botID && mo.Allow.Has(discord.PermissionViewChannel) {
+			ids = append(ids, mo.UserID)
+		}
+	}
+	return ids
+}
+
+// sortMembers puts the opener first, then everyone else by name.
+func sortMembers(ms []TicketMember) {
+	slices.SortStableFunc(ms, func(a, b TicketMember) int {
+		if a.Opener != b.Opener {
+			if a.Opener {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+}
+
+// AddMember gives someone access to an open ticket for a dashboard user, as
+// /ticket add does, and says so in the ticket.
+func (d *Dashboard) AddMember(ctx context.Context, t store.Ticket, byID snowflake.ID, target discord.User) error {
+	if err := d.b.addToTicket(ctx, t.ChannelID, nil, target); err != nil {
+		return d.channelErr(t, err)
+	}
+	d.post(ctx, t, addedMessage(byID, target.ID))
+	return nil
+}
+
+// RemoveMember takes someone's access to an open ticket away for a dashboard
+// user, as /ticket remove does, and says so in the ticket. targetMember is
+// nil if they've left the server.
+func (d *Dashboard) RemoveMember(ctx context.Context, t store.Ticket, byID snowflake.ID, target discord.User, targetMember *discord.ResolvedMember) error {
+	if err := d.b.removeFromTicket(ctx, t.ChannelID, nil, target, targetMember); err != nil {
+		return d.channelErr(t, err)
+	}
+	d.post(ctx, t, removedMessage(byID, target.ID))
+	return nil
+}
+
+// Rename renames an open ticket's channel or thread for a dashboard user.
+func (d *Dashboard) Rename(ctx context.Context, t store.Ticket, name string) error {
+	// Past Discord's two renames every 10 minutes the request waits for the
+	// limit to reset, so give up long before that; renameTicket explains.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return d.channelErr(t, d.b.renameTicket(ctx, t.ChannelID, nil, name))
+}
+
+// channelErr turns Discord's "unknown channel" for a ticket into
+// ErrChannelDeleted, closing the ticket, since the bot never noticed.
+func (d *Dashboard) channelErr(t store.Ticket, err error) error {
+	if discordx.IsCode(err, discordx.CodeUnknownChannel) {
+		d.b.closeDeletedChannel(t.ChannelID)
+		return ErrChannelDeleted
+	}
+	return err
 }

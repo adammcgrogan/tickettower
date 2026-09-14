@@ -457,9 +457,7 @@ func (b *Bot) handleAddCommand(e *handler.CommandEvent) error {
 	if err := b.addToTicket(ctx, e.Channel().ID(), e.Member(), target); err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
 	}
-	return e.CreateMessage(discord.NewMessageCreate().
-		WithContent(discord.UserMention(e.User().ID) + " added " + discord.UserMention(target.ID) + " to this ticket.").
-		WithAllowedMentions(&discord.AllowedMentions{Users: []snowflake.ID{target.ID}}))
+	return e.CreateMessage(addedMessage(e.User().ID, target.ID))
 }
 
 func (b *Bot) handleRemoveCommand(e *handler.CommandEvent) error {
@@ -474,7 +472,7 @@ func (b *Bot) handleRemoveCommand(e *handler.CommandEvent) error {
 	if err := b.removeFromTicket(ctx, e.Channel().ID(), e.Member(), target, targetMember); err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
 	}
-	return e.CreateMessage(public(discord.UserMention(e.User().ID) + " removed " + discord.UserMention(target.ID) + " from this ticket."))
+	return e.CreateMessage(removedMessage(e.User().ID, target.ID))
 }
 
 func (b *Bot) handleRenameCommand(e *handler.CommandEvent) error {

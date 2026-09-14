@@ -235,8 +235,11 @@ export function canReopen(t: Ticket): boolean {
 	return !!t.reopen_until && new Date(t.reopen_until) > new Date();
 }
 
-/** A staff member who can take a ticket, from the assignee search. */
-export type Assignee = { id: string; name: string; avatar_url: string };
+/** A server member from a search: someone to assign a ticket to, or add to it. */
+export type Member = { id: string; name: string; avatar_url: string };
+
+/** Someone with their own access to a ticket. Whoever opened it can't be removed. */
+export type TicketMember = Member & { opener: boolean };
 
 /** Wrap the matching words in a search snippet; see `snippetParts`. */
 export const MATCH_START = '\ue000';

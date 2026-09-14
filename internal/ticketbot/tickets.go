@@ -811,13 +811,14 @@ func (b *Bot) guildName(ctx context.Context, id snowflake.ID) string {
 	return "the server"
 }
 
-// addToTicket gives a user access to the ticket.
+// addToTicket gives a user access to the ticket. m is nil for dashboard
+// users, who have already been checked.
 func (b *Bot) addToTicket(ctx context.Context, channelID snowflake.ID, m *discord.ResolvedMember, target discord.User) error {
 	t, tt, err := b.loadTicket(ctx, channelID)
 	if err != nil {
 		return err
 	}
-	if !isStaff(m, tt) {
+	if m != nil && !isStaff(m, tt) {
 		return userErr("Only support staff can add people to tickets.")
 	}
 	if t.Mode == store.ModeThread {
@@ -828,18 +829,32 @@ func (b *Bot) addToTicket(ctx context.Context, channelID snowflake.ID, m *discor
 		discord.MemberPermissionOverwriteUpdate{Allow: &allow}, rest.WithCtx(ctx))
 }
 
+// addedMessage tells the ticket someone was added, mentioning them so they
+// find it.
+func addedMessage(by, target snowflake.ID) discord.MessageCreate {
+	return discord.NewMessageCreate().
+		WithContent(discord.UserMention(by) + " added " + discord.UserMention(target) + " to this ticket.").
+		WithAllowedMentions(&discord.AllowedMentions{Users: []snowflake.ID{target}})
+}
+
+// removedMessage tells the ticket someone was removed.
+func removedMessage(by, target snowflake.ID) discord.MessageCreate {
+	return public(discord.UserMention(by) + " removed " + discord.UserMention(target) + " from this ticket.")
+}
+
 // removeFromTicket revokes a user's access to the ticket. It only reports
 // success when access actually changed: someone who can see the ticket
 // through a support role or Administrator keeps it, and someone who was
 // never added has nothing to remove. targetMember is nil if the person has
-// left the server.
+// left the server. m is nil for dashboard users, who have already been
+// checked.
 func (b *Bot) removeFromTicket(ctx context.Context, channelID snowflake.ID, m *discord.ResolvedMember,
 	target discord.User, targetMember *discord.ResolvedMember) error {
 	t, tt, err := b.loadTicket(ctx, channelID)
 	if err != nil {
 		return err
 	}
-	if !isStaff(m, tt) {
+	if m != nil && !isStaff(m, tt) {
 		return userErr("Only support staff can remove people from tickets.")
 	}
 	if target.ID == t.OpenerID {
@@ -887,13 +902,14 @@ func keepsAccess(targetID snowflake.ID, target *discord.ResolvedMember, tt *stor
 	return nil
 }
 
-// renameTicket renames the ticket's channel or thread.
+// renameTicket renames the ticket's channel or thread. m is nil for
+// dashboard users, who have already been checked.
 func (b *Bot) renameTicket(ctx context.Context, channelID snowflake.ID, m *discord.ResolvedMember, name string) error {
 	t, tt, err := b.loadTicket(ctx, channelID)
 	if err != nil {
 		return err
 	}
-	if !isStaff(m, tt) {
+	if m != nil && !isStaff(m, tt) {
 		return userErr("Only support staff can rename tickets.")
 	}
 	name = strings.TrimSpace(name)

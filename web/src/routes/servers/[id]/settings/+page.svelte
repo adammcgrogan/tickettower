@@ -28,7 +28,7 @@
 	type RoleLevel = DashboardRole['level'];
 	const levels: { value: RoleLevel; label: string; body: string }[] = [
 		{ value: 'viewer', label: 'Viewer', body: 'Read tickets, transcripts and analytics.' },
-		{ value: 'support', label: 'Support', body: 'Viewer, plus reply to, close, reopen, move and hold tickets, and block members.' },
+		{ value: 'support', label: 'Support', body: 'Viewer, plus reply to, close, reopen, move and hold tickets, add or remove people, and block members.' },
 		{ value: 'admin', label: 'Admin', body: 'Support, plus change ticket types, buttons, saved replies and settings.' }
 	];
 
