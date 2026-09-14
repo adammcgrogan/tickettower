@@ -74,7 +74,7 @@ func TestBlockExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.GetBlock(ctx, testGuild, 8)
-	if err != nil || got.ExpiresAt == nil || !got.ExpiresAt.Equal(future) {
+	if err != nil || got.ExpiresAt == nil || !got.ExpiresAt.Equal(future.Truncate(time.Microsecond)) {
 		t.Fatalf("GetBlock for active block = %+v, %v", got, err)
 	}
 
