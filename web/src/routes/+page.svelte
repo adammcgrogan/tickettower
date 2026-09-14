@@ -86,9 +86,9 @@
 
 	const comparison: { label: string; tower: string | boolean; a: string | boolean; b: string | boolean }[] = [
 		{ label: 'Starting price', tower: 'Free', a: 'Free, Pro from $8/mo', b: 'Free, Premium from $2.99/mo' },
-		{ label: 'Source code', tower: 'Public on GitHub', a: 'Closed', b: 'Closed' },
 		{ label: 'Reply to tickets from a browser', tower: true, a: false, b: true },
-		{ label: 'Analytics and response times', tower: true, a: false, b: false }
+		{ label: 'Analytics and response times', tower: true, a: false, b: false },
+		{ label: 'Quiet tickets close themselves', tower: true, a: true, b: false }
 	];
 
 	const faqs: { q: string; a: string; link?: { href: string; label: string } }[] = [
