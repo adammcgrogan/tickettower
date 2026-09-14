@@ -128,7 +128,7 @@ export type TicketType = {
 	ask_rating: boolean;
 	/** The wording of that request; empty uses the default. */
 	rating_prompt: string;
-	/** The colour of this type's button on ticket buttons. */
+	/** The colour of this type's button on its ticket panel. */
 	button_style: ButtonStyle;
 	/** Replaces the type's name on the button when set. */
 	button_label: string;
@@ -387,8 +387,8 @@ export type Transcript = {
 
 /**
  * Something in a server's setup that stops tickets working. `kind` says where
- * it's fixed: a ticket type or ticket buttons (by `id`), a ticket type that
- * isn't on any published ticket buttons ("unlisted"), or the log channel.
+ * it's fixed: a ticket type or ticket panel (by `id`), a ticket type that
+ * isn't on any published ticket panel ("unlisted"), or the log channel.
  */
 export type SetupProblem = {
 	kind: 'ticket_type' | 'panel' | 'unlisted' | 'log_channel';

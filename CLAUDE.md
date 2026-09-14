@@ -61,7 +61,7 @@ web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,buttons
 - Tests: store tests run against real Postgres (`testStore(t)` truncates). The API tests use miniredis, except billing tests, which also hit real Postgres directly. Because `internal/store` and `internal/api` share one `TEST_DATABASE_URL` instance, always run `go test` with `-p 1` so their package binaries don't truncate/insert concurrently. Add tests with new store queries.
 
 **Naming**
-- What the code calls a **panel** (the message with buttons or a dropdown that members click to open a ticket) is called **ticket buttons** everywhere people read it: the dashboard, bot replies and API error messages. The code, API routes (`/api/guilds/{id}/panels`), store and tables keep `panel`; the dashboard URL is `/servers/[id]/buttons` (old `/panels` links redirect).
+- What the code calls a **panel** (the message with buttons or a dropdown that members click to open a ticket) is called a **ticket panel** everywhere people read it too: the dashboard, bot replies and API error messages. The dashboard URL is `/servers/[id]/panels` (old `/buttons` links redirect).
 
 **Frontend**
 - Design ("dispatch desk"): ink-navy surfaces and one signal-amber accent `#f2b544` (text on it uses `on-accent`). Amber means "needs action": primary buttons and tickets waiting on the team, nothing decorative. Instrument Sans for the UI; Big Shoulders Display (`font-display`) only for page titles, big figures and ticket numbers. The one loud element is `TicketStub` (a ticket number shaped like an admission stub); keep everything around it quiet: hairline dividers rather than stacks of cards, sentence-case labels, no all-caps eyebrows, no "A · B" meta strings.

@@ -218,15 +218,15 @@
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 
-	// Which ticket buttons show this type. A new type can go straight onto
-	// existing ones, so it isn't forgotten; with just one set, that's the
+	// Which ticket panels show this type. A new type can go straight onto
+	// existing ones, so it isn't forgotten; with just one panel, that's the
 	// obvious choice.
 	const MAX_PANEL_TYPES = 25;
 	let panels = $state<Panel[] | null>(null);
 	let addTo = $state<number[]>([]);
 	const onPanel = (p: Panel) => !!initial && p.ticket_type_ids.includes(initial.id);
 	const isFull = (p: Panel) => !onPanel(p) && p.ticket_type_ids.length >= MAX_PANEL_TYPES;
-	// Ticket buttons need at least one type, so their only one can't be taken off.
+	// A ticket panel needs at least one type, so its only one can't be taken off.
 	const isOnly = (p: Panel) => onPanel(p) && p.ticket_type_ids.length === 1;
 
 	const snapshot = () => JSON.stringify([form, [...addTo].sort()]);
@@ -238,7 +238,7 @@
 			.then((p) => {
 				panels = p;
 				if (initial) addTo = p.filter(onPanel).map((x) => x.id);
-				// A copy starts on the same ticket buttons as the original, where there's room.
+				// A copy starts on the same ticket panels as the original, where there's room.
 				else if (copyOf) addTo = p.filter((x) => x.ticket_type_ids.includes(copyOf.id) && !isFull(x)).map((x) => x.id);
 				else if (p.length === 1 && !isFull(p[0])) addTo = [p[0].id];
 				saved = snapshot();
@@ -254,7 +254,7 @@
 		}
 	});
 
-	/** Puts the type on, or takes it off, the ticket buttons that changed, returning how many failed. */
+	/** Puts the type on, or takes it off, the ticket panels that changed, returning how many failed. */
 	async function syncPanels(typeId: number): Promise<number> {
 		let failed = 0;
 		for (const p of panels ?? []) {
@@ -337,7 +337,7 @@
 					send('PATCH', form)
 				);
 				const failed = await syncPanels(initial.id);
-				if (failed) toast("Saved, but your ticket buttons couldn't all be updated. Try again from Ticket buttons.", 'error');
+				if (failed) toast("Saved, but your ticket panels couldn't all be updated. Try again from Ticket panels.", 'error');
 				else toast('Ticket type saved');
 				if (res.warning) toast(res.warning, 'info');
 				saved = snapshot();
@@ -346,9 +346,9 @@
 				const created = await api<TicketType>(`/guilds/${guildId}/ticket-types`, send('POST', form));
 				const failed = await syncPanels(created.id);
 				if (failed) {
-					toast("Ticket type created, but it couldn't be added to your ticket buttons. Add it from Ticket buttons.", 'error');
+					toast("Ticket type created, but it couldn't be added to your ticket panels. Add it from Ticket panels.", 'error');
 				} else {
-					toast(addTo.length ? 'Ticket type created and added to your ticket buttons' : 'Ticket type created');
+					toast(addTo.length ? 'Ticket type created and added to your ticket panels' : 'Ticket type created');
 				}
 				goto(`/servers/${guildId}/ticket-types`);
 			}
@@ -484,7 +484,7 @@
 						label="Description"
 						for="description"
 						optional
-						hint="Shown under the option when ticket buttons are shown as a dropdown menu."
+						hint="Shown under the option when the ticket panel is shown as a dropdown menu."
 						error={errors.description}
 					>
 						<input
@@ -639,7 +639,7 @@
 				</section>
 			{:else if tab === 'button'}
 				<section class="space-y-5 p-5">
-					{@render heading('The button', 'How this type looks on your ticket buttons message.')}
+					{@render heading('The button', 'How this type looks on your ticket panel message.')}
 					<div class="grid gap-5 sm:grid-cols-[1fr_auto]">
 						<Field
 							label="Button label"
@@ -683,15 +683,15 @@
 				<section class="space-y-4 p-5">
 					{@render heading(
 						'Shown on',
-						'Members can only open this type from ticket buttons it’s on. Published buttons update in Discord straight away.'
+						'Members can only open this type from ticket panels it’s on. Published panels update in Discord straight away.'
 					)}
 					{#if panels === null}
 						<div class="h-16 animate-pulse rounded-lg bg-elevated"></div>
 					{:else if panels.length === 0}
 						<p class="rounded-lg border border-dashed border-border p-4 text-sm text-muted">
-							You haven't made any ticket buttons yet.
-							<a href="/servers/{guildId}/buttons/new" class="text-fg underline-offset-4 hover:underline">
-								Create them
+							You haven't made any ticket panels yet.
+							<a href="/servers/{guildId}/panels/new" class="text-fg underline-offset-4 hover:underline">
+								Create one
 							</a>
 							once this type is saved.
 						</p>
@@ -723,7 +723,7 @@
 						</ul>
 						{#if addTo.length === 0}
 							<p class="flex items-center gap-1.5 text-xs text-muted">
-								<Icon name="alert" size={13} /> Not on any ticket buttons, so members can't open it yet.
+								<Icon name="alert" size={13} /> Not on any ticket panel, so members can't open it yet.
 							</p>
 						{/if}
 					{/if}
@@ -949,7 +949,7 @@
 				<section class="space-y-5 p-5">
 					{@render heading(
 						'Roles',
-						"Anyone who can see your ticket buttons can open this type, unless you narrow it down here. Members who don't qualify are told why when they click."
+						"Anyone who can see your ticket panel can open this type, unless you narrow it down here. Members who don't qualify are told why when they click."
 					)}
 					<Field
 						label="Required roles"

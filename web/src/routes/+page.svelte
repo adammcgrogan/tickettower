@@ -31,7 +31,7 @@
 			body: 'Quick setup asks what tickets are for and who handles them, then creates your first ticket type.'
 		},
 		{
-			title: 'Post your ticket buttons',
+			title: 'Post your ticket panel',
 			body: 'Pick a channel and publish. Members can open tickets straight away.'
 		}
 	];
@@ -94,11 +94,11 @@
 	const faqs: { q: string; a: string; link?: { href: string; label: string } }[] = [
 		{
 			q: 'Is it really free?',
-			a: 'The free plan covers everything most servers need: transcripts, analytics and replying from the dashboard, with generous limits on ticket types and ticket buttons. A paid premium plan raises those limits for larger servers.'
+			a: 'The free plan covers everything most servers need: transcripts, analytics and replying from the dashboard, with generous limits on ticket types and ticket panels. A paid premium plan raises those limits for larger servers.'
 		},
 		{
 			q: 'How long does setup take?',
-			a: 'A few minutes. Add the bot, answer the quick setup questions on the Home page and post your ticket buttons. The setup check tells you if a permission is missing.',
+			a: 'A few minutes. Add the bot, answer the quick setup questions on the Home page and post your ticket panel. The setup check tells you if a permission is missing.',
 			link: { href: '/help/getting-started', label: 'Read the setup guide' }
 		},
 		{
@@ -117,11 +117,11 @@
 		},
 		{
 			q: 'How many ticket types can I have?',
-			a: 'Up to 25 ticket types and 10 sets of ticket buttons per server. Each set holds up to 25 buttons, which is as many as Discord allows in one message.'
+			a: 'Up to 25 ticket types and 10 ticket panels per server. Each panel holds up to 25 buttons, which is as many as Discord allows in one message.'
 		},
 		{
 			q: "I'm using another ticket bot. Can I switch?",
-			a: 'Add it alongside your current bot and post new ticket buttons. Once the old tickets are finished, remove the old buttons and bot.'
+			a: 'Add it alongside your current bot and post a new ticket panel. Once the old tickets are finished, remove the old panel and bot.'
 		},
 		{
 			q: 'Can I host it myself?',
@@ -206,7 +206,7 @@
 				</ul>
 			</div>
 
-			<div class="rounded-2xl border border-border bg-surface p-2" aria-label="Example ticket buttons">
+			<div class="rounded-2xl border border-border bg-surface p-2" aria-label="Example ticket panel">
 				<PanelPreview
 					title="Need a hand?"
 					description="Pick a topic below and we'll open a private ticket for you. Our team will be with you shortly."
@@ -415,10 +415,10 @@
 				<ul class="space-y-3 border-t border-border pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
 					{#each [
 						'100 ticket types instead of 25',
-						'50 sets of ticket buttons instead of 10',
+						'50 ticket panels instead of 10',
 						'200 saved replies instead of 50',
 						'Transcripts kept forever, not just 90 days',
-						`No "Powered by ${APP_NAME}" footer on ticket buttons`
+						`No "Powered by ${APP_NAME}" footer on ticket panels`
 					] as benefit (benefit)}
 						<li class="flex items-start gap-3 text-sm">
 							<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">

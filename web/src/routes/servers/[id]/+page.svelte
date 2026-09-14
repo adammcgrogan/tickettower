@@ -124,16 +124,16 @@
 			href: `${base}/ticket-types/new`
 		},
 		{
-			title: 'Design your ticket buttons',
+			title: 'Design your ticket panel',
 			body: 'The message members click to open a ticket.',
 			done: !!panels?.length,
-			href: `${base}/buttons/new`
+			href: `${base}/panels/new`
 		},
 		{
-			title: 'Publish them',
+			title: 'Publish it',
 			body: 'Post the buttons in a channel and start taking tickets.',
 			done: live,
-			href: panels?.length ? `${base}/buttons/${panels[0].id}` : `${base}/buttons`
+			href: panels?.length ? `${base}/panels/${panels[0].id}` : `${base}/panels`
 		}
 	]);
 	const nextStep = $derived(steps.findIndex((s) => !s.done));
@@ -169,7 +169,7 @@
 		<section class="mt-8 rounded-xl border border-border bg-surface">
 			<div class="border-b border-border px-5 py-4">
 				<h2 class="font-semibold">Finish setting up</h2>
-				<p class="mt-0.5 text-sm text-muted">Members can open tickets once your ticket buttons are published.</p>
+				<p class="mt-0.5 text-sm text-muted">Members can open tickets once your ticket panel is published.</p>
 			</div>
 			<ol class="divide-y divide-border">
 				{#each steps as step, i (step.title)}

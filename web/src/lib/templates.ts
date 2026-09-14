@@ -1,6 +1,6 @@
 /**
  * Starter setups for quick setup: a few ticket types with questions and
- * welcome messages, plus the ticket buttons that offer them. Where tickets open
+ * welcome messages, plus the ticket panel that offers them. Where tickets open
  * and who handles them are asked separately, since they depend on the server.
  * Everything here must pass the API's ticket type and panel validation.
  */

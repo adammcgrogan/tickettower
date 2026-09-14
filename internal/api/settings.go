@@ -142,7 +142,7 @@ func clonePtr[T any](p *T) *T {
 }
 
 // deleteGuildData wipes everything stored for the server: tickets and
-// transcripts, ticket types, ticket buttons (their messages are removed from
+// transcripts, ticket types, ticket panels (their messages are removed from
 // Discord too), saved replies, blocks and settings. Server managers only, and
 // only once every ticket is closed, since the bot is still serving open ones.
 func (s *Server) deleteGuildData(w http.ResponseWriter, r *http.Request) {

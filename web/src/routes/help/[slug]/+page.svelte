@@ -55,7 +55,7 @@
 				{#if guide.slug === 'getting-started'}
 					<p>
 						Members open tickets by clicking a button in your server, or with <code>/ticket open</code>.
-						This guide gets you from nothing to working ticket buttons in about a minute.
+						This guide gets you from nothing to a working ticket panel in about a minute.
 					</p>
 					<ol>
 						<li>
@@ -73,9 +73,9 @@
 						<li>Click a button yourself to check a ticket opens, then close it.</li>
 					</ol>
 
-					<h2>Changing your ticket buttons</h2>
+					<h2>Changing your ticket panel</h2>
 					<p>
-						<strong>Ticket buttons</strong> in the dashboard lets you change the message's title,
+						<strong>Ticket panels</strong> in the dashboard lets you change the message's title,
 						description and colour, add a banner image or thumbnail, show the ticket types as buttons or a
 						dropdown menu (with your own prompt), and choose which ticket types appear. One message can
 						offer up to 25 ticket types. Each button's colour and label come from its ticket type.
@@ -110,7 +110,7 @@
 						The name is the button's label, unless you set a <strong>button label</strong> of its own (so
 						the button can say "Get help" while the type is called "General support"). Each button also
 						has a <strong>colour</strong>: blurple, grey, green or red. The description is shown under the
-						option when your ticket buttons are a dropdown menu.
+						option when your ticket panel is a dropdown menu.
 					</p>
 					<p>
 						For the emoji, use a single emoji, or a custom emoji from your server written as
@@ -182,7 +182,7 @@
 
 					<h2>Who can open these tickets</h2>
 					<p>
-						By default, anyone who can see your ticket buttons can open any type, from the buttons or with
+						By default, anyone who can see your ticket panel can open any type, from the buttons or with
 						<code>/ticket open</code>. Each type can narrow that down:
 					</p>
 					<ul>
@@ -320,7 +320,7 @@
 						</li>
 						<li>
 							<code>/ticket open</code> with <code>for</code>: open a ticket for a member, from anywhere in
-							the server. Members can use <code>/ticket open</code> too, for the types on ticket buttons
+							the server. Members can use <code>/ticket open</code> too, for the types on the ticket panel
 							they can see.
 						</li>
 					</ul>
@@ -350,7 +350,7 @@
 							dashboard, and block members.
 						</li>
 						<li>
-							<strong>Admin</strong>: also change ticket types, ticket buttons, saved replies and settings.
+							<strong>Admin</strong>: also change ticket types, ticket panels, saved replies and settings.
 						</li>
 					</ul>
 					<p>

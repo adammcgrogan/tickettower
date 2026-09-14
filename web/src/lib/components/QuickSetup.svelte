@@ -23,10 +23,10 @@
 
 	/**
 	 * Sets a server up in one step: ticket types from a template (or one named
-	 * type), plus ticket buttons for them posted in a channel. A suggested
+	 * type), plus a ticket panel for them posted in a channel. A suggested
 	 * starting point, not the only option — Home shows it for a new server,
 	 * and everything it creates can be freely rebuilt afterwards from Ticket
-	 * types and Ticket buttons.
+	 * types and Ticket panels.
 	 */
 	let {
 		guildId,
@@ -110,7 +110,7 @@
 	<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_24rem]">
 		<form onsubmit={submit} class="space-y-6 p-6 sm:p-8">
 			<div>
-				<h2 class="text-lg font-semibold">Get your ticket buttons live</h2>
+				<h2 class="text-lg font-semibold">Get your ticket panel live</h2>
 				<p class="mt-1 max-w-lg text-sm text-muted">
 					Answer a few questions and {APP_NAME} will create your ticket types and post buttons members can
 					click to open a ticket. These are a starting point — rename, add or remove types, questions and

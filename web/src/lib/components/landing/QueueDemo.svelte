@@ -45,7 +45,7 @@
 			<p class="mt-5 px-2 text-xs text-subtle">Setup</p>
 			<ul class="mt-1.5 space-y-0.5 text-sm text-muted">
 				<li class="flex items-center gap-2.5 px-2 py-1.5"><Icon name="tag" size={15} />Ticket types</li>
-				<li class="flex items-center gap-2.5 px-2 py-1.5"><Icon name="panel" size={15} />Ticket buttons</li>
+				<li class="flex items-center gap-2.5 px-2 py-1.5"><Icon name="panel" size={15} />Ticket panels</li>
 				<li class="flex items-center gap-2.5 px-2 py-1.5"><Icon name="settings" size={15} />Settings</li>
 			</ul>
 		</aside>

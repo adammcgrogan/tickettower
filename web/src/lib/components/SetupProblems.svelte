@@ -17,9 +17,9 @@
 			case 'ticket_type':
 				return `${base}/ticket-types/${p.id}`;
 			case 'panel':
-				return `${base}/buttons/${p.id}`;
+				return `${base}/panels/${p.id}`;
 			case 'unlisted':
-				return `${base}/buttons`;
+				return `${base}/panels`;
 			case 'log_channel':
 				return `${base}/settings`;
 		}

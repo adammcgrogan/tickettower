@@ -277,7 +277,7 @@
 			<p class="hint mx-auto mt-1 max-w-sm">
 				Once members start opening tickets, you'll see how quickly your team replies and how members rate their help.
 			</p>
-			<a href="/servers/{guildId}/buttons" class="btn btn-primary mt-5">Set up ticket buttons</a>
+			<a href="/servers/{guildId}/panels" class="btn btn-primary mt-5">Set up your ticket panel</a>
 		{/if}
 	</div>
 {:else}

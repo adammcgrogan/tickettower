@@ -30,7 +30,7 @@ const (
 // before a member runs into it.
 type problem struct {
 	// Kind says where to fix it: "ticket_type" and "panel" (with ID), "unlisted"
-	// (a ticket type, by ID, that isn't on any published ticket buttons) or
+	// (a ticket type, by ID, that isn't on any published ticket panel) or
 	// "log_channel".
 	Kind   string `json:"kind"`
 	ID     int64  `json:"id,omitempty"`
@@ -195,7 +195,7 @@ func setupProblems(s setup) []problem {
 		case s.channel(*p.ChannelID) == nil:
 			out = append(out, problem{Kind: "panel", ID: p.ID,
 				Title:  fmt.Sprintf("%q was in a deleted channel", p.Title),
-				Detail: "Members can't see these ticket buttons any more. Publish them in another channel."})
+				Detail: "Members can't see this ticket panel any more. Publish it in another channel."})
 		case len(panels.Ordered(p, s.types)) == 0:
 			out = append(out, problem{Kind: "panel", ID: p.ID,
 				Title:  fmt.Sprintf("%q has no ticket types", p.Title),
@@ -208,7 +208,7 @@ func setupProblems(s setup) []problem {
 			if !slices.ContainsFunc(published, func(p store.Panel) bool { return slices.Contains(p.TicketTypeIDs, t.ID) }) {
 				out = append(out, problem{Kind: "unlisted", ID: t.ID,
 					Title:  fmt.Sprintf("Members can't choose %s", t.Name),
-					Detail: "It isn't on any published ticket buttons. Add it to your ticket buttons to start taking these tickets."})
+					Detail: "It isn't on any published ticket panel. Add it to your ticket panel to start taking these tickets."})
 			}
 		}
 	}

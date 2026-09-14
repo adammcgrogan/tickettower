@@ -19,8 +19,8 @@ import (
 
 // --- /ticket open ---
 
-// handleOpenCommand opens a ticket without the ticket buttons, for members
-// who can't find them. Staff can open one for a member with "for".
+// handleOpenCommand opens a ticket without the ticket panel, for members
+// who can't find it. Staff can open one for a member with "for".
 func (b *Bot) handleOpenCommand(e *handler.CommandEvent) error {
 	data := e.SlashCommandInteractionData()
 	guildID, m := e.GuildID(), e.Member()
@@ -103,7 +103,7 @@ func (b *Bot) openFor(ctx context.Context, guildID snowflake.ID, by *discord.Res
 }
 
 // typeToOpen finds the ticket type a member asked for with /ticket open.
-// Members can only open types whose ticket buttons they can see, as with the
+// Members can only open types whose ticket panel they can see, as with the
 // buttons themselves; other types are reported as not existing, so hidden
 // ones stay hidden. Their roles are checked as the ticket opens.
 func (b *Bot) typeToOpen(ctx context.Context, guildID snowflake.ID, m *discord.ResolvedMember, value string) (store.TicketType, error) {
@@ -125,7 +125,7 @@ func (b *Bot) typeToOpen(ctx context.Context, guildID snowflake.ID, m *discord.R
 	return tt, nil
 }
 
-// visibleTypeIDs returns the ticket types on ticket buttons the member can
+// visibleTypeIDs returns the ticket types on the ticket panel the member can
 // see, from the gateway cache, or nil for server managers, who can open any.
 func (b *Bot) visibleTypeIDs(ctx context.Context, guildID snowflake.ID, m *discord.ResolvedMember) (map[int64]bool, error) {
 	if isStaff(m, nil) {
@@ -143,7 +143,7 @@ func (b *Bot) visibleTypeIDs(ctx context.Context, guildID snowflake.ID, m *disco
 	}), nil
 }
 
-// visibleTypes returns the ticket types on published ticket buttons in the
+// visibleTypes returns the ticket types on published ticket panels in the
 // channels canView allows.
 func visibleTypes(panels []store.Panel, canView func(channelID snowflake.ID) bool) map[int64]bool {
 	out := map[int64]bool{}
@@ -187,7 +187,7 @@ func (b *Bot) handleOpenAutocomplete(e *handler.AutocompleteEvent) error {
 }
 
 // openable filters types down to those a member could open with /ticket
-// open: set up, on ticket buttons they can see (when visible isn't nil) and
+// open: set up, on the ticket panel they can see (when visible isn't nil) and
 // not ruled out by their roles. Staff opening a ticket for someone else
 // (forSomeone) get every set-up type they handle instead.
 func openable(types []store.TicketType, m *discord.ResolvedMember, forSomeone bool, visible map[int64]bool) []store.TicketType {

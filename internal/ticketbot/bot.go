@@ -252,7 +252,7 @@ func (b *Bot) welcome(guildID, channelID snowflake.ID) {
 	url := fmt.Sprintf("%s/servers/%s", b.cfg.PublicURL, guildID)
 	desc := "Members will be able to open a private ticket with your team from a button, and every conversation " +
 		"is saved as a transcript.\n\nTo get started, choose where tickets open and who handles them, then post " +
-		"your ticket buttons. It takes about a minute in the dashboard."
+		"your ticket panel. It takes about a minute in the dashboard."
 	msg := discord.NewMessageCreate()
 	// Discord rejects link buttons to non-https URLs.
 	if strings.HasPrefix(url, "https://") {

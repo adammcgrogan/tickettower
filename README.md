@@ -11,14 +11,14 @@ managed from a clean web dashboard.
 1. [Add the bot](https://tickettower.net/api/invite) to your server.
 2. Log in at [tickettower.net](https://tickettower.net) with Discord and pick your server.
 3. Follow the quick setup on the Home page: create a ticket type, then post your
-   ticket buttons in a channel.
+   ticket panel in a channel.
 
 That's it. Members click a button, and a private ticket opens for them and your
 support team.
 
 ## Features
 
-- **Ticket buttons**: post a message with buttons or a dropdown menu, designed in
+- **Ticket panels**: post a message with buttons or a dropdown menu, designed in
   the dashboard with a live preview, with your own button colours, labels and
   images
 - **Ticket types**: each opens a private channel or a private thread, with its

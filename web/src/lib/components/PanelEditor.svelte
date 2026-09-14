@@ -122,8 +122,8 @@
 		const p = await save();
 		if (!p) return;
 		if (isNew) {
-			toast("Saved. Publish them to a channel when you're ready.");
-			goto(`/servers/${guildId}/buttons/${p.id}`, { replaceState: true });
+			toast("Saved. Publish it to a channel when you're ready.");
+			goto(`/servers/${guildId}/panels/${p.id}`, { replaceState: true });
 		} else {
 			toast(p.message_id ? 'Saved and updated in Discord' : 'Saved');
 		}
@@ -373,9 +373,9 @@
 		>
 			<span class="pl-1 text-xs text-muted">{dirty ? 'Unsaved changes' : panel ? 'All changes saved' : ''}</span>
 			<div class="flex gap-2">
-				<a href="/servers/{guildId}/buttons" class="btn btn-ghost">Back</a>
+				<a href="/servers/{guildId}/panels" class="btn btn-ghost">Back</a>
 				<button type="submit" class="btn btn-primary" disabled={saving || (!!panel && !dirty)}>
-					{saving ? 'Saving…' : panel ? 'Save changes' : 'Create ticket buttons'}
+					{saving ? 'Saving…' : panel ? 'Save changes' : 'Create ticket panel'}
 				</button>
 			</div>
 		</div>
@@ -398,10 +398,10 @@
 
 <Dialog
 	bind:open={publishOpen}
-	title={panel?.message_id ? 'Republish ticket buttons' : 'Publish ticket buttons'}
+	title={panel?.message_id ? 'Republish ticket panel' : 'Publish ticket panel'}
 	description={panel?.message_id
 		? 'Publishing to the same channel updates the existing message. Choosing a new channel moves it.'
-		: 'The bot will post these buttons so members can start opening tickets.'}
+		: 'The bot will post this panel so members can start opening tickets.'}
 >
 	<Field label="Channel" for="publish-channel" error={publishError}>
 		<ChannelSelect

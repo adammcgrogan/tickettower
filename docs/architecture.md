@@ -36,7 +36,7 @@ Names (`opener_name`, `type_name`, …) are snapshots so history reads well afte
 
 ## Key flows
 
-**Opening a ticket.** A panel button (`/panel/open/{typeID}`), the dropdown (`/panel/select`) or `/ticket open` triggers `ticketbot.openTicket`. Both it and `formFor` run the same access check first (`ticketbot/access.go`): a server-wide block (`ticket_blocks`), the type's blocked and required roles, the member's open-ticket limit and the type's cooldown since their last ticket of it closed, in that order, so a blocked member learns nothing else. Staff block and unblock with `/ticket block` and `/ticket unblock` (anyone on any type's support team, or a manager) or from Settings. If the type has questions, `formFor` shows a modal (`/ticket-form/{source}/{typeID}/{version}`); its submit then calls `openTicket` with the answers. `version` fingerprints the questions, so answers to a form edited mid-fill are rejected rather than mismatched. `/ticket open` (`ticketbot/open.go`) only offers a member the types on ticket buttons they can see (worked out from the panel channels' overwrites in the gateway cache), so it never opens a type the buttons wouldn't; any other type is reported as unknown. With `for`, staff open a ticket for a member instead: there's no form, the type's rules on who can open it are skipped apart from the member's open-ticket limit (`onBehalfErr`), the staff member is added to the ticket, and the welcome message and log entry say who opened it.
+**Opening a ticket.** A panel button (`/panel/open/{typeID}`), the dropdown (`/panel/select`) or `/ticket open` triggers `ticketbot.openTicket`. Both it and `formFor` run the same access check first (`ticketbot/access.go`): a server-wide block (`ticket_blocks`), the type's blocked and required roles, the member's open-ticket limit and the type's cooldown since their last ticket of it closed, in that order, so a blocked member learns nothing else. Staff block and unblock with `/ticket block` and `/ticket unblock` (anyone on any type's support team, or a manager) or from Settings. If the type has questions, `formFor` shows a modal (`/ticket-form/{source}/{typeID}/{version}`); its submit then calls `openTicket` with the answers. `version` fingerprints the questions, so answers to a form edited mid-fill are rejected rather than mismatched. `/ticket open` (`ticketbot/open.go`) only offers a member the types on the ticket panel they can see (worked out from the panel channels' overwrites in the gateway cache), so it never opens a type the panel wouldn't; any other type is reported as unknown. With `for`, staff open a ticket for a member instead: there's no form, the type's rules on who can open it are skipped apart from the member's open-ticket limit (`onBehalfErr`), the staff member is added to the ticket, and the welcome message and log entry say who opened it.
 1. Lock the member, check the type exists, check their open-ticket limit, and pair any form answers with the questions.
 2. Get the next number from `guild_settings.ticket_counter`.
 3. Create the channel (with permission overwrites: deny @everyone, allow the opener, the support roles and the bot) or a private thread (and add the opener).
@@ -69,8 +69,8 @@ Tickets can also be closed from the dashboard (`POST …/tickets/{id}/close`). T
 - support roles the bot can't ping: roles that aren't mentionable when the bot lacks Mention Everyone there. In thread mode that ping is what adds staff to the thread, so it's reported as tickets not opening
 - categories and channels that were deleted
 - categories that are full or nearly full (Discord allows 50 channels per category; the bot also explains this when a ticket fails to open)
-- published ticket buttons whose channel is gone or that have no ticket types
-- ticket types that aren't on any published ticket buttons
+- a published ticket panel whose channel is gone or that has no ticket types
+- ticket types that aren't on any published ticket panel
 - a log channel the bot can't post in
 
 Home, the ticket types list and the ticket type editor show the problems, each linking to its fix.
@@ -95,7 +95,7 @@ The SQL rules live in `store/autoclose.go`; the dashboard hint repeats the lead 
 
 **Feedback.** The closing DM (`closedDM` in `ticketbot/tickets.go`) asks for a rating unless the ticket's type has `ask_rating` off, in which case it only says the ticket closed and links the transcript. A type can reword the request (`rating_prompt`, with `{staff}` for the claimer). The DM rating buttons (`/rate/{ticketID}/{n}`) save the rating and swap the buttons for "Add a comment" (a modal). Only the opener can rate. Each rating, and each comment, is also posted to the log channel (`ratedLog`). Analytics returns `asks_rating` per type so the dashboard can say "Not asked" instead of showing a blank.
 
-**Publishing a panel** (shown as "ticket buttons" in the dashboard). `POST /api/guilds/{id}/panels/{panelID}/publish`:
+**Publishing a panel** (shown as "ticket panel" in the dashboard). `POST /api/guilds/{id}/panels/{panelID}/publish`:
 - If the panel is already in that channel, edit the message in place.
 - If it moved channels, post a new message and delete the old one.
 - If the old message is gone (unknown message), post a new one.

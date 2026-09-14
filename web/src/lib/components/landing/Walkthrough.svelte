@@ -8,7 +8,7 @@
 	 * advance on their own while in view, until someone picks one.
 	 */
 	const steps = [
-		{ title: 'A member picks a topic', body: 'From ticket buttons or a dropdown menu you design.' },
+		{ title: 'A member picks a topic', body: 'From a ticket panel or a dropdown menu you design.' },
 		{ title: 'They answer your questions', body: 'Up to five, asked before the ticket opens.' },
 		{ title: 'A private ticket opens', body: 'Your support roles are pinged, with the answers attached.' },
 		{ title: 'Your team replies', body: 'In Discord, or from the dashboard in your browser.' },

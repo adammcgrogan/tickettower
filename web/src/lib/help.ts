@@ -2,7 +2,7 @@
 export const guides = [
 	{
 		slug: 'getting-started',
-		title: 'Set up your first ticket buttons',
+		title: 'Set up your first ticket panel',
 		summary: 'Add the bot, create a ticket type and post buttons members can click.',
 		section: 'Getting started'
 	},

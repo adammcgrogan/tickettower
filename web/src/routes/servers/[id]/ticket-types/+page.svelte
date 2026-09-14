@@ -42,11 +42,11 @@
 		return parent ? `Private channels in ${parent.name}` : 'Private channels';
 	}
 
-	// Which ticket buttons show the type, since that's where members open it.
+	// Which ticket panels show the type, since that's where members open it.
 	function shownOn(t: TicketType) {
 		const on = panels.filter((p) => p.ticket_type_ids.includes(t.id));
-		if (on.length === 0) return 'Not on any ticket buttons';
-		return on.length === 1 ? `On “${on[0].title}”` : `On ${on.length} sets of ticket buttons`;
+		if (on.length === 0) return 'Not on any ticket panel';
+		return on.length === 1 ? `On “${on[0].title}”` : `On ${on.length} ticket panels`;
 	}
 
 	function facts(t: TicketType) {

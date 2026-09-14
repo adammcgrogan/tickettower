@@ -494,7 +494,7 @@ func (s *Server) refreshPublished(ctx context.Context, guildID snowflake.ID, aff
 	if len(affected) == 0 {
 		return ""
 	}
-	const warning = "Saved, but some published ticket buttons couldn't be updated in Discord. Try publishing them again."
+	const warning = "Saved, but some published ticket panels couldn't be updated in Discord. Try publishing them again."
 	types, err := s.store.ListTicketTypes(ctx, guildID)
 	if err != nil {
 		s.log.Error("load ticket types", slog.Any("err", err))

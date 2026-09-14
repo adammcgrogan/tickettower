@@ -283,7 +283,7 @@
 				<p class="hint mt-1">
 					{tier === 'premium'
 						? "This server is on the premium plan."
-						: `Free plans get up to ${limits?.max_ticket_types ?? 25} ticket types and ${limits?.max_panels ?? 10} sets of ticket buttons.`}
+						: `Free plans get up to ${limits?.max_ticket_types ?? 25} ticket types and ${limits?.max_panels ?? 10} ticket panels.`}
 				</p>
 			</div>
 			<div>
@@ -482,7 +482,7 @@
 			<div>
 				<h2 class="font-medium">Delete server data</h2>
 				<p class="hint mt-1">
-					Removes every ticket and transcript, rating, ticket type, set of ticket buttons, saved reply,
+					Removes every ticket and transcript, rating, ticket type, ticket panel, saved reply,
 					blocked member and setting stored for this server. The bot stays in the server.
 				</p>
 			</div>
@@ -500,7 +500,7 @@
 <Dialog
 	bind:open={deleteOpen}
 	title="Delete all server data?"
-	description="Every ticket, transcript, ticket type, set of ticket buttons, saved reply and setting for this server will be deleted for good."
+	description="Every ticket, transcript, ticket type, ticket panel, saved reply and setting for this server will be deleted for good."
 >
 	<form id="delete-data" onsubmit={deleteData} class="space-y-4">
 		{#if deleteError}<p class="text-sm text-danger">{deleteError}</p>{/if}
@@ -593,10 +593,10 @@
 	<ul class="space-y-3">
 		{#each [
 			`Up to ${limits?.max_ticket_types ?? 100} ticket types`,
-			`Up to ${limits?.max_panels ?? 50} sets of ticket buttons`,
+			`Up to ${limits?.max_panels ?? 50} ticket panels`,
 			`Up to ${limits?.max_saved_replies ?? 200} saved replies`,
 			'Transcripts kept forever, not just 90 days',
-			`No "Powered by ${APP_NAME}" footer on ticket buttons`
+			`No "Powered by ${APP_NAME}" footer on ticket panels`
 		] as benefit (benefit)}
 			<li class="flex items-start gap-3 text-sm">
 				<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">

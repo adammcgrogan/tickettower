@@ -138,7 +138,7 @@ func (s *Server) createPanel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if max := s.limits(r.Context(), g.ID).MaxPanels; count >= max {
-		s.writeFailure(w, invalid("", fmt.Sprintf("You can have up to %d sets of ticket buttons.", max)))
+		s.writeFailure(w, invalid("", fmt.Sprintf("You can have up to %d ticket panels.", max)))
 		return
 	}
 
@@ -155,12 +155,12 @@ func (s *Server) createPanel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) loadPanel(w http.ResponseWriter, r *http.Request) (store.Panel, bool) {
 	id, ok := pathID(r, "panelID")
 	if !ok {
-		writeError(w, http.StatusNotFound, "ticket buttons not found")
+		writeError(w, http.StatusNotFound, "ticket panel not found")
 		return store.Panel{}, false
 	}
 	p, err := s.store.GetPanel(r.Context(), guildFrom(r).ID, id)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "ticket buttons not found")
+		writeError(w, http.StatusNotFound, "ticket panel not found")
 		return p, false
 	} else if err != nil {
 		s.writeFailure(w, err)

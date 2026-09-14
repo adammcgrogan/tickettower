@@ -107,7 +107,7 @@ type TicketType struct {
 	// default.
 	AskRating    bool   `json:"ask_rating"`
 	RatingPrompt string `json:"rating_prompt"`
-	// ButtonStyle is the colour of this type's button on ticket buttons.
+	// ButtonStyle is the colour of this type's button on its ticket panel.
 	// ButtonLabel replaces the type's name on the button when set.
 	ButtonStyle ButtonStyle `json:"button_style"`
 	ButtonLabel string      `json:"button_label"`

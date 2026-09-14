@@ -36,8 +36,8 @@
 		deleting = true;
 		try {
 			await api(`/guilds/${guildId}/panels/${panelId}`, send('DELETE'));
-			toast('Ticket buttons deleted');
-			goto(`/servers/${guildId}/buttons`);
+			toast('Ticket panel deleted');
+			goto(`/servers/${guildId}/panels`);
 		} catch (e) {
 			toast(errorMessage(e), 'error');
 		} finally {
@@ -48,8 +48,8 @@
 </script>
 
 <PageHeader
-	title={data?.panel.title ?? 'Ticket buttons'}
-	back={{ href: `/servers/${guildId}/buttons`, label: 'Ticket buttons' }}
+	title={data?.panel.title ?? 'Ticket panel'}
+	back={{ href: `/servers/${guildId}/panels`, label: 'Ticket panels' }}
 >
 	{#snippet actions()}
 		{#if data}
@@ -62,7 +62,7 @@
 
 <div class="mt-6">
 	{#if missing}
-		<p class="card p-5 text-sm text-muted">These ticket buttons don't exist any more.</p>
+		<p class="card p-5 text-sm text-muted">This ticket panel doesn't exist any more.</p>
 	{:else if data}
 		<PanelEditor {guildId} initial={data.panel} types={data.types} channels={data.channels} />
 	{:else}
@@ -72,13 +72,13 @@
 
 <Dialog
 	bind:open={confirmDelete}
-	title="Delete these ticket buttons?"
-	description="If they're published, the message will be removed from Discord too. Open tickets aren't affected."
+	title="Delete this ticket panel?"
+	description="If it's published, the message will be removed from Discord too. Open tickets aren't affected."
 >
 	{#snippet footer()}
 		<button class="btn btn-ghost" onclick={() => (confirmDelete = false)}>Cancel</button>
 		<button class="btn btn-danger" onclick={remove} disabled={deleting}>
-			{deleting ? 'Deleting…' : 'Delete ticket buttons'}
+			{deleting ? 'Deleting…' : 'Delete ticket panel'}
 		</button>
 	{/snippet}
 </Dialog>

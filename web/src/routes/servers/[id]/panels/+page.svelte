@@ -30,13 +30,13 @@
 </script>
 
 <PageHeader
-	title="Ticket buttons"
+	title="Ticket panels"
 	description="The messages members click to open a ticket. Post them in any channel, as buttons or a dropdown menu."
 >
 	{#snippet actions()}
 		{#if typeCount > 0}
-			<a href="/servers/{guildId}/buttons/new" class="btn btn-primary">
-				<Icon name="plus" size={15} /> New ticket buttons
+			<a href="/servers/{guildId}/panels/new" class="btn btn-primary">
+				<Icon name="plus" size={15} /> New ticket panel
 			</a>
 		{/if}
 	{/snippet}
@@ -65,12 +65,12 @@
 					<Icon name="plus" size={15} /> Create ticket type
 				</a>
 			{:else}
-				<p class="mt-4 font-medium">No ticket buttons yet</p>
+				<p class="mt-4 font-medium">No ticket panels yet</p>
 				<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
 					Design a message with buttons and post it in a channel so members can open tickets.
 				</p>
-				<a href="/servers/{guildId}/buttons/new" class="btn btn-primary mt-5">
-					<Icon name="plus" size={15} /> Create ticket buttons
+				<a href="/servers/{guildId}/panels/new" class="btn btn-primary mt-5">
+					<Icon name="plus" size={15} /> Create ticket panel
 				</a>
 			{/if}
 		</div>
@@ -79,7 +79,7 @@
 			{#each panels as p (p.id)}
 				<li>
 					<a
-						href="/servers/{guildId}/buttons/{p.id}"
+						href="/servers/{guildId}/panels/{p.id}"
 						class="group card block overflow-hidden transition-colors hover:border-border-strong"
 					>
 						<div class="h-1" style="background:{intToHex(p.color)}"></div>
