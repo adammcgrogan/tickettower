@@ -146,10 +146,12 @@ const (
 	inScope  = `t.guild_id = $1 AND ($4::bigint IS NULL OR t.ticket_type_id = $4)`
 	openedIn = ` AND t.opened_at >= $2 AND t.opened_at < $3`
 	closedIn = ` AND t.closed_at >= $2 AND t.closed_at < $3`
-	// A team message is from a person other than the opener, which is the
-	// same rule the bot uses for the first response. Replies the bot posted
-	// for a staff member (the dashboard, /reply) count for that person.
-	teamMsg = `(NOT m.author_bot OR m.sent_by IS NOT NULL) AND COALESCE(m.sent_by, m.author_id) <> t.opener_id`
+	// A team message is one the bot marked as staff when it was captured
+	// (a support role or server manager, or a reply posted for a staff
+	// member), which is the same rule it uses for the first response. Bots
+	// and everyone else in the ticket are the member's side.
+	teamMsg   = `m.author_staff`
+	memberMsg = `NOT m.author_staff AND NOT m.author_bot`
 	// teamMember is who a team message counts for, and their name: the staff
 	// member behind a bot-posted reply is named in the embed's author.
 	teamMember     = `COALESCE(m.sent_by, m.author_id)`
@@ -398,7 +400,7 @@ func (s *Store) summary(ctx context.Context, args []any) (Summary, []int, error)
 	err = s.pool.QueryRow(ctx, `
 		SELECT count(*), COALESCE(sum(team), 0), COALESCE(sum(member), 0), count(*) FILTER (WHERE team = 1)
 		FROM (
-			SELECT count(*) FILTER (WHERE `+teamMsg+`) AS team, count(*) FILTER (WHERE m.author_id = t.opener_id) AS member
+			SELECT count(*) FILTER (WHERE `+teamMsg+`) AS team, count(*) FILTER (WHERE `+memberMsg+`) AS member
 			FROM tickets t JOIN ticket_messages m ON m.ticket_id = t.id
 			WHERE `+inScope+closedIn+` GROUP BY t.id
 		) x`, args...).Scan(&sm.Transcripts, &sm.TeamMessages, &sm.MemberMessages, &sm.OneTouch)

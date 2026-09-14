@@ -30,7 +30,7 @@ func TestAnalytics(t *testing.T) {
 	say := func(tk Ticket, author snowflake.ID) {
 		msgID++
 		err := s.InsertTicketMessage(ctx, TicketMessage{ID: msgID, TicketID: tk.ID, AuthorID: author,
-			AuthorName: "someone", CreatedAt: time.Now()})
+			AuthorName: "someone", AuthorStaff: author == staff, CreatedAt: time.Now()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,8 +39,8 @@ func TestAnalytics(t *testing.T) {
 	sayFor := func(tk Ticket, by snowflake.ID, name string) {
 		msgID++
 		err := s.InsertTicketMessage(ctx, TicketMessage{ID: msgID, TicketID: tk.ID, AuthorID: 7, AuthorName: "Ticket Tower",
-			AuthorBot: true, SentBy: &by, Embeds: []Embed{{Author: &EmbedAuthor{Name: name}, Description: "hi"}},
-			CreatedAt: time.Now()})
+			AuthorBot: true, SentBy: &by, AuthorStaff: true,
+			Embeds: []Embed{{Author: &EmbedAuthor{Name: name}, Description: "hi"}}, CreatedAt: time.Now()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,6 +57,7 @@ func TestAnalytics(t *testing.T) {
 	say(a, opener)
 	sayFor(a, staff, "staff")
 	say(a, opener)
+	say(a, 77) // a friend added with /ticket add: the member's side, not the team's
 	s.ClaimTicket(ctx, a.ID, staff, "staff")
 	s.CloseTicket(ctx, a.ID, staff, "staff", "Resolved")
 	if err := s.SetFeedbackRating(ctx, a.ID, 4); err != nil {
@@ -95,7 +96,7 @@ func TestAnalytics(t *testing.T) {
 	if sm.RatingAvg == nil || *sm.RatingAvg != 4 || sm.RatingCount != 1 || got.Ratings[3] != 1 {
 		t.Errorf("rating = %v (%d) %v", sm.RatingAvg, sm.RatingCount, got.Ratings)
 	}
-	if sm.ClosedUnanswered != 2 || sm.Transcripts != 1 || sm.TeamMessages != 1 || sm.MemberMessages != 2 || sm.OneTouch != 1 {
+	if sm.ClosedUnanswered != 2 || sm.Transcripts != 1 || sm.TeamMessages != 1 || sm.MemberMessages != 3 || sm.OneTouch != 1 {
 		t.Errorf("summary = %+v", sm)
 	}
 	if got.Closures != (Closures{Team: 1, Member: 1, Auto: 1}) {
