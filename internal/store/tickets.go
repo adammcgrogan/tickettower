@@ -195,6 +195,17 @@ func (s *Store) CloseTicketByChannel(ctx context.Context, channelID snowflake.ID
 	return tag.RowsAffected() == 1, err
 }
 
+// CloseTicketsOfLeftGuilds closes every open ticket in guilds the bot has
+// left, since it can no longer post in, warn about or delete their channels.
+// Their channels count as dealt with. It returns how many were closed.
+func (s *Store) CloseTicketsOfLeftGuilds(ctx context.Context, reason string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE tickets t SET status = 'closed', close_reason = $1, closed_at = now(), channel_cleaned_at = now()
+		FROM guilds g
+		WHERE g.id = t.guild_id AND g.left_at IS NOT NULL AND t.status = 'open'`, reason)
+	return tag.RowsAffected(), err
+}
+
 // ReopenTicket reopens a closed thread ticket. It reports false if the
 // ticket is open, or is a channel ticket (its channel is gone). The ticket
 // starts as waiting on the team, with any auto-close warning forgotten.
@@ -216,6 +227,7 @@ func (s *Store) TicketsToCleanUp(ctx context.Context, closedBefore time.Time) ([
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+ticketColumns+` FROM tickets
 		WHERE status = 'closed' AND channel_cleaned_at IS NULL AND closed_at <= $1
+		  AND guild_id IN (SELECT id FROM guilds WHERE left_at IS NULL)
 		ORDER BY closed_at LIMIT 50`, closedBefore)
 	if err != nil {
 		return nil, err

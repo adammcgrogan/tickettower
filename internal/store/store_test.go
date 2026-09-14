@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 )
@@ -88,5 +89,55 @@ func assertActive(t *testing.T, s *Store, want map[snowflake.ID]bool) {
 		if got[id] != active {
 			t.Errorf("guild %d active = %v, want %v", id, got[id], active)
 		}
+	}
+}
+
+// Leaving a server closes its open tickets, and the loops no longer see them.
+func TestLeavingClosesOpenTickets(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	gone, kept := snowflake.ID(700), snowflake.ID(701)
+	seedGuild(t, s, gone)
+	seedGuild(t, s, kept)
+	tt := newType(t, s, gone, "Support")
+	hours := 12
+	tt.AutoCloseHours = &hours
+	if err := s.UpdateTicketType(ctx, tt); err != nil {
+		t.Fatal(err)
+	}
+	tk := Ticket{GuildID: gone, Number: 1, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+		ChannelID: 7001, OpenerID: 42, OpenerName: "adam"}
+	if err := s.CreateTicket(ctx, &tk); err != nil {
+		t.Fatal(err)
+	}
+	other := Ticket{GuildID: kept, Number: 1, TypeName: "Support", Mode: ModeChannel, ChannelID: 7002, OpenerID: 42, OpenerName: "adam"}
+	if err := s.CreateTicket(ctx, &other); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkGuildLeft(ctx, gone); err != nil {
+		t.Fatal(err)
+	}
+
+	// Even before the close, the loops skip the left guild.
+	if due, _ := s.TicketsToWarn(ctx, tk.LastActivityAt.Add(48*time.Hour)); len(due) != 0 {
+		t.Errorf("auto-close still looks at a left guild's tickets: %v", due)
+	}
+
+	n, err := s.CloseTicketsOfLeftGuilds(ctx, "The bot was removed")
+	if err != nil || n != 1 {
+		t.Fatalf("closed %d, %v; want 1", n, err)
+	}
+	got, _ := s.GetTicket(ctx, tk.ID)
+	if got.Status != StatusClosed || got.ClosedBy != nil || got.CloseReason != "The bot was removed" {
+		t.Errorf("ticket after leaving: %+v", got)
+	}
+	if left, _ := s.TicketsToCleanUp(ctx, time.Now().Add(time.Hour)); len(left) != 0 {
+		t.Errorf("cleanup sweep would retry a channel the bot can't reach: %v", left)
+	}
+	if got, _ := s.GetTicket(ctx, other.ID); got.Status != StatusOpen {
+		t.Errorf("another server's ticket was closed")
+	}
+	if refs, _ := s.OpenTicketRefs(ctx); len(refs) != 1 || refs[0].GuildID != kept {
+		t.Errorf("open refs = %+v", refs)
 	}
 }

@@ -156,7 +156,7 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	}
 	// Track the channel before sending anything so the welcome message is
 	// captured in the transcript.
-	b.tickets.put(store.TicketRef{ID: ticket.ID, ChannelID: channelID, OpenerID: user.ID})
+	b.tickets.put(store.TicketRef{ID: ticket.ID, GuildID: guildID, ChannelID: channelID, OpenerID: user.ID})
 
 	welcome := welcomeMessage(ticket, tt, answers, b.guildName(ctx, guildID))
 	if _, err := b.rest.CreateMessage(channelID, welcome, rest.WithCtx(ctx)); err != nil {
@@ -486,7 +486,7 @@ func (b *Bot) reopenTicket(ctx context.Context, t store.Ticket, byID snowflake.I
 	if err != nil {
 		return t, err
 	}
-	b.tickets.put(store.TicketRef{ID: t.ID, ChannelID: t.ChannelID, OpenerID: t.OpenerID, HasFirstResponse: t.FirstResponseAt != nil})
+	b.tickets.put(store.TicketRef{ID: t.ID, GuildID: t.GuildID, ChannelID: t.ChannelID, OpenerID: t.OpenerID, HasFirstResponse: t.FirstResponseAt != nil})
 	go b.logEvent(t.GuildID, reopenedLog(t, byID))
 	b.log.Info("ticket reopened", slog.String("guild_id", t.GuildID.String()), slog.Int("number", t.Number))
 	return t, nil
