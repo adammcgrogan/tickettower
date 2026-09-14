@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { api, ApiError, errorMessage, send, type AdminGuild, type AdminOverview } from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { timeAgo } from '$lib/format';
@@ -12,16 +13,16 @@
 	let overview = $state<AdminOverview | null>(null);
 	let guilds = $state<AdminGuild[] | null>(null);
 	let error = $state('');
-	let notFound = $state(false);
 
 	const tierOptions: { value: 'free' | 'premium'; label: string }[] = [
 		{ value: 'free', label: 'Free' },
 		{ value: 'premium', label: 'Premium' }
 	];
 
+	// Not the owner: leave with no trace of what this page is, rather than
+	// showing an "Admin" title and description before finding out.
 	async function load() {
 		error = '';
-		notFound = false;
 		try {
 			const [o, g] = await Promise.all([
 				api<AdminOverview>('/admin/overview'),
@@ -31,7 +32,7 @@
 			guilds = g;
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 404) {
-				notFound = true;
+				await goto('/servers', { replaceState: true });
 			} else {
 				error = errorMessage(e);
 			}
@@ -54,18 +55,12 @@
 	}
 </script>
 
-<svelte:head><title>Admin · {APP_NAME}</title></svelte:head>
+<svelte:head><title>{overview ? `Admin · ${APP_NAME}` : APP_NAME}</title></svelte:head>
 
 <AppHeader />
 
 <main class="mx-auto max-w-6xl px-5 py-12">
-	<PageHeader title="Admin" description="Install and usage stats across every server. Only you can see this." />
-
-	{#if notFound}
-		<div class="mt-8 rounded-xl border border-border bg-surface px-6 py-16 text-center">
-			<p class="font-medium">Not found</p>
-		</div>
-	{:else if error && !overview}
+	{#if error && !overview}
 		<div class="mt-8 rounded-xl border border-danger/30 bg-danger/5 p-5 text-sm">
 			<p class="text-danger">{error}</p>
 			<button onclick={load} class="mt-3 text-muted underline-offset-4 hover:text-fg hover:underline">
@@ -73,9 +68,12 @@
 			</button>
 		</div>
 	{:else if !overview || !guilds}
+		<div class="mt-8 h-10 w-40 animate-pulse rounded bg-surface"></div>
 		<div class="mt-8 h-[164px] animate-pulse rounded-xl bg-surface"></div>
 		<div class="mt-4 h-80 animate-pulse rounded-xl bg-surface"></div>
 	{:else}
+		<PageHeader title="Admin" description="Install and usage stats across every server. Only you can see this." />
+
 		<dl class="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border lg:grid-cols-4">
 			<div class="bg-surface p-5">
 				<dt class="text-sm text-muted">Active servers</dt>
