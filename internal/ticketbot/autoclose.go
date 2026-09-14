@@ -58,6 +58,9 @@ func (b *Bot) runAutoClose(ctx context.Context, now time.Time) {
 	b.remindStaff(ctx, now)
 	b.cleanUpClosedTickets(ctx, now)
 	b.deleteKeptChannels(ctx, now)
+	if err := b.store.DeleteExpiredBlocks(ctx, now); err != nil && ctx.Err() == nil {
+		b.log.Error("failed to delete expired blocks", slog.Any("err", err))
+	}
 }
 
 func (b *Bot) warnInactive(ctx context.Context, it store.InactiveTicket, now time.Time) {

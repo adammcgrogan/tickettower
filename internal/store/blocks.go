@@ -21,16 +21,17 @@ type Block struct {
 	BlockedBy     snowflake.ID `json:"blocked_by"`
 	BlockedByName string       `json:"blocked_by_name"`
 	CreatedAt     time.Time    `json:"created_at"`
+	ExpiresAt     *time.Time   `json:"expires_at"` // nil means the block never expires
 }
 
-const blockSelect = `SELECT guild_id, user_id, user_name, reason, blocked_by, blocked_by_name, created_at FROM ticket_blocks`
+const blockSelect = `SELECT guild_id, user_id, user_name, reason, blocked_by, blocked_by_name, created_at, expires_at FROM ticket_blocks`
 
 func scanBlock(row pgx.Row) (Block, error) {
 	var (
 		b                     Block
 		guildID, userID, byID int64
 	)
-	if err := row.Scan(&guildID, &userID, &b.UserName, &b.Reason, &byID, &b.BlockedByName, &b.CreatedAt); err != nil {
+	if err := row.Scan(&guildID, &userID, &b.UserName, &b.Reason, &byID, &b.BlockedByName, &b.CreatedAt, &b.ExpiresAt); err != nil {
 		return b, notFound(err)
 	}
 	b.GuildID = snowflake.ID(guildID)
@@ -39,9 +40,11 @@ func scanBlock(row pgx.Row) (Block, error) {
 	return b, nil
 }
 
-// ListBlocks returns a guild's blocked members, newest first.
+// ListBlocks returns a guild's active blocked members, newest first.
 func (s *Store) ListBlocks(ctx context.Context, guildID snowflake.ID) ([]Block, error) {
-	rows, err := s.pool.Query(ctx, blockSelect+` WHERE guild_id = $1 ORDER BY created_at DESC, user_id`, int64(guildID))
+	rows, err := s.pool.Query(ctx, blockSelect+`
+		WHERE guild_id = $1 AND (expires_at IS NULL OR expires_at > now())
+		ORDER BY created_at DESC, user_id`, int64(guildID))
 	if err != nil {
 		return nil, err
 	}
@@ -58,22 +61,33 @@ func (s *Store) ListBlocks(ctx context.Context, guildID snowflake.ID) ([]Block, 
 	return out, rows.Err()
 }
 
-// GetBlock returns a member's block, or ErrNotFound if they aren't blocked.
+// GetBlock returns a member's active block, or ErrNotFound if they aren't
+// blocked (including if their block has expired).
 func (s *Store) GetBlock(ctx context.Context, guildID, userID snowflake.ID) (Block, error) {
-	return scanBlock(s.pool.QueryRow(ctx, blockSelect+` WHERE guild_id = $1 AND user_id = $2`, int64(guildID), int64(userID)))
+	return scanBlock(s.pool.QueryRow(ctx,
+		blockSelect+` WHERE guild_id = $1 AND user_id = $2 AND (expires_at IS NULL OR expires_at > now())`,
+		int64(guildID), int64(userID)))
 }
 
-// BlockMember blocks a member, or updates the reason and who blocked them if
-// they already were. It sets b.CreatedAt.
+// BlockMember blocks a member, or updates the reason, expiry and who blocked
+// them if they already were. It sets b.CreatedAt.
 func (s *Store) BlockMember(ctx context.Context, b *Block) error {
 	return s.pool.QueryRow(ctx, `
-		INSERT INTO ticket_blocks (guild_id, user_id, user_name, reason, blocked_by, blocked_by_name)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO ticket_blocks (guild_id, user_id, user_name, reason, blocked_by, blocked_by_name, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (guild_id, user_id) DO UPDATE
 		SET user_name = EXCLUDED.user_name, reason = EXCLUDED.reason,
-		    blocked_by = EXCLUDED.blocked_by, blocked_by_name = EXCLUDED.blocked_by_name, created_at = now()
+		    blocked_by = EXCLUDED.blocked_by, blocked_by_name = EXCLUDED.blocked_by_name,
+		    expires_at = EXCLUDED.expires_at, created_at = now()
 		RETURNING created_at`,
-		int64(b.GuildID), int64(b.UserID), b.UserName, b.Reason, int64(b.BlockedBy), b.BlockedByName).Scan(&b.CreatedAt)
+		int64(b.GuildID), int64(b.UserID), b.UserName, b.Reason, int64(b.BlockedBy), b.BlockedByName, b.ExpiresAt).Scan(&b.CreatedAt)
+}
+
+// DeleteExpiredBlocks removes blocks whose expiry has passed, so they stop
+// showing up in the Blocked members list.
+func (s *Store) DeleteExpiredBlocks(ctx context.Context, now time.Time) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM ticket_blocks WHERE expires_at IS NOT NULL AND expires_at <= $1`, now)
+	return err
 }
 
 // UnblockMember lifts a block. It returns ErrNotFound if there wasn't one.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/discord"
@@ -16,9 +17,21 @@ import (
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
+// blockDurations maps a duration option to how long the block lasts. Matches
+// blockDurations in the bot and blockDurationOptions in the web app; "" means
+// the block never expires.
+var blockDurations = map[string]time.Duration{
+	"":    0,
+	"1h":  time.Hour,
+	"1d":  24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+	"30d": 30 * 24 * time.Hour,
+}
+
 type blockInput struct {
-	UserID snowflake.ID `json:"user_id"`
-	Reason string       `json:"reason"`
+	UserID   snowflake.ID `json:"user_id"`
+	Reason   string       `json:"reason"`
+	Duration string       `json:"duration"`
 }
 
 func (s *Server) listBlocks(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +60,11 @@ func (s *Server) createBlock(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, invalid("user_id", "Paste the member's user ID. In Discord, right-click them and choose Copy User ID."))
 		return
 	}
+	duration, ok := blockDurations[in.Duration]
+	if !ok {
+		s.writeFailure(w, invalid("duration", "Choose one of the listed durations."))
+		return
+	}
 	user := auth.FromContext(r.Context()).User
 	if in.UserID == user.ID {
 		s.writeFailure(w, invalid("user_id", "You can't block yourself."))
@@ -72,6 +90,10 @@ func (s *Server) createBlock(w http.ResponseWriter, r *http.Request) {
 	block := store.Block{
 		GuildID: g.ID, UserID: in.UserID, UserName: member.EffectiveName(), Reason: in.Reason,
 		BlockedBy: user.ID, BlockedByName: user.DisplayName,
+	}
+	if duration > 0 {
+		until := time.Now().Add(duration)
+		block.ExpiresAt = &until
 	}
 	if err := s.store.BlockMember(r.Context(), &block); err != nil {
 		s.writeFailure(w, err)

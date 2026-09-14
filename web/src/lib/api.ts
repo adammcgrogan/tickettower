@@ -223,9 +223,19 @@ export type Block = {
 	blocked_by: string;
 	blocked_by_name: string;
 	created_at: string;
+	expires_at: string | null;
 };
 
 export const MAX_BLOCK_REASON = 200;
+
+/** Matches blockDurations in the API and bot. '' blocks until unblocked. */
+export const blockDurationOptions: { value: string; label: string }[] = [
+	{ value: '', label: 'Until unblocked' },
+	{ value: '1h', label: '1 hour' },
+	{ value: '1d', label: '1 day' },
+	{ value: '7d', label: '7 days' },
+	{ value: '30d', label: '30 days' }
+];
 
 /** An answer the team sends often, from the reply box or with /reply. */
 export type SavedReply = {

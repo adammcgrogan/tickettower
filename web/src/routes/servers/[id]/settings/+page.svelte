@@ -7,6 +7,7 @@
 		ApiError,
 		atLeast,
 		errorMessage,
+		blockDurationOptions,
 		MAX_BLOCK_REASON,
 		send,
 		type Block,
@@ -155,13 +156,13 @@
 	// --- Blocked members ---
 	let blocks = $state<Block[]>([]);
 	let blockOpen = $state(false);
-	let blockForm = $state({ user_id: '', reason: '' });
+	let blockForm = $state({ user_id: '', reason: '', duration: '' });
 	let blockErrors = $state<Record<string, string>>({});
 	let blocking = $state(false);
 	let unblocking = $state<string | null>(null);
 
 	function openBlock() {
-		blockForm = { user_id: '', reason: '' };
+		blockForm = { user_id: '', reason: '', duration: '' };
 		blockErrors = {};
 		blockOpen = true;
 	}
@@ -173,7 +174,11 @@
 		try {
 			const created = await api<Block>(
 				`/guilds/${guild.id}/blocks`,
-				send('POST', { user_id: blockForm.user_id.trim(), reason: blockForm.reason })
+				send('POST', {
+					user_id: blockForm.user_id.trim(),
+					reason: blockForm.reason,
+					duration: blockForm.duration
+				})
 			);
 			blocks = [created, ...blocks.filter((b) => b.user_id !== created.user_id)];
 			blockOpen = false;
@@ -450,7 +455,9 @@
 							<div class="min-w-0 flex-1">
 								<p class="truncate text-sm font-medium">{b.user_name}</p>
 								<p class="mt-0.5 text-sm text-muted">
-									Blocked by {b.blocked_by_name} {timeAgo(b.created_at)}{b.reason ? `: ${b.reason}` : ''}
+									Blocked by {b.blocked_by_name} {timeAgo(b.created_at)}{b.expires_at
+										? `, lifts ${timeAgo(b.expires_at)}`
+										: ''}{b.reason ? `: ${b.reason}` : ''}
 								</p>
 							</div>
 							<button
@@ -560,6 +567,13 @@
 				placeholder="e.g. Repeated spam tickets"
 				aria-invalid={!!blockErrors.reason}
 			/>
+		</Field>
+		<Field label="Duration" for="block-duration" error={blockErrors.duration}>
+			<select id="block-duration" class="input" bind:value={blockForm.duration}>
+				{#each blockDurationOptions as o (o.value)}
+					<option value={o.value}>{o.label}</option>
+				{/each}
+			</select>
 		</Field>
 	</form>
 	{#snippet footer()}

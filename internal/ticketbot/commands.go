@@ -154,6 +154,11 @@ var commands = []discord.ApplicationCommandCreate{
 						Description: "Shown to them if they try to open a ticket",
 						MaxLength:   ptr(store.MaxBlockReason),
 					},
+					discord.ApplicationCommandOptionString{
+						Name:        "duration",
+						Description: "How long the block lasts. Leave out to block until unblocked.",
+						Choices:     blockDurationChoices,
+					},
 				},
 			},
 			discord.ApplicationCommandOptionSubCommand{
@@ -590,6 +595,22 @@ func (b *Bot) handleRenameCommand(e *handler.CommandEvent) error {
 
 // --- Blocking members ---
 
+// blockDurations maps the /ticket block duration choice to how long the
+// block lasts. Matches blockDurationOptions in the API and web.
+var blockDurations = map[string]time.Duration{
+	"1h":  time.Hour,
+	"1d":  24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+	"30d": 30 * 24 * time.Hour,
+}
+
+var blockDurationChoices = []discord.ApplicationCommandOptionChoiceString{
+	{Name: "1 hour", Value: "1h"},
+	{Name: "1 day", Value: "1d"},
+	{Name: "7 days", Value: "7d"},
+	{Name: "30 days", Value: "30d"},
+}
+
 func (b *Bot) handleBlockCommand(e *handler.CommandEvent) error {
 	data := e.SlashCommandInteractionData()
 	target := data.User("user")
@@ -598,12 +619,13 @@ func (b *Bot) handleBlockCommand(e *handler.CommandEvent) error {
 		targetMember = &rm
 	}
 	reason, _ := data.OptString("reason")
+	duration, _ := data.OptString("duration")
 	if e.GuildID() == nil {
 		return e.CreateMessage(ephemeral("Members can only be blocked in a server."))
 	}
 	ctx, cancel := timeout(e.Ctx)
 	defer cancel()
-	msg, err := b.blockMember(ctx, *e.GuildID(), e.Member(), target, targetMember, reason)
+	msg, err := b.blockMember(ctx, *e.GuildID(), e.Member(), target, targetMember, reason, blockDurations[duration])
 	if err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
 	}

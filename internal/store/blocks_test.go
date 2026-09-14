@@ -50,6 +50,43 @@ func TestBlocks(t *testing.T) {
 	}
 }
 
+func TestBlockExpiry(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+
+	past := time.Now().Add(-time.Hour)
+	expired := Block{GuildID: testGuild, UserID: 7, UserName: "troll", BlockedBy: 1, BlockedByName: "mod", ExpiresAt: &past}
+	if err := s.BlockMember(ctx, &expired); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetBlock(ctx, testGuild, 7); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetBlock for expired block = %v, want ErrNotFound", err)
+	}
+	list, err := s.ListBlocks(ctx, testGuild)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("ListBlocks with only an expired block = %+v, %v", list, err)
+	}
+
+	future := time.Now().Add(time.Hour)
+	active := Block{GuildID: testGuild, UserID: 8, UserName: "spammer", BlockedBy: 1, BlockedByName: "mod", ExpiresAt: &future}
+	if err := s.BlockMember(ctx, &active); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetBlock(ctx, testGuild, 8)
+	if err != nil || got.ExpiresAt == nil || !got.ExpiresAt.Equal(future) {
+		t.Fatalf("GetBlock for active block = %+v, %v", got, err)
+	}
+
+	if err := s.DeleteExpiredBlocks(ctx, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	list, err = s.ListBlocks(ctx, testGuild)
+	if err != nil || len(list) != 1 || list[0].UserID != 8 {
+		t.Fatalf("ListBlocks after sweep = %+v, %v", list, err)
+	}
+}
+
 func TestLastClosedAt(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

@@ -51,6 +51,9 @@ func (b *Bot) loadOpener(ctx context.Context, guildID snowflake.ID, userID snowf
 func accessErr(tt store.TicketType, st openerState, now time.Time) error {
 	if st.block != nil {
 		msg := "You can't open tickets in this server."
+		if st.block.ExpiresAt != nil {
+			msg += fmt.Sprintf(" You can again %s.", discord.FormattedTimestampMention(st.block.ExpiresAt.Unix(), discord.TimestampStyleRelative))
+		}
 		if st.block.Reason != "" {
 			msg += "\n**Reason:** " + st.block.Reason
 		}
@@ -131,8 +134,9 @@ func (b *Bot) isSupport(ctx context.Context, guildID snowflake.ID, m *discord.Re
 }
 
 // blockMember blocks target from opening tickets and returns the message to
-// show the staff member.
-func (b *Bot) blockMember(ctx context.Context, guildID snowflake.ID, by *discord.ResolvedMember, target discord.User, targetMember *discord.ResolvedMember, reason string) (string, error) {
+// show the staff member. duration is how long the block lasts, or 0 to block
+// until someone unblocks them.
+func (b *Bot) blockMember(ctx context.Context, guildID snowflake.ID, by *discord.ResolvedMember, target discord.User, targetMember *discord.ResolvedMember, reason string, duration time.Duration) (string, error) {
 	ok, err := b.isSupport(ctx, guildID, by)
 	if err != nil {
 		return "", err
@@ -161,10 +165,17 @@ func (b *Bot) blockMember(ctx context.Context, guildID snowflake.ID, by *discord
 		GuildID: guildID, UserID: target.ID, UserName: name, Reason: reason,
 		BlockedBy: by.User.ID, BlockedByName: by.EffectiveName(),
 	}
+	if duration > 0 {
+		until := time.Now().Add(duration)
+		block.ExpiresAt = &until
+	}
 	if err := b.store.BlockMember(ctx, &block); err != nil {
 		return "", err
 	}
 	msg := fmt.Sprintf("%s can no longer open tickets.", discord.UserMention(target.ID))
+	if block.ExpiresAt != nil {
+		msg += fmt.Sprintf(" This lifts %s.", discord.FormattedTimestampMention(block.ExpiresAt.Unix(), discord.TimestampStyleRelative))
+	}
 	if reason != "" {
 		msg += " They'll see the reason if they try: " + reason
 	}
