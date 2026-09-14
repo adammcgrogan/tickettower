@@ -1,7 +1,9 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -55,5 +57,42 @@ func TestLoginIsRateLimitedPerIP(t *testing.T) {
 	// Unrelated routes are unaffected.
 	if rec := env.do("GET", "/api/config", nil); rec.Code != http.StatusOK {
 		t.Errorf("/api/config after auth limit: %d", rec.Code)
+	}
+}
+
+// A client can't dodge the login limit by claiming to be someone else: with
+// no trusted proxy, forwarded headers are ignored altogether.
+func TestLoginLimitIgnoresSpoofedIPHeaders(t *testing.T) {
+	env := newTestEnv(t)
+	for i := range authLimit {
+		req := httptest.NewRequest("GET", "/api/auth/login", nil)
+		req.Header.Set("X-Real-IP", fmt.Sprintf("10.0.0.%d", i))
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.1.0.%d", i))
+		req.Header.Set("True-Client-IP", fmt.Sprintf("10.2.0.%d", i))
+		rec := httptest.NewRecorder()
+		env.handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusFound {
+			t.Fatalf("login %d: got %d", i+1, rec.Code)
+		}
+	}
+	req := httptest.NewRequest("GET", "/api/auth/login", nil)
+	req.Header.Set("X-Real-IP", "10.9.9.9")
+	rec := httptest.NewRecorder()
+	env.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("spoofed header bypassed the limit: got %d", rec.Code)
+	}
+}
+
+// Behind a trusted proxy, the address it appends to X-Forwarded-For is the
+// client, and anything the client put in front of it is ignored.
+func TestByIPBehindTrustedProxy(t *testing.T) {
+	var got string
+	h := clientIP(1)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got = byIP(r) }))
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 203.0.113.7")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	if got != "203.0.113.7" {
+		t.Errorf("client ip = %q, want the proxy-added entry", got)
 	}
 }

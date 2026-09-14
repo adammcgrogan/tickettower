@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/adammcgrogan/tickettower/internal/auth"
 )
 
@@ -90,13 +92,17 @@ func (l *rateLimiter) middleware(key func(*http.Request) string) func(http.Handl
 	}
 }
 
-// byIP keys on the client address (middleware.RealIP has already applied
-// X-Forwarded-For from the proxy).
+// byIP keys on the client address worked out by the clientIP middleware,
+// falling back to the connection's address if it couldn't tell (for instance
+// a request that arrived with fewer proxy hops than configured).
 func byIP(r *http.Request) string {
+	if ip := middleware.GetClientIP(r.Context()); ip != "" {
+		return ip
+	}
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return host
 	}
-	return r.RemoteAddr // a bare address, e.g. from a proxy header
+	return r.RemoteAddr
 }
 
 // byUser keys on the logged-in user.

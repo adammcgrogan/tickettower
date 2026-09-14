@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/disgoorg/disgo/discord"
@@ -47,6 +48,11 @@ type Config struct {
 	PublicURL string
 	Port      string
 	StaticDir string
+	// TrustedProxies is how many reverse proxies sit in front of the API
+	// (Railway's edge is one). The client IP is read from X-Forwarded-For
+	// past that many hops; 0 means the connection's own address is used and
+	// forwarded headers are ignored, so nobody can spoof their IP.
+	TrustedProxies int
 }
 
 func (c Config) IsDev() bool { return c.Env != "production" }
@@ -83,6 +89,9 @@ func Load(required ...string) (Config, error) {
 	if cfg.DevGuildID, err = optionalID("DEV_GUILD_ID"); err != nil {
 		return Config{}, err
 	}
+	if cfg.TrustedProxies, err = optionalCount("TRUSTED_PROXIES"); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
 }
 
@@ -91,6 +100,18 @@ func get(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func optionalCount(key string) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("%s must be a whole number of proxies, got %q", key, v)
+	}
+	return n, nil
 }
 
 func optionalID(key string) (snowflake.ID, error) {
