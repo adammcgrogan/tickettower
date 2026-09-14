@@ -66,6 +66,12 @@ type Summary struct {
 	TeamMessages   int `json:"team_messages"`
 	MemberMessages int `json:"member_messages"`
 	OneTouch       int `json:"one_touch"` // resolved with a single team message
+	// ClaimMedianSec is the median time from open to claim, for tickets
+	// opened in the window that were claimed.
+	ClaimMedianSec *float64 `json:"claim_median_seconds"`
+	// Reopened counts tickets closed in the window that had been reopened
+	// at some point before their final close.
+	Reopened int `json:"reopened"`
 }
 
 type SeriesPoint struct {
@@ -127,6 +133,8 @@ type Analytics struct {
 	WaitingNow int `json:"waiting_now"` // open, waiting on the team and not on hold
 	OnHoldNow  int `json:"on_hold_now"`
 	OverdueNow int `json:"overdue_now"` // waiting longer than the type's reply target
+	// BacklogAgeMedianSec is the median age of tickets open right now.
+	BacklogAgeMedianSec *float64 `json:"backlog_age_median_seconds"`
 
 	Series         []SeriesPoint `json:"series"`
 	Heatmap        [][]int       `json:"heatmap"`          // [weekday, Sunday first][hour], UTC
@@ -213,10 +221,12 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 		       count(*) FILTER (WHERE t.status = 'open' AND t.on_hold),
 		       count(*) FILTER (WHERE t.status = 'open' AND t.waiting_on_staff AND NOT t.on_hold
 		                          AND tt.reply_target_minutes IS NOT NULL
-		                          AND t.waiting_since + make_interval(mins => tt.reply_target_minutes) <= $3)
+		                          AND t.waiting_since + make_interval(mins => tt.reply_target_minutes) <= $3),
+		       percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM $3 - t.opened_at))
+		           FILTER (WHERE t.status = 'open')
 		FROM tickets t LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id
 		WHERE t.guild_id = $1 AND ($2::bigint IS NULL OR t.ticket_type_id = $2)`,
-		gid, q.TypeID, now).Scan(&a.OpenNow, &a.WaitingNow, &a.OnHoldNow, &a.OverdueNow)
+		gid, q.TypeID, now).Scan(&a.OpenNow, &a.WaitingNow, &a.OnHoldNow, &a.OverdueNow, &a.BacklogAgeMedianSec)
 	if err != nil {
 		return a, err
 	}
@@ -389,10 +399,13 @@ func (s *Store) summary(ctx context.Context, args []any) (Summary, []int, error)
 		       count(*) FILTER (WHERE t.opened_at >= $2 AND t.opened_at < $3 AND tt.reply_target_minutes IS NOT NULL),
 		       count(*) FILTER (WHERE t.opened_at >= $2 AND t.opened_at < $3 AND tt.reply_target_minutes IS NOT NULL
 		                          AND t.first_response_at IS NOT NULL
-		                          AND t.first_response_at - t.opened_at <= make_interval(mins => tt.reply_target_minutes))
+		                          AND t.first_response_at - t.opened_at <= make_interval(mins => tt.reply_target_minutes)),
+		       percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.claimed_at - t.opened_at))
+		           FILTER (WHERE t.opened_at >= $2 AND t.opened_at < $3 AND t.claimed_at IS NOT NULL),
+		       count(*) FILTER (WHERE t.closed_at >= $2 AND t.closed_at < $3 AND t.reopened_at IS NOT NULL)
 		FROM tickets t LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id WHERE `+inScope, args...).
 		Scan(&sm.Opened, &sm.Closed, &sm.FirstResponseMedianSec, &sm.ResolutionMedianSec, &sm.ClosedUnanswered,
-			&sm.TargetMeasured, &sm.TargetMet)
+			&sm.TargetMeasured, &sm.TargetMet, &sm.ClaimMedianSec, &sm.Reopened)
 	if err != nil {
 		return sm, ratings, err
 	}

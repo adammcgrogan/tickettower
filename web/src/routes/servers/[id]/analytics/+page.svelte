@@ -172,6 +172,23 @@
 				label: 'Closed without a reply',
 				value: pct(s.closed_unanswered, s.closed),
 				hint: s.closed ? plural(s.closed_unanswered, 'ticket') : 'No closed tickets yet'
+			},
+			{
+				label: 'Time to claim',
+				value: formatDuration(s.claim_median_seconds),
+				hint:
+					change(s.claim_median_seconds, p?.claim_median_seconds, ['slower', 'faster']) ??
+					'Median time from open to claim'
+			},
+			{
+				label: 'Reopened tickets',
+				value: pct(s.reopened, s.closed),
+				hint: s.closed ? plural(s.reopened, 'ticket') : 'No closed tickets yet'
+			},
+			{
+				label: 'Backlog age',
+				value: formatDuration(data.backlog_age_median_seconds),
+				hint: data.open_now ? 'Median age of tickets open now' : 'No tickets open right now'
 			}
 		];
 	});

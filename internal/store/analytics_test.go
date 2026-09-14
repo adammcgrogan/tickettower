@@ -70,9 +70,10 @@ func TestAnalytics(t *testing.T) {
 		t.Error("comment without a rating should report false")
 	}
 	// b: claimed and still open. c: closed by the member, with the same reason
-	// spelled differently. d: auto-closed.
+	// spelled differently, after having been reopened once. d: auto-closed.
 	s.ClaimTicket(ctx, b.ID, staff, "staff")
 	s.CloseTicket(ctx, c.ID, opener, "adam", " resolved ")
+	s.pool.Exec(ctx, `UPDATE tickets SET reopened_at = now() - interval '30 minutes' WHERE id = $1`, c.ID)
 	s.pool.Exec(ctx, `UPDATE tickets SET status = 'closed', closed_at = now(), auto_closed = true,
 		close_reason = 'No activity for 1 day' WHERE id = $1`, d.ID)
 
@@ -98,6 +99,17 @@ func TestAnalytics(t *testing.T) {
 	}
 	if sm.ClosedUnanswered != 2 || sm.Transcripts != 1 || sm.TeamMessages != 1 || sm.MemberMessages != 3 || sm.OneTouch != 1 {
 		t.Errorf("summary = %+v", sm)
+	}
+	// a and b were both claimed a moment after opening; a was backdated an
+	// hour, so the median sits around half that.
+	if sm.ClaimMedianSec == nil || *sm.ClaimMedianSec < 1500 || *sm.ClaimMedianSec > 2000 {
+		t.Errorf("claim median = %v, want ~1800", sm.ClaimMedianSec)
+	}
+	if sm.Reopened != 1 {
+		t.Errorf("reopened = %d, want 1", sm.Reopened)
+	}
+	if got.BacklogAgeMedianSec == nil {
+		t.Error("backlog age median = nil, want a value while a ticket is open")
 	}
 	if got.Closures != (Closures{Team: 1, Member: 1, Auto: 1}) {
 		t.Errorf("closures = %+v", got.Closures)

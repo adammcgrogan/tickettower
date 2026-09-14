@@ -29,6 +29,7 @@ type Ticket struct {
 	OpenerName      string        `json:"opener_name"`
 	ClaimedBy       *snowflake.ID `json:"claimed_by"`
 	ClaimedByName   *string       `json:"claimed_by_name"`
+	ClaimedAt       *time.Time    `json:"claimed_at"`
 	Status          TicketStatus  `json:"status"`
 	CloseReason     string        `json:"close_reason"`
 	ClosedBy        *snowflake.ID `json:"closed_by"`
@@ -68,7 +69,7 @@ type TicketFeedback struct {
 // ticketColumns and ticketFrom read a ticket with its feedback, if any.
 // Queries built on them must not alias the tickets table.
 const ticketColumns = `tickets.id, guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name,
-	claimed_by, claimed_by_name, status, close_reason, closed_by, closed_by_name, opened_at, first_response_at, closed_at,
+	claimed_by, claimed_by_name, claimed_at, status, close_reason, closed_by, closed_by_name, opened_at, first_response_at, closed_at,
 	last_activity_at, waiting_on_staff, waiting_since, on_hold, hold_reason, channel_kept_until,
 	fb.rating, fb.comment, fb.created_at`
 
@@ -85,7 +86,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		ratedAt                    *time.Time
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Number, &t.TicketTypeID, &t.TypeName, &mode, &channelID, &opener,
-		&t.OpenerName, &claimedBy, &t.ClaimedByName, &status, &t.CloseReason, &closedBy, &t.ClosedByName, &t.OpenedAt,
+		&t.OpenerName, &claimedBy, &t.ClaimedByName, &t.ClaimedAt, &status, &t.CloseReason, &closedBy, &t.ClosedByName, &t.OpenedAt,
 		&t.FirstResponseAt, &t.ClosedAt, &t.LastActivityAt, &t.WaitingOnStaff, &t.WaitingSince, &t.OnHold, &t.HoldReason,
 		&t.ChannelKeptUntil, &rating, &comment, &ratedAt)
 	if err != nil {
@@ -190,7 +191,7 @@ func (s *Store) GetTicketByChannel(ctx context.Context, channelID snowflake.ID) 
 // else got there first.
 func (s *Store) ClaimTicket(ctx context.Context, id int64, userID snowflake.ID, userName string) (bool, error) {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE tickets SET claimed_by = $2, claimed_by_name = $3
+		UPDATE tickets SET claimed_by = $2, claimed_by_name = $3, claimed_at = now()
 		WHERE id = $1 AND status = 'open' AND claimed_by IS NULL`, id, int64(userID), userName)
 	return tag.RowsAffected() == 1, err
 }
@@ -198,19 +199,20 @@ func (s *Store) ClaimTicket(ctx context.Context, id int64, userID snowflake.ID, 
 // UnclaimTicket releases a ticket claimed by userID.
 func (s *Store) UnclaimTicket(ctx context.Context, id int64, userID snowflake.ID) (bool, error) {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE tickets SET claimed_by = NULL, claimed_by_name = NULL
+		UPDATE tickets SET claimed_by = NULL, claimed_by_name = NULL, claimed_at = NULL
 		WHERE id = $1 AND status = 'open' AND claimed_by = $2`, id, int64(userID))
 	return tag.RowsAffected() == 1, err
 }
 
 // AssignTicket hands an open ticket to userID, whoever holds it now, and
 // returns the previous claimer (nil if it was unclaimed). It reports false
-// if the ticket is closed.
+// if the ticket is closed. Reassigning an already-claimed ticket keeps its
+// original claimed_at, since the ticket was already picked up.
 func (s *Store) AssignTicket(ctx context.Context, id int64, userID snowflake.ID, userName string) (prev *snowflake.ID, ok bool, err error) {
 	var was *int64
 	err = s.pool.QueryRow(ctx, `
-		WITH old AS (SELECT claimed_by FROM tickets WHERE id = $1 AND status = 'open')
-		UPDATE tickets SET claimed_by = $2, claimed_by_name = $3
+		WITH old AS (SELECT claimed_by, claimed_at FROM tickets WHERE id = $1 AND status = 'open')
+		UPDATE tickets SET claimed_by = $2, claimed_by_name = $3, claimed_at = COALESCE(old.claimed_at, now())
 		FROM old WHERE tickets.id = $1 AND tickets.status = 'open'
 		RETURNING old.claimed_by`, id, int64(userID), userName).Scan(&was)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -225,7 +227,7 @@ func (s *Store) ReleaseTicket(ctx context.Context, id int64) (prev snowflake.ID,
 	var was int64
 	err = s.pool.QueryRow(ctx, `
 		WITH old AS (SELECT claimed_by FROM tickets WHERE id = $1 AND status = 'open' AND claimed_by IS NOT NULL)
-		UPDATE tickets SET claimed_by = NULL, claimed_by_name = NULL
+		UPDATE tickets SET claimed_by = NULL, claimed_by_name = NULL, claimed_at = NULL
 		FROM old WHERE tickets.id = $1 AND tickets.status = 'open'
 		RETURNING old.claimed_by`, id).Scan(&was)
 	if errors.Is(err, pgx.ErrNoRows) {

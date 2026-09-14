@@ -364,6 +364,10 @@ export type AnalyticsSummary = {
 	team_messages: number;
 	member_messages: number;
 	one_touch: number;
+	/** Median time from open to claim, for tickets opened in the window that were claimed. */
+	claim_median_seconds: number | null;
+	/** Tickets closed in the window that had been reopened before their final close. */
+	reopened: number;
 };
 
 export type Analytics = {
@@ -378,6 +382,8 @@ export type Analytics = {
 	on_hold_now: number;
 	/** Waiting longer than the type's reply target. */
 	overdue_now: number;
+	/** Median age of tickets open right now. */
+	backlog_age_median_seconds: number | null;
 	series: { date: string; opened: number; closed: number; backlog: number }[];
 	/** [weekday, Sunday first][hour], UTC. */
 	heatmap: number[][];
