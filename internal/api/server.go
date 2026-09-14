@@ -378,7 +378,10 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 // spaHandler serves the built frontend, falling back to index.html so
-// client-side routes work on refresh.
+// client-side routes work on refresh. Hashed assets are cached for good;
+// everything else (index.html above all, which names those assets) must be
+// revalidated on every load, or a deploy leaves browsers with a stale shell
+// pointing at chunks that no longer exist.
 func spaHandler(dir string) http.Handler {
 	fileServer := http.FileServer(http.Dir(dir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -386,10 +389,13 @@ func spaHandler(dir string) http.Handler {
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			if strings.HasPrefix(r.URL.Path, "/_app/immutable/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
 			}
 			fileServer.ServeHTTP(w, r)
 			return
 		}
+		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 	})
 }

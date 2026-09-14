@@ -110,6 +110,13 @@ func TestSPA(t *testing.T) {
 	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
 		t.Errorf("immutable asset Cache-Control = %q", cc)
 	}
+	// The shell must be revalidated every time, or a deploy strands browsers
+	// on an index.html that names assets that are gone.
+	for _, path := range []string{"/", "/servers/123"} {
+		if cc := env.do("GET", path, nil).Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("%s Cache-Control = %q, want no-cache", path, cc)
+		}
+	}
 }
 
 func TestUnknownAPIRouteIsJSON404(t *testing.T) {
