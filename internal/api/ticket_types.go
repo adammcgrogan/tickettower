@@ -39,6 +39,7 @@ type ticketTypeInput struct {
 	WelcomeMessage  string           `json:"welcome_message"`
 	MaxOpenPerUser  int              `json:"max_open_per_user"`
 	Questions       []store.Question `json:"questions"`
+	Answers         []store.Answer   `json:"answers"`
 	AutoCloseHours  *int             `json:"auto_close_hours"`
 	RequiredRoleIDs []snowflake.ID   `json:"required_role_ids"`
 	BlockedRoleIDs  []snowflake.ID   `json:"blocked_role_ids"`
@@ -78,6 +79,7 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.WelcomeMessage = in.WelcomeMessage
 	t.MaxOpenPerUser = in.MaxOpenPerUser
 	t.Questions = in.Questions
+	t.Answers = in.Answers
 	t.AutoCloseHours = in.AutoCloseHours
 	t.RequiredRoleIDs = in.RequiredRoleIDs
 	t.BlockedRoleIDs = in.BlockedRoleIDs
@@ -122,6 +124,26 @@ func validateQuestions(qs []store.Question) ([]store.Question, error) {
 			return nil, invalid("questions", fmt.Sprintf("Choose a short answer or a paragraph for question %d.", i+1))
 		}
 		out[i] = q
+	}
+	return out, nil
+}
+
+// validateAnswers normalises a ticket type's suggested answers.
+func validateAnswers(as []store.Answer) ([]store.Answer, error) {
+	if len(as) > store.MaxAnswers {
+		return nil, invalid("answers", fmt.Sprintf("Add up to %d answers.", store.MaxAnswers))
+	}
+	out := make([]store.Answer, len(as))
+	for i, a := range as {
+		a.Title = strings.TrimSpace(a.Title)
+		if n := utf8.RuneCountInString(a.Title); n == 0 || n > store.MaxAnswerTitle {
+			return nil, invalid("answers", fmt.Sprintf("Answer %d needs a title of up to %d characters.", i+1, store.MaxAnswerTitle))
+		}
+		a.Body = strings.TrimSpace(a.Body)
+		if n := utf8.RuneCountInString(a.Body); n == 0 || n > store.MaxAnswerBody {
+			return nil, invalid("answers", fmt.Sprintf("Answer %d needs a short answer of up to %d characters.", i+1, store.MaxAnswerBody))
+		}
+		out[i] = a
 	}
 	return out, nil
 }
@@ -178,6 +200,11 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 		return err
 	}
 	in.Questions = questions
+	answers, err := validateAnswers(in.Answers)
+	if err != nil {
+		return err
+	}
+	in.Answers = answers
 	if h := in.AutoCloseHours; h != nil && !slices.Contains(autoCloseOptions, *h) {
 		return invalid("auto_close_hours", "Choose one of the listed auto-close times.")
 	}

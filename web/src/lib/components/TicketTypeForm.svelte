@@ -6,6 +6,9 @@
 		ApiError,
 		errorMessage,
 		CLOSED_KEEP_DAYS,
+		MAX_ANSWER_BODY,
+		MAX_ANSWER_TITLE,
+		MAX_ANSWERS,
 		MAX_BUTTON_LABEL,
 		MAX_QUESTIONS,
 		MAX_RATING_PROMPT,
@@ -78,6 +81,7 @@
 			welcome_message: source?.welcome_message ?? '',
 			max_open_per_user: source?.max_open_per_user ?? 1,
 			questions: source?.questions.map((q) => ({ ...q })) ?? [],
+			answers: source?.answers.map((a) => ({ ...a })) ?? [],
 			auto_close_hours: source?.auto_close_hours ?? null,
 			required_role_ids: [...(source?.required_role_ids ?? [])],
 			blocked_role_ids: [...(source?.blocked_role_ids ?? [])],
@@ -195,6 +199,15 @@
 	function moveQuestion(i: number, by: -1 | 1) {
 		const qs = form.questions;
 		[qs[i], qs[i + by]] = [qs[i + by], qs[i]];
+	}
+
+	function addAnswer() {
+		form.answers.push({ title: '', body: '' });
+	}
+
+	function moveAnswer(i: number, by: -1 | 1) {
+		const as = form.answers;
+		[as[i], as[i + by]] = [as[i + by], as[i]];
 	}
 
 	let channels = $state<Channel[]>([]);
@@ -354,7 +367,7 @@
 	const tabs: { id: Tab; label: string }[] = [
 		{ id: 'basics', label: 'Basics' },
 		{ id: 'button', label: 'Button' },
-		{ id: 'welcome', label: 'Questions and welcome' },
+		{ id: 'welcome', label: 'Before opening' },
 		{ id: 'access', label: 'Who can open' },
 		{ id: 'handling', label: 'While open' },
 		{ id: 'closing', label: 'Closing' }
@@ -374,6 +387,7 @@
 		notify_role_id: 'basics',
 		button_label: 'button',
 		button_style: 'button',
+		answers: 'welcome',
 		questions: 'welcome',
 		welcome_message: 'welcome',
 		required_role_ids: 'access',
@@ -714,6 +728,96 @@
 					{/if}
 				</section>
 			{:else if tab === 'welcome'}
+				<section class="space-y-5 p-5">
+					<div class="flex items-start justify-between gap-4">
+						<div>
+							<h2 class="font-medium">Suggested answers</h2>
+							<p class="hint mt-1">
+								Shown to a member before the ticket opens, with a choice to say it solved it or continue.
+								Handy for questions the team answers often.
+							</p>
+						</div>
+						{#if form.answers.length > 0 && form.answers.length < MAX_ANSWERS}
+							<button type="button" class="btn btn-secondary h-8 shrink-0 px-3" onclick={addAnswer}>
+								<Icon name="plus" size={14} /> Add answer
+							</button>
+						{/if}
+					</div>
+
+					{#if form.answers.length === 0}
+						<div class="rounded-xl border border-dashed border-border px-6 py-8 text-center">
+							<p class="text-sm font-medium">No suggested answers</p>
+							<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+								Members go straight to the ticket. Add up to {MAX_ANSWERS} answers to common questions, like
+								shipping times or how to reset a password.
+							</p>
+							<button type="button" class="btn btn-secondary mt-4 h-8 px-3" onclick={addAnswer}>
+								<Icon name="plus" size={14} /> Add answer
+							</button>
+						</div>
+					{:else}
+						<ol class="space-y-3">
+							{#each form.answers as a, i (i)}
+								<li class="space-y-4 rounded-lg border border-border bg-bg/40 p-4">
+									<div class="flex items-center gap-2">
+										<span class="text-xs font-medium text-muted">Answer {i + 1}</span>
+										<div class="ml-auto flex items-center gap-0.5">
+											<button
+												type="button"
+												class="btn btn-ghost h-7 px-1.5"
+												disabled={i === 0}
+												onclick={() => moveAnswer(i, -1)}
+												aria-label="Move answer {i + 1} up"
+											>
+												<Icon name="chevron-up" size={14} />
+											</button>
+											<button
+												type="button"
+												class="btn btn-ghost h-7 px-1.5"
+												disabled={i === form.answers.length - 1}
+												onclick={() => moveAnswer(i, 1)}
+												aria-label="Move answer {i + 1} down"
+											>
+												<Icon name="chevron-down" size={14} />
+											</button>
+											<button
+												type="button"
+												class="btn btn-ghost h-7 px-1.5 hover:text-danger"
+												onclick={() => form.answers.splice(i, 1)}
+												aria-label="Remove answer {i + 1}"
+											>
+												<Icon name="trash" size={14} />
+											</button>
+										</div>
+									</div>
+									<Field label="Title" for="a-{i}-title">
+										<input
+											id="a-{i}-title"
+											class="input"
+											bind:value={a.title}
+											maxlength={MAX_ANSWER_TITLE}
+											placeholder="e.g. Shipping times"
+											required
+										/>
+									</Field>
+									<Field label="Answer" for="a-{i}-body">
+										<textarea
+											id="a-{i}-body"
+											class="input"
+											rows="2"
+											bind:value={a.body}
+											maxlength={MAX_ANSWER_BODY}
+											placeholder="e.g. Orders usually arrive within 5-7 business days."
+											required
+										></textarea>
+									</Field>
+								</li>
+							{/each}
+						</ol>
+					{/if}
+					{#if errors.answers}<p class="text-xs text-danger">{errors.answers}</p>{/if}
+				</section>
+
 				<section class="space-y-5 p-5">
 					<div class="flex items-start justify-between gap-4">
 						<div>

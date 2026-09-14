@@ -189,6 +189,13 @@
 				label: 'Backlog age',
 				value: formatDuration(data.backlog_age_median_seconds),
 				hint: data.open_now ? 'Median age of tickets open now' : 'No tickets open right now'
+			},
+			{
+				label: 'Answered without a ticket',
+				value: s.answers_deflected.toLocaleString(),
+				hint:
+					change(s.answers_deflected, p?.answers_deflected, ['more', 'fewer']) ??
+					'Members who said a suggested answer solved it'
 			}
 		];
 	});

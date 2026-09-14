@@ -23,6 +23,10 @@ const (
 	closeConfirmButtonID = "/ticket-btn/close-confirm"
 	closeModalID         = "/ticket-modal/close"
 	reopenButtonPrefix   = "/ticket-btn/reopen/" // + {ticketID}
+
+	// Shown before a ticket type's form when it has suggested answers.
+	answerOpenButtonPrefix  = "/ticket-btn/answer-open/"  // + {typeID}
+	answerCloseButtonPrefix = "/ticket-btn/answer-close/" // + {typeID}
 )
 
 var guildOnly = []discord.InteractionContextType{discord.InteractionContextTypeGuild}
@@ -216,19 +220,25 @@ func (b *Bot) handleOpenButton(e *handler.ComponentEvent) error {
 		return e.CreateMessage(ephemeral("This button is out of date."))
 	}
 	ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
-	modal, err := b.formFor(ctx, e.GuildID(), e.Member(), typeID, formFromButton)
+	answers, err := b.answersFor(ctx, e.GuildID(), e.Member(), typeID)
 	cancel()
+	if err != nil {
+		return e.CreateMessage(ephemeral(b.describe(err)))
+	}
+	if answers != nil {
+		return e.CreateMessage(*answers)
+	}
+
+	modal, content, err := b.openFormOrContent(e, typeID)
 	if err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
 	}
 	if modal != nil {
 		return e.Modal(*modal)
 	}
-
 	if err := e.DeferCreateMessage(true); err != nil {
 		return err
 	}
-	content := b.openForUser(e.Ctx, e.GuildID(), e.Member(), typeID, nil)
 	_, err = e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent(content))
 	return err
 }
@@ -242,9 +252,17 @@ func (b *Bot) handleOpenSelect(e *handler.ComponentEvent) error {
 	}
 	typeID, parseErr := strconv.ParseInt(values[0], 10, 64)
 
+	var answers *discord.MessageCreate
+	var answerErr error
+	if parseErr == nil {
+		ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
+		answers, answerErr = b.answersFor(ctx, e.GuildID(), e.Member(), typeID)
+		cancel()
+	}
+
 	var modal *discord.ModalCreate
 	var formErr error
-	if parseErr == nil {
+	if parseErr == nil && answers == nil && answerErr == nil {
 		ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
 		modal, formErr = b.formFor(ctx, e.GuildID(), e.Member(), typeID, formFromSelect)
 		cancel()
@@ -254,13 +272,22 @@ func (b *Bot) handleOpenSelect(e *handler.ComponentEvent) error {
 		return e.Modal(*modal)
 	}
 
+	// Every other outcome resets the dropdown now and replies in a
+	// follow-up, since answers (and the form after them, if any) are shown
+	// in a fresh ephemeral message rather than the panel's.
 	if err := e.UpdateMessage(reset); err != nil {
+		return err
+	}
+	if answers != nil {
+		_, err := e.CreateFollowupMessage(*answers)
 		return err
 	}
 	var content string
 	switch {
 	case parseErr != nil:
 		content = "These buttons are out of date."
+	case answerErr != nil:
+		content = b.describe(answerErr)
 	case formErr != nil:
 		content = b.describe(formErr)
 	default:
@@ -268,6 +295,64 @@ func (b *Bot) handleOpenSelect(e *handler.ComponentEvent) error {
 	}
 	_, err := e.CreateFollowupMessage(ephemeral(content))
 	return err
+}
+
+// openFormOrContent resolves a ticket button click into either a form to
+// show or the message to leave for the member, without responding to the
+// interaction itself.
+func (b *Bot) openFormOrContent(e *handler.ComponentEvent, typeID int64) (*discord.ModalCreate, string, error) {
+	ctx, cancel := context.WithTimeout(e.Ctx, formTimeout)
+	modal, err := b.formFor(ctx, e.GuildID(), e.Member(), typeID, formFromButton)
+	cancel()
+	if err != nil {
+		return nil, "", err
+	}
+	if modal != nil {
+		return modal, "", nil
+	}
+	return nil, b.openForUser(e.Ctx, e.GuildID(), e.Member(), typeID, nil), nil
+}
+
+// handleAnswerOpen continues opening a ticket after a member decided its
+// suggested answers didn't solve it, editing the ephemeral answers message
+// in place.
+func (b *Bot) handleAnswerOpen(e *handler.ComponentEvent) error {
+	typeID, err := strconv.ParseInt(e.Vars["typeID"], 10, 64)
+	if err != nil {
+		return e.UpdateMessage(discord.NewMessageUpdate().WithContent("This button is out of date.").ClearComponents())
+	}
+	modal, content, err := b.openFormOrContent(e, typeID)
+	if err != nil {
+		return e.UpdateMessage(discord.NewMessageUpdate().WithContent(b.describe(err)).ClearComponents())
+	}
+	if modal != nil {
+		return e.Modal(*modal)
+	}
+	if err := e.DeferUpdateMessage(); err != nil {
+		return err
+	}
+	_, err = e.UpdateInteractionResponse(discord.NewMessageUpdate().WithContent(content).WithEmbeds().ClearComponents())
+	return err
+}
+
+// handleAnswerClose records that a member's question was answered without
+// opening a ticket.
+func (b *Bot) handleAnswerClose(e *handler.ComponentEvent) error {
+	typeID, err := strconv.ParseInt(e.Vars["typeID"], 10, 64)
+	if err != nil {
+		return e.UpdateMessage(discord.NewMessageUpdate().WithContent("This button is out of date.").ClearComponents())
+	}
+	if guildID := e.GuildID(); guildID != nil {
+		ctx, cancel := timeout(e.Ctx)
+		if err := b.store.RecordAnswerDeflection(ctx, *guildID, typeID); err != nil {
+			b.log.Warn("record answer deflection", slog.Any("err", err))
+		}
+		cancel()
+	}
+	return e.UpdateMessage(discord.NewMessageUpdate().
+		WithContent("Glad that helped! Open a ticket any time if you need more.").
+		WithEmbeds().
+		ClearComponents())
 }
 
 func (b *Bot) handleFormModal(e *handler.ModalEvent) error {

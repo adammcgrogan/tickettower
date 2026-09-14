@@ -77,6 +77,13 @@ func TestAnalytics(t *testing.T) {
 	s.pool.Exec(ctx, `UPDATE tickets SET status = 'closed', closed_at = now(), auto_closed = true,
 		close_reason = 'No activity for 1 day' WHERE id = $1`, d.ID)
 
+	if err := s.RecordAnswerDeflection(ctx, testGuild, billing.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordAnswerDeflection(ctx, testGuild, support.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	got, err := s.Analytics(ctx, testGuild, AnalyticsQuery{Days: 7})
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +106,9 @@ func TestAnalytics(t *testing.T) {
 	}
 	if sm.ClosedUnanswered != 2 || sm.Transcripts != 1 || sm.TeamMessages != 1 || sm.MemberMessages != 3 || sm.OneTouch != 1 {
 		t.Errorf("summary = %+v", sm)
+	}
+	if sm.AnswersDeflected != 2 {
+		t.Errorf("answers deflected = %d, want 2", sm.AnswersDeflected)
 	}
 	// a and b were both claimed a moment after opening; a was backdated an
 	// hour, so the median sits around half that.
@@ -145,6 +155,9 @@ func TestAnalytics(t *testing.T) {
 	}
 	if only.Summary.Opened != 1 || only.OpenNow != 0 || len(only.ByType) != 1 || len(only.Staff) != 0 {
 		t.Errorf("filtered = %+v", only)
+	}
+	if only.Summary.AnswersDeflected != 1 {
+		t.Errorf("filtered answers deflected = %d, want 1", only.Summary.AnswersDeflected)
 	}
 
 	// All time has no previous window and still shows at least a week.

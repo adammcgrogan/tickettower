@@ -91,6 +91,16 @@ export type Question = {
 
 export const MAX_QUESTIONS = 5;
 
+/** A short, pre-written answer to a common question, shown before a member opens a ticket. */
+export type Answer = {
+	title: string;
+	body: string;
+};
+
+export const MAX_ANSWERS = 5;
+export const MAX_ANSWER_TITLE = 100;
+export const MAX_ANSWER_BODY = 300;
+
 export type TicketType = {
 	id: number;
 	guild_id: string;
@@ -104,6 +114,8 @@ export type TicketType = {
 	welcome_message: string;
 	max_open_per_user: number;
 	questions: Question[];
+	/** Shown before the form (or welcome message) when a member clicks a ticket button. */
+	answers: Answer[];
 	/** Hours without activity before a ticket closes itself, or null for never. */
 	auto_close_hours: number | null;
 	/** Members need one of these roles to open this type; empty means anyone. */
@@ -409,6 +421,8 @@ export type AnalyticsSummary = {
 	claim_median_seconds: number | null;
 	/** Tickets closed in the window that had been reopened before their final close. */
 	reopened: number;
+	/** Members who said a ticket type's suggested answers solved it, without opening one. */
+	answers_deflected: number;
 };
 
 export type Analytics = {

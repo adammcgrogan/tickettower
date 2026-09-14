@@ -35,6 +35,14 @@ const (
 	MaxParagraphAnswer = 1000
 )
 
+// Suggested answer limits, sized so up to MaxAnswers fit comfortably in one
+// embed alongside its title.
+const (
+	MaxAnswers     = 5
+	MaxAnswerTitle = 100
+	MaxAnswerBody  = 300
+)
+
 // Question is asked in a form when a member opens a ticket.
 type Question struct {
 	Label       string        `json:"label"`
@@ -51,6 +59,13 @@ func (q Question) MaxAnswer() int {
 	return MaxShortAnswer
 }
 
+// Answer is a short, pre-written answer to a common question, shown to a
+// member before they open a ticket of this type.
+type Answer struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+}
+
 // TicketType is a category of ticket (e.g. "Billing") and how it is handled.
 type TicketType struct {
 	ID             int64          `json:"id"`
@@ -64,12 +79,16 @@ type TicketType struct {
 	// NotifyOnOpen is who a new channel ticket pings: the support roles
 	// (default), a specific role (NotifyRoleID), or nobody. Thread tickets
 	// always ping the support roles, since that's what gives them access.
-	NotifyOnOpen NotifyMode    `json:"notify_on_open"`
-	NotifyRoleID *snowflake.ID `json:"notify_role_id"`
-	NameFormat     string         `json:"name_format"`
-	WelcomeMessage string         `json:"welcome_message"`
-	MaxOpenPerUser int            `json:"max_open_per_user"`
-	Questions      []Question     `json:"questions"`
+	NotifyOnOpen   NotifyMode    `json:"notify_on_open"`
+	NotifyRoleID   *snowflake.ID `json:"notify_role_id"`
+	NameFormat     string        `json:"name_format"`
+	WelcomeMessage string        `json:"welcome_message"`
+	MaxOpenPerUser int           `json:"max_open_per_user"`
+	Questions      []Question    `json:"questions"`
+	// Answers are suggested answers shown to a member before this type's
+	// form (or welcome message) is shown, so they can skip opening a
+	// ticket if one answers their question.
+	Answers []Answer `json:"answers"`
 	// AutoCloseHours is how long a ticket can sit without activity before
 	// it closes itself; nil means never.
 	AutoCloseHours *int `json:"auto_close_hours"`
@@ -211,7 +230,7 @@ var ButtonStyles = []ButtonStyle{ButtonPrimary, ButtonSecondary, ButtonSuccess, 
 const MaxButtonLabel = 80
 
 const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_id, support_role_ids,
-	name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
+	name_format, welcome_message, max_open_per_user, questions, answers, auto_close_hours,
 	required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt, button_style, button_label,
 	claim_lock, claim_lock_exempt_role_ids, reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where,
 	reminder_ping, closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id, created_at`
@@ -236,7 +255,7 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 		notifyID *int64
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Name, &t.Emoji, &t.Description, &mode, &parentID, &roles,
-		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours,
+		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.Answers, &t.AutoCloseHours,
 		&required, &blocked, &t.CooldownMinutes, &t.AskRating, &t.RatingPrompt, &style, &t.ButtonLabel,
 		&lock, &exempt, &t.ReplyTargetMinutes, &t.ReminderMinutes, &t.ReminderRepeat, &where, &ping,
 		&closedID, &access, &t.ClosedKeepDays, &notify, &notifyID, &t.CreatedAt)
@@ -254,6 +273,7 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 	t.RequiredRoleIDs = fromInt64s(required)
 	t.BlockedRoleIDs = fromInt64s(blocked)
 	t.Questions = questionsOrEmpty(t.Questions)
+	t.Answers = answersOrEmpty(t.Answers)
 	t.NotifyOnOpen = NotifyMode(notify)
 	t.NotifyRoleID = idFromNullable(notifyID)
 	return t, nil
@@ -266,6 +286,15 @@ func questionsOrEmpty(qs []Question) []Question {
 		return []Question{}
 	}
 	return qs
+}
+
+// answersOrEmpty avoids storing a JSON null, which the NOT NULL constraint
+// wouldn't catch.
+func answersOrEmpty(as []Answer) []Answer {
+	if as == nil {
+		return []Answer{}
+	}
+	return as
 }
 
 func (s *Store) ListTicketTypes(ctx context.Context, guildID snowflake.ID) ([]TicketType, error) {
@@ -301,6 +330,7 @@ func (s *Store) CountTicketTypes(ctx context.Context, guildID snowflake.ID) (int
 // don't set them (tests, templates) get the dashboard's defaults.
 func (t *TicketType) defaults() {
 	t.Questions = questionsOrEmpty(t.Questions)
+	t.Answers = answersOrEmpty(t.Answers)
 	if t.ButtonStyle == "" {
 		t.ButtonStyle = ButtonPrimary
 	}
@@ -329,16 +359,16 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 	t.defaults()
 	return s.pool.QueryRow(ctx, `
 		INSERT INTO ticket_types (guild_id, name, emoji, description, mode, parent_id, support_role_ids,
-		                          name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
+		                          name_format, welcome_message, max_open_per_user, questions, answers, auto_close_hours,
 		                          required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt,
 		                          button_style, button_label, claim_lock, claim_lock_exempt_role_ids,
 		                          reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where, reminder_ping,
 		                          closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
-		        $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+		        $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
-		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.AutoCloseHours,
+		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.Answers, t.AutoCloseHours,
 		toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating, t.RatingPrompt,
 		string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
 		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
@@ -352,16 +382,16 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE ticket_types
 		SET name = $3, emoji = $4, description = $5, mode = $6, parent_id = $7, support_role_ids = $8,
-		    name_format = $9, welcome_message = $10, max_open_per_user = $11, questions = $12, auto_close_hours = $13,
-		    required_role_ids = $14, blocked_role_ids = $15, cooldown_minutes = $16, ask_rating = $17,
-		    rating_prompt = $18, button_style = $19, button_label = $20, claim_lock = $21,
-		    claim_lock_exempt_role_ids = $22, reply_target_minutes = $23, reminder_minutes = $24,
-		    reminder_repeat = $25, reminder_where = $26, reminder_ping = $27, closed_parent_id = $28,
-		    closed_member_access = $29, closed_keep_days = $30, notify_on_open = $31, notify_role_id = $32,
+		    name_format = $9, welcome_message = $10, max_open_per_user = $11, questions = $12, answers = $13,
+		    auto_close_hours = $14, required_role_ids = $15, blocked_role_ids = $16, cooldown_minutes = $17,
+		    ask_rating = $18, rating_prompt = $19, button_style = $20, button_label = $21, claim_lock = $22,
+		    claim_lock_exempt_role_ids = $23, reply_target_minutes = $24, reminder_minutes = $25,
+		    reminder_repeat = $26, reminder_where = $27, reminder_ping = $28, closed_parent_id = $29,
+		    closed_member_access = $30, closed_keep_days = $31, notify_on_open = $32, notify_role_id = $33,
 		    updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
-		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions,
+		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.Answers,
 		t.AutoCloseHours, toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating,
 		t.RatingPrompt, string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
 		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),

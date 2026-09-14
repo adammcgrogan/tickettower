@@ -34,3 +34,31 @@ func TestValidateQuestions(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateAnswers(t *testing.T) {
+	got, err := validateAnswers([]store.Answer{{Title: "  Refund times  ", Body: "  3-5 days  "}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := got[0]; a.Title != "Refund times" || a.Body != "3-5 days" {
+		t.Errorf("normalised = %+v", a)
+	}
+	if got, err := validateAnswers(nil); err != nil || got == nil || len(got) != 0 {
+		t.Errorf("nil answers = %#v, %v", got, err)
+	}
+
+	bad := map[string][]store.Answer{
+		"too many":    make([]store.Answer, store.MaxAnswers+1),
+		"empty title": {{Title: "  ", Body: "Body"}},
+		"long title":  {{Title: strings.Repeat("a", store.MaxAnswerTitle+1), Body: "Body"}},
+		"empty body":  {{Title: "Title", Body: "  "}},
+		"long body":   {{Title: "Title", Body: strings.Repeat("a", store.MaxAnswerBody+1)}},
+	}
+	for name, as := range bad {
+		_, err := validateAnswers(as)
+		ve, ok := err.(*validationError)
+		if !ok || ve.Field != "answers" {
+			t.Errorf("%s: err = %v, want an answers validation error", name, err)
+		}
+	}
+}

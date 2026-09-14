@@ -48,12 +48,19 @@ func TestTicketTypeCRUD(t *testing.T) {
 	if got.Questions == nil || len(got.Questions) != 0 {
 		t.Errorf("questions default = %#v, want empty", got.Questions)
 	}
+	if got.Answers == nil || len(got.Answers) != 0 {
+		t.Errorf("answers default = %#v, want empty", got.Answers)
+	}
 
 	questions := []Question{
 		{Label: "Order number", Placeholder: "#1234", Style: QuestionShort, Required: true},
 		{Label: "What happened?", Style: QuestionParagraph},
 	}
-	got.Name, got.Mode, got.ParentID, got.SupportRoleIDs, got.Questions = "Payments", ModeThread, nil, nil, questions
+	answers := []Answer{
+		{Title: "Refund times", Body: "Refunds take 3-5 business days."},
+	}
+	got.Name, got.Mode, got.ParentID, got.SupportRoleIDs, got.Questions, got.Answers =
+		"Payments", ModeThread, nil, nil, questions, answers
 	if err := s.UpdateTicketType(ctx, got); err != nil {
 		t.Fatal(err)
 	}
@@ -64,16 +71,23 @@ func TestTicketTypeCRUD(t *testing.T) {
 	if !slices.Equal(got.Questions, questions) {
 		t.Errorf("questions = %+v, want %+v", got.Questions, questions)
 	}
+	if !slices.Equal(got.Answers, answers) {
+		t.Errorf("answers = %+v, want %+v", got.Answers, answers)
+	}
 
-	// Clearing the questions stores an empty list, not JSON null.
-	got.Questions = nil
+	// Clearing the questions and answers stores empty lists, not JSON null.
+	got.Questions, got.Answers = nil, nil
 	if err := s.UpdateTicketType(ctx, got); err != nil {
 		t.Fatal(err)
 	}
-	var raw string
+	var raw, rawAnswers string
 	s.pool.QueryRow(ctx, `SELECT questions::text FROM ticket_types WHERE id = $1`, tt.ID).Scan(&raw)
 	if raw != "[]" {
 		t.Errorf("stored questions = %s, want []", raw)
+	}
+	s.pool.QueryRow(ctx, `SELECT answers::text FROM ticket_types WHERE id = $1`, tt.ID).Scan(&rawAnswers)
+	if rawAnswers != "[]" {
+		t.Errorf("stored answers = %s, want []", rawAnswers)
 	}
 
 	// Another guild can't see or delete it.

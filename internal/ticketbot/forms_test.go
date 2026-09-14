@@ -6,6 +6,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/disgoorg/disgo/discord"
+
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
@@ -70,5 +72,36 @@ func TestWelcomeMessageFitsEmbedLimit(t *testing.T) {
 	// Without answers the welcome message is left alone.
 	if msg := welcomeMessage(store.Ticket{}, tt, nil, "", nil); msg.Embeds[0].Description != tt.WelcomeMessage {
 		t.Error("welcome message changed without answers")
+	}
+}
+
+func TestAnswersMessage(t *testing.T) {
+	tt := store.TicketType{ID: 42, Answers: []store.Answer{
+		{Title: "Refund times", Body: "3-5 business days"},
+		{Title: "Shipping", Body: "Usually 2 weeks"},
+	}}
+	msg := answersMessage(tt)
+
+	if !msg.Flags.Has(discord.MessageFlagEphemeral) {
+		t.Error("answers message should be ephemeral")
+	}
+	if len(msg.Embeds) != 1 || len(msg.Embeds[0].Fields) != 2 || msg.Embeds[0].Fields[0].Name != "Refund times" {
+		t.Errorf("embed = %+v", msg.Embeds)
+	}
+
+	if len(msg.Components) != 1 {
+		t.Fatalf("components = %+v", msg.Components)
+	}
+	row, ok := msg.Components[0].(discord.ActionRowComponent)
+	if !ok || len(row.Components) != 2 {
+		t.Fatalf("action row = %+v", msg.Components[0])
+	}
+	closeBtn, ok := row.Components[0].(discord.ButtonComponent)
+	if !ok || closeBtn.CustomID != answerCloseButtonPrefix+"42" {
+		t.Errorf("close button = %+v", row.Components[0])
+	}
+	openBtn, ok := row.Components[1].(discord.ButtonComponent)
+	if !ok || openBtn.CustomID != answerOpenButtonPrefix+"42" {
+		t.Errorf("open button = %+v", row.Components[1])
 	}
 }

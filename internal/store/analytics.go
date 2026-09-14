@@ -72,6 +72,9 @@ type Summary struct {
 	// Reopened counts tickets closed in the window that had been reopened
 	// at some point before their final close.
 	Reopened int `json:"reopened"`
+	// AnswersDeflected counts members who said a ticket type's suggested
+	// answers solved it, so they never opened a ticket.
+	AnswersDeflected int `json:"answers_deflected"`
 }
 
 type SeriesPoint struct {
@@ -439,7 +442,23 @@ func (s *Store) summary(ctx context.Context, args []any) (Summary, []int, error)
 		avg := float64(total) / float64(sm.RatingCount)
 		sm.RatingAvg = &avg
 	}
+	if err != nil {
+		return sm, ratings, err
+	}
+
+	err = s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM answer_deflections d
+		WHERE d.guild_id = $1 AND ($4::bigint IS NULL OR d.ticket_type_id = $4)
+		  AND d.created_at >= $2 AND d.created_at < $3`, args...).Scan(&sm.AnswersDeflected)
 	return sm, ratings, err
+}
+
+// RecordAnswerDeflection logs that a member said a ticket type's suggested
+// answers solved it, instead of opening a ticket, for Analytics.
+func (s *Store) RecordAnswerDeflection(ctx context.Context, guildID snowflake.ID, ticketTypeID int64) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO answer_deflections (guild_id, ticket_type_id) VALUES ($1, $2)`, int64(guildID), ticketTypeID)
+	return err
 }
 
 // eachRow calls fn for every row, closing rows and returning the first error.

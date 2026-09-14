@@ -55,6 +55,50 @@ func (b *Bot) formFor(ctx context.Context, guildID *snowflake.ID, m *discord.Res
 	return &modal, nil
 }
 
+// answersFor returns the ephemeral message offering a ticket type's
+// suggested answers before its form (or welcome message) is shown, or nil
+// if it has none. It runs the same eligibility checks as formFor, so a
+// member who can't open the type gets that error now rather than after
+// reading the answers.
+func (b *Bot) answersFor(ctx context.Context, guildID *snowflake.ID, m *discord.ResolvedMember, typeID int64) (*discord.MessageCreate, error) {
+	if guildID == nil || m == nil {
+		return nil, nil
+	}
+	tt, err := b.store.GetTicketType(ctx, *guildID, typeID)
+	if err != nil || len(tt.Answers) == 0 {
+		return nil, nil // openTicket reports a missing type
+	}
+	st, err := b.loadOpener(ctx, *guildID, m.User.ID, m.RoleIDs, tt)
+	if err != nil {
+		return nil, err
+	}
+	if err := accessErr(tt, st, time.Now()); err != nil {
+		return nil, err
+	}
+	msg := answersMessage(tt)
+	return &msg, nil
+}
+
+// answersMessage shows a ticket type's suggested answers with a choice to
+// say it solved it, or continue opening the ticket.
+func answersMessage(tt store.TicketType) discord.MessageCreate {
+	embed := discord.NewEmbed().
+		WithTitle("Before you open a ticket").
+		WithColor(colorAccent)
+	for _, a := range tt.Answers {
+		embed = embed.AddField(a.Title, a.Body, false)
+	}
+	id := strconv.FormatInt(tt.ID, 10)
+	return discord.NewMessageCreate().
+		WithEmbeds(embed).
+		WithEphemeral(true).
+		AddActionRow(
+			discord.NewSuccessButton("That answered it", answerCloseButtonPrefix+id).
+				WithEmoji(discord.ComponentEmoji{Name: "✅"}),
+			discord.NewSecondaryButton("Open a ticket anyway", answerOpenButtonPrefix+id),
+		)
+}
+
 func formModal(customID string, tt store.TicketType) discord.ModalCreate {
 	m := discord.NewModalCreate(customID, truncate(tt.Name, 45))
 	for i, q := range tt.Questions {
