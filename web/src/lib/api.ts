@@ -256,6 +256,8 @@ export type TranscriptMessage = {
 	author_name: string;
 	author_avatar: string;
 	author_bot: boolean;
+	/** The staff member a bot-posted reply was sent for (dashboard, /reply), else null. */
+	sent_by: string | null;
 	content: string;
 	embeds: Embed[];
 	attachments: Attachment[];

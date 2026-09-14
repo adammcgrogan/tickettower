@@ -147,8 +147,13 @@ const (
 	openedIn = ` AND t.opened_at >= $2 AND t.opened_at < $3`
 	closedIn = ` AND t.closed_at >= $2 AND t.closed_at < $3`
 	// A team message is from a person other than the opener, which is the
-	// same rule the bot uses for the first response.
-	teamMsg = `NOT m.author_bot AND m.author_id <> t.opener_id`
+	// same rule the bot uses for the first response. Replies the bot posted
+	// for a staff member (the dashboard, /reply) count for that person.
+	teamMsg = `(NOT m.author_bot OR m.sent_by IS NOT NULL) AND COALESCE(m.sent_by, m.author_id) <> t.opener_id`
+	// teamMember is who a team message counts for, and their name: the staff
+	// member behind a bot-posted reply is named in the embed's author.
+	teamMember     = `COALESCE(m.sent_by, m.author_id)`
+	teamMemberName = `COALESCE(m.embeds->0->'author'->>'name', m.author_name)`
 )
 
 // Analytics summarises a guild's tickets over the requested window.
@@ -341,7 +346,8 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 			SELECT t.closed_by AS uid, max(t.closed_by_name) AS name, count(*) AS n
 			FROM tickets t WHERE `+inScope+closedIn+` AND t.closed_by <> t.opener_id GROUP BY 1
 		), replies AS (
-			SELECT m.author_id AS uid, max(m.author_name) AS name, count(*) AS n, count(DISTINCT m.ticket_id) AS tickets
+			SELECT `+teamMember+` AS uid, max(`+teamMemberName+`) AS name, count(*) AS n,
+			       count(DISTINCT m.ticket_id) AS tickets
 			FROM tickets t JOIN ticket_messages m ON m.ticket_id = t.id
 			WHERE `+inScope+openedIn+` AND `+teamMsg+` GROUP BY 1
 		), people AS (

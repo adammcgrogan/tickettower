@@ -35,6 +35,16 @@ func TestAnalytics(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// A reply the bot posted for a staff member, as the dashboard does.
+	sayFor := func(tk Ticket, by snowflake.ID, name string) {
+		msgID++
+		err := s.InsertTicketMessage(ctx, TicketMessage{ID: msgID, TicketID: tk.ID, AuthorID: 7, AuthorName: "Ticket Tower",
+			AuthorBot: true, SentBy: &by, Embeds: []Embed{{Author: &EmbedAuthor{Name: name}, Description: "hi"}},
+			CreatedAt: time.Now()})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	a := open(1, billing, 9001)
 	b := open(2, billing, 9002)
 	c := open(3, support, 9003)
@@ -45,7 +55,7 @@ func TestAnalytics(t *testing.T) {
 	s.pool.Exec(ctx, `UPDATE tickets SET opened_at = now() - interval '1 hour',
 		first_response_at = now() - interval '50 minutes' WHERE id = $1`, a.ID)
 	say(a, opener)
-	say(a, staff)
+	sayFor(a, staff, "staff")
 	say(a, opener)
 	s.ClaimTicket(ctx, a.ID, staff, "staff")
 	s.CloseTicket(ctx, a.ID, staff, "staff", "Resolved")
@@ -108,7 +118,7 @@ func TestAnalytics(t *testing.T) {
 		t.Errorf("by type = %+v", got.ByType)
 	}
 	if len(got.Staff) != 1 || got.Staff[0].Claimed != 2 || got.Staff[0].Closed != 1 || got.Staff[0].Replies != 1 ||
-		got.Staff[0].Tickets != 1 || *got.Staff[0].AvgRating != 4 {
+		got.Staff[0].Tickets != 1 || *got.Staff[0].AvgRating != 4 || got.Staff[0].Name != "staff" {
 		t.Errorf("staff = %+v", got.Staff)
 	}
 	if got.Previous == nil || got.Previous.Opened != 0 {

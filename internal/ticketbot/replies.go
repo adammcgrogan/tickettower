@@ -11,6 +11,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/store"
@@ -62,7 +63,20 @@ func (b *Bot) handleReplyCommand(e *handler.CommandEvent) error {
 	if err := e.CreateMessage(msg); err != nil {
 		return err
 	}
-	b.recordReply(ctx, t, e.User().ID, time.Now())
+	by := e.User().ID
+	b.recordReply(ctx, t, by, time.Now())
+	// The response is captured as a bot message; note who it was sent for so
+	// analytics credit them (the capture may land first, so this is an
+	// upsert of that one field).
+	if m, err := e.GetInteractionResponse(rest.WithCtx(ctx)); err == nil {
+		saved := toTicketMessage(t.ID, *m)
+		saved.SentBy = &by
+		if err := b.store.InsertTicketMessage(ctx, saved); err != nil {
+			b.log.Error("failed to save who sent a saved reply", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+		}
+	} else {
+		b.log.Warn("failed to read the saved reply message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+	}
 	return nil
 }
 
