@@ -244,3 +244,20 @@ func TestSecurityHeaders(t *testing.T) {
 		t.Errorf("HSTS behind an https proxy = %q", hsts)
 	}
 }
+
+// An expired Discord token doesn't log the user out by itself: the session
+// still works, and the token is only refreshed when Discord is needed.
+func TestExpiredDiscordTokenKeepsSession(t *testing.T) {
+	env := newTestEnv(t)
+	sess := auth.Session{
+		User:  auth.User{ID: 42, Username: "adam", DisplayName: "Adam"},
+		OAuth: oauth2.Session{AccessToken: "old", RefreshToken: "r", Expiration: time.Now().Add(-time.Hour)},
+	}
+	data, _ := json.Marshal(sess)
+	env.redis.Set("session:expired", string(data))
+
+	cookie := &http.Cookie{Name: "session", Value: "expired"}
+	if rec := env.do("GET", "/api/me", cookie); rec.Code != 200 {
+		t.Fatalf("/api/me with an expired token: got %d", rec.Code)
+	}
+}
