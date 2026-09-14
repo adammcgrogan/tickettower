@@ -494,7 +494,8 @@ func (s *Server) syncPanelMessage(ctx context.Context, p store.Panel, types []st
 	if p.ChannelID == nil || p.MessageID == nil {
 		return nil
 	}
-	_, err := s.discord.UpdateMessage(*p.ChannelID, *p.MessageID, panels.Update(s.cfg.AppName, p, types), rest.WithCtx(ctx))
+	branding := s.limits(ctx, p.GuildID).Branding
+	_, err := s.discord.UpdateMessage(*p.ChannelID, *p.MessageID, panels.Update(s.cfg.AppName, branding, p, types), rest.WithCtx(ctx))
 	if discordx.IsCode(err, discordx.CodeUnknownMessage, discordx.CodeUnknownChannel) {
 		return s.store.SetPanelMessage(ctx, p.GuildID, p.ID, nil, nil)
 	}

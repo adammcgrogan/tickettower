@@ -62,17 +62,18 @@ func IsValidEmoji(s string) bool {
 	return n <= 10 && !strings.ContainsAny(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 <>:")
 }
 
-// Create renders the panel as a new message.
-func Create(appName string, p store.Panel, types []store.TicketType) discord.MessageCreate {
+// Create renders the panel as a new message. branding adds a "Powered by"
+// footer, which free-tier guilds get and premium ones don't.
+func Create(appName string, branding bool, p store.Panel, types []store.TicketType) discord.MessageCreate {
 	return discord.NewMessageCreate().
-		WithEmbeds(embed(appName, p)).
+		WithEmbeds(embed(appName, branding, p)).
 		WithComponents(components(p, types)...)
 }
 
 // Update renders the panel as an edit to its existing message.
-func Update(appName string, p store.Panel, types []store.TicketType) discord.MessageUpdate {
+func Update(appName string, branding bool, p store.Panel, types []store.TicketType) discord.MessageUpdate {
 	return discord.NewMessageUpdate().
-		WithEmbeds(embed(appName, p)).
+		WithEmbeds(embed(appName, branding, p)).
 		WithComponents(components(p, types)...)
 }
 
@@ -95,8 +96,11 @@ func Ordered(p store.Panel, types []store.TicketType) []store.TicketType {
 // DefaultPlaceholder is the dropdown's prompt when a panel doesn't set one.
 const DefaultPlaceholder = "Choose a topic…"
 
-func embed(appName string, p store.Panel) discord.Embed {
-	e := discord.NewEmbed().WithTitle(p.Title).WithColor(p.Color).WithFooterText("Powered by " + appName)
+func embed(appName string, branding bool, p store.Panel) discord.Embed {
+	e := discord.NewEmbed().WithTitle(p.Title).WithColor(p.Color)
+	if branding {
+		e = e.WithFooterText("Powered by " + appName)
+	}
 	if p.Description != "" {
 		e = e.WithDescription(p.Description)
 	}

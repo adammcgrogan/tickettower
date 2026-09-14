@@ -67,6 +67,13 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/me", s.getMe)
 			r.Get("/guilds", s.listGuilds)
 			r.Get("/transcripts/{ticketID}", s.getTranscript)
+
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(s.requireSuperadmin)
+				r.Get("/overview", s.getAdminOverview)
+				r.Get("/guilds", s.listAdminGuilds)
+				r.Post("/guilds/{guildID}/tier", s.setAdminGuildTier)
+			})
 			r.Route("/guilds/{guildID}", func(r chi.Router) {
 				r.Use(s.requireGuild)
 				r.Get("/", s.getGuild)
@@ -211,7 +218,10 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, auth.FromContext(r.Context()).User)
+	writeJSON(w, http.StatusOK, struct {
+		auth.User
+		IsSuperadmin bool `json:"is_superadmin"`
+	}{auth.FromContext(r.Context()).User, s.isSuperadmin(r)})
 }
 
 type guildResponse struct {

@@ -74,6 +74,8 @@
 
 - Private staff notes: `/ticket note` and a Private note tab in the Tickets page's reply box (on closed tickets too) save notes only the team sees (`ticket_notes`, `…/tickets/{id}/notes`). They show between the messages in the dashboard and the transcript for dashboard users and support staff, never for the opener, and are deleted with the transcript
 
+- Tier plumbing (issue #77): free plans cap transcript retention at 90 days and keep the "Powered by" panel footer; premium (set by hand for now, `entitlements.tier`) drops both. A `/admin` panel, visible only to `SUPERADMIN_USER_ID`, shows install/usage/plan totals across every server and lets the owner move a server between plans until billing exists
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.
@@ -83,7 +85,7 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 1. **Deploy to Railway**: set up the services and env vars, set a real `PUBLIC_URL` (which enables transcript links in DMs), unset `DEV_GUILD_ID`, and add the production OAuth redirect. Reset the bot token/secret first (they were shared in a chat).
 2. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
 3. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile. The auto-close job is already safe to run in several processes.
-4. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.
+4. **Premium billing**: the plan limits and `/admin` panel exist (issue #77); what's left is real payment — Discord App Subscriptions or Stripe — so premium isn't only set by hand.
 
 ## Nice to have
 

@@ -13,7 +13,8 @@
 		type DashboardRole,
 		type Guild,
 		type GuildSettings,
-		type Role
+		type Role,
+		type Stats
 	} from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { timeAgo } from '$lib/format';
@@ -35,18 +36,21 @@
 	const getGuild = getContext<() => Guild>('guild');
 	const guild = $derived(getGuild());
 
-	const retention = [
-		{ value: '', label: 'Keep forever' },
-		{ value: '7', label: '7 days' },
-		{ value: '30', label: '30 days' },
-		{ value: '90', label: '90 days' },
-		{ value: '180', label: '6 months' },
-		{ value: '365', label: '1 year' }
+	const allRetention = [
+		{ value: '', label: 'Keep forever', days: Infinity },
+		{ value: '7', label: '7 days', days: 7 },
+		{ value: '30', label: '30 days', days: 30 },
+		{ value: '90', label: '90 days', days: 90 },
+		{ value: '180', label: '6 months', days: 180 },
+		{ value: '365', label: '1 year', days: 365 }
 	];
 
 	let settings = $state<GuildSettings | null>(null);
+	let limits = $state<Stats['limits'] | null>(null);
 	let roles = $state<Role[]>([]);
 	let channels = $state<Channel[]>([]);
+	const retentionCap = $derived(limits?.max_transcript_retention_days || Infinity);
+	const retention = $derived(allRetention.filter((o) => o.days <= retentionCap));
 	let loadError = $state('');
 	let retentionValue = $state('');
 	let dashboardRoles = $state<DashboardRole[]>([]);
@@ -83,15 +87,17 @@
 	async function load() {
 		loadError = '';
 		try {
-			const [s, r, c, b] = await Promise.all([
+			const [s, r, c, b, st] = await Promise.all([
 				api<GuildSettings>(`/guilds/${guild.id}/settings`),
 				api<Role[]>(`/guilds/${guild.id}/roles`),
 				api<Channel[]>(`/guilds/${guild.id}/channels`),
-				api<Block[]>(`/guilds/${guild.id}/blocks`)
+				api<Block[]>(`/guilds/${guild.id}/blocks`),
+				api<Stats>(`/guilds/${guild.id}/stats`)
 			]);
 			roles = r;
 			channels = c;
 			blocks = b;
+			limits = st.limits;
 			reset(s);
 		} catch (e) {
 			loadError = errorMessage(e);
@@ -323,7 +329,9 @@
 				<Field
 					label="Keep transcripts for"
 					for="retention"
-					hint="Older transcripts are deleted automatically. Ticket details and stats are kept."
+					hint={retentionCap === Infinity
+						? 'Older transcripts are deleted automatically. Ticket details and stats are kept.'
+						: `Older transcripts are deleted automatically. Free plans keep them for up to ${retentionCap} days.`}
 					help="transcripts"
 					error={errors.transcript_retention_days}
 				>

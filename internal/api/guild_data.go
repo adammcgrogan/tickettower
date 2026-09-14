@@ -154,9 +154,15 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, err)
 		return
 	}
+	tier, err := s.store.GuildTier(r.Context(), g.ID)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"tickets": stats,
-		"limits":  s.limits(r.Context(), g.ID),
+		"tier":    tier,
+		"limits":  entitlements.ForTier(tier),
 	})
 }
 

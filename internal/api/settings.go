@@ -63,6 +63,12 @@ func (s *Server) validateSettings(ctx context.Context, guildID snowflake.ID, man
 	if d := in.TranscriptRetentionDays; d != nil && !slices.Contains(retentionOptions, *d) {
 		return invalid("transcript_retention_days", "Choose one of the listed retention periods.")
 	}
+	if max := s.limits(ctx, guildID).MaxTranscriptRetentionDays; max > 0 {
+		if d := in.TranscriptRetentionDays; d == nil || *d > max {
+			return invalid("transcript_retention_days",
+				fmt.Sprintf("Free plans can keep transcripts for up to %d days. Upgrade to premium to keep them longer.", max))
+		}
+	}
 
 	if in.LogChannelID != nil && *in.LogChannelID == 0 {
 		in.LogChannelID = nil

@@ -103,7 +103,7 @@ func TestButtonStylesLabelsAndImages(t *testing.T) {
 		{ID: 2, Name: "Report", ButtonStyle: store.ButtonDanger},
 		{ID: 3, Name: "Other"}, // no style saved: primary
 	}
-	msg := Create("App", p, types)
+	msg := Create("App", true, p, types)
 	row := msg.Components[0].(discord.ActionRowComponent)
 	got := []struct {
 		label string
@@ -133,14 +133,20 @@ func TestButtonStylesLabelsAndImages(t *testing.T) {
 	if e.Image == nil || e.Image.URL != p.ImageURL || e.Thumbnail == nil || e.Thumbnail.URL != p.ThumbnailURL {
 		t.Errorf("embed images = %+v / %+v", e.Image, e.Thumbnail)
 	}
+	if e.Footer == nil || e.Footer.Text != "Powered by App" {
+		t.Errorf("footer = %+v, want branding", e.Footer)
+	}
+	if unbranded := Create("App", false, p, types).Embeds[0]; unbranded.Footer != nil {
+		t.Errorf("footer = %+v, want none for premium", unbranded.Footer)
+	}
 
 	p.Style, p.Placeholder = store.PanelDropdown, "What do you need?"
-	menu := Create("App", p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
+	menu := Create("App", true, p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
 	if menu.Placeholder != "What do you need?" || menu.Options[0].Label != "Get help" {
 		t.Errorf("dropdown = %q, first option %q", menu.Placeholder, menu.Options[0].Label)
 	}
 	p.Placeholder = ""
-	menu = Create("App", p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
+	menu = Create("App", true, p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
 	if menu.Placeholder != DefaultPlaceholder {
 		t.Errorf("default placeholder = %q", menu.Placeholder)
 	}

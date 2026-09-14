@@ -27,7 +27,7 @@ type testEnv struct {
 	redis   *miniredis.Miniredis
 }
 
-func newTestEnv(t *testing.T) testEnv {
+func newTestEnv(t *testing.T, opts ...func(*config.Config)) testEnv {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -44,6 +44,9 @@ func newTestEnv(t *testing.T) testEnv {
 		DiscordClientID: 123456789,
 		PublicURL:       "http://localhost:5173",
 		StaticDir:       static,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
 	}
 	am := auth.NewManager(cfg.DiscordClientID, "secret", cfg.PublicURL, rdb)
 	// The store and Discord client are nil: none of the routes exercised here

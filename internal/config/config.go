@@ -53,6 +53,9 @@ type Config struct {
 	// past that many hops; 0 means the connection's own address is used and
 	// forwarded headers are ignored, so nobody can spoof their IP.
 	TrustedProxies int
+	// SuperadminUserID, if set, is the only Discord user who can open the
+	// /admin panel (install and usage stats across every guild).
+	SuperadminUserID snowflake.ID
 }
 
 func (c Config) IsDev() bool { return c.Env != "production" }
@@ -90,6 +93,9 @@ func Load(required ...string) (Config, error) {
 		return Config{}, err
 	}
 	if cfg.TrustedProxies, err = optionalCount("TRUSTED_PROXIES"); err != nil {
+		return Config{}, err
+	}
+	if cfg.SuperadminUserID, err = optionalID("SUPERADMIN_USER_ID"); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

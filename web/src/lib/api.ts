@@ -3,6 +3,35 @@ export type User = {
 	username: string;
 	display_name: string;
 	avatar_url: string;
+	/** True only for the bot's owner (SUPERADMIN_USER_ID). */
+	is_superadmin: boolean;
+};
+
+export type AdminOverview = {
+	/** Ever installed, including servers that removed the bot. */
+	total_guilds: number;
+	active_guilds: number;
+	joined_last_30: number;
+	left_last_30: number;
+	/** Among active guilds. */
+	premium_guilds: number;
+	free_guilds: number;
+	tickets_opened_last_30: number;
+	tickets_closed_last_30: number;
+	/** Active guilds that opened at least one ticket in the last 30 days. */
+	using_guilds_last_30: number;
+};
+
+export type AdminGuild = {
+	id: string;
+	name: string;
+	icon_url: string | null;
+	tier: 'free' | 'premium';
+	joined_at: string;
+	left_at: string | null;
+	tickets_total: number;
+	tickets_last_30: number;
+	last_ticket_at: string | null;
 };
 
 export type Guild = {
@@ -346,7 +375,15 @@ export type SetupProblem = {
 
 export type Stats = {
 	tickets: { open: number; opened_week: number };
-	limits: { max_panels: number; max_ticket_types: number; max_saved_replies: number };
+	tier: 'free' | 'premium';
+	limits: {
+		max_panels: number;
+		max_ticket_types: number;
+		max_saved_replies: number;
+		/** 0 means no cap. */
+		max_transcript_retention_days: number;
+		branding: boolean;
+	};
 };
 
 export type AnalyticsSummary = {

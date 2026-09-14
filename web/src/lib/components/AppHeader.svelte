@@ -54,6 +54,15 @@
 							<div class="truncate text-xs text-muted">@{user.username}</div>
 						</div>
 						<div class="my-1 h-px bg-border"></div>
+						{#if user.is_superadmin}
+							<a
+								role="menuitem"
+								href="/admin"
+								class="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted transition-colors hover:bg-elevated hover:text-fg"
+							>
+								Admin
+							</a>
+						{/if}
 						<button
 							role="menuitem"
 							onclick={logout}
