@@ -25,6 +25,13 @@ Requirements: Go 1.26+, Node 22+, Postgres 16+, Redis 7+.
 Tests: `TEST_DATABASE_URL=postgres://localhost:5432/relay_test?sslmode=disable make test`
 (store tests are skipped without it).
 
+Dependencies: `go.mod` pins the exact Go patch release (`go 1.26.x`), which the
+Dockerfiles and CI use too, so standard-library fixes reach production. CI fails
+on vulnerabilities reachable from the code (`govulncheck`) and on high-severity
+npm advisories (`npm audit`); Dependabot opens weekly PRs for Go, npm, Docker
+and Actions updates. When Dependabot bumps the toolchain, bump the
+`golang:<version>-alpine` tag in both Dockerfiles to match.
+
 ## Production (Railway)
 
 One project, `tickettower`, with **Postgres**, **Redis** and two services built
