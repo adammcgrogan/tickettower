@@ -153,6 +153,8 @@ export type TicketType = {
 	notify_on_open: 'roles' | 'custom' | 'none';
 	/** The role pinged when notify_on_open is 'custom'. */
 	notify_role_id: string | null;
+	/** Shares out new tickets round robin among staff who've opted in with /ticket available. */
+	auto_assign: boolean;
 	created_at: string;
 };
 

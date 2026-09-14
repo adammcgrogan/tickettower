@@ -168,6 +168,17 @@ var commands = []discord.ApplicationCommandCreate{
 					discord.ApplicationCommandOptionUser{Name: "user", Description: "Who to unblock", Required: true},
 				},
 			},
+			discord.ApplicationCommandOptionSubCommand{
+				Name:        "available",
+				Description: "Opt in or out of getting tickets assigned to you automatically",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionBool{
+						Name:        "on",
+						Description: "On to receive auto-assigned tickets, off to stop",
+						Required:    true,
+					},
+				},
+			},
 		},
 	},
 	discord.SlashCommandCreate{
@@ -640,6 +651,20 @@ func (b *Bot) handleUnblockCommand(e *handler.CommandEvent) error {
 	ctx, cancel := timeout(e.Ctx)
 	defer cancel()
 	msg, err := b.unblockMember(ctx, *e.GuildID(), e.Member(), target)
+	if err != nil {
+		return e.CreateMessage(ephemeral(b.describe(err)))
+	}
+	return e.CreateMessage(ephemeral(msg))
+}
+
+func (b *Bot) handleAvailableCommand(e *handler.CommandEvent) error {
+	if e.GuildID() == nil {
+		return e.CreateMessage(ephemeral("This only works in a server."))
+	}
+	on, _ := e.SlashCommandInteractionData().OptBool("on")
+	ctx, cancel := timeout(e.Ctx)
+	defer cancel()
+	msg, err := b.setAvailable(ctx, *e.GuildID(), e.Member(), on)
 	if err != nil {
 		return e.CreateMessage(ephemeral(b.describe(err)))
 	}

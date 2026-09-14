@@ -81,6 +81,9 @@ type TicketType struct {
 	// always ping the support roles, since that's what gives them access.
 	NotifyOnOpen   NotifyMode    `json:"notify_on_open"`
 	NotifyRoleID   *snowflake.ID `json:"notify_role_id"`
+	// AutoAssign shares out new tickets of this type round robin, among
+	// staff who've opted in with /ticket available. Off by default.
+	AutoAssign bool `json:"auto_assign"`
 	NameFormat     string        `json:"name_format"`
 	WelcomeMessage string        `json:"welcome_message"`
 	MaxOpenPerUser int           `json:"max_open_per_user"`
@@ -233,7 +236,8 @@ const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_
 	name_format, welcome_message, max_open_per_user, questions, answers, auto_close_hours,
 	required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt, button_style, button_label,
 	claim_lock, claim_lock_exempt_role_ids, reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where,
-	reminder_ping, closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id, created_at`
+	reminder_ping, closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id,
+	auto_assign, created_at`
 
 func scanTicketType(row pgx.Row) (TicketType, error) {
 	var (
@@ -258,7 +262,7 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.Answers, &t.AutoCloseHours,
 		&required, &blocked, &t.CooldownMinutes, &t.AskRating, &t.RatingPrompt, &style, &t.ButtonLabel,
 		&lock, &exempt, &t.ReplyTargetMinutes, &t.ReminderMinutes, &t.ReminderRepeat, &where, &ping,
-		&closedID, &access, &t.ClosedKeepDays, &notify, &notifyID, &t.CreatedAt)
+		&closedID, &access, &t.ClosedKeepDays, &notify, &notifyID, &t.AutoAssign, &t.CreatedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
@@ -363,9 +367,10 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 		                          required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt,
 		                          button_style, button_label, claim_lock, claim_lock_exempt_role_ids,
 		                          reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where, reminder_ping,
-		                          closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id)
+		                          closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id,
+		                          auto_assign)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
-		        $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+		        $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.Answers, t.AutoCloseHours,
@@ -373,7 +378,7 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 		string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
 		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
 		nullableID(t.ClosedParentID), string(t.ClosedMemberAccess), t.ClosedKeepDays,
-		string(t.NotifyOnOpen), nullableID(t.NotifyRoleID),
+		string(t.NotifyOnOpen), nullableID(t.NotifyRoleID), t.AutoAssign,
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
@@ -388,7 +393,7 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 		    claim_lock_exempt_role_ids = $23, reply_target_minutes = $24, reminder_minutes = $25,
 		    reminder_repeat = $26, reminder_where = $27, reminder_ping = $28, closed_parent_id = $29,
 		    closed_member_access = $30, closed_keep_days = $31, notify_on_open = $32, notify_role_id = $33,
-		    updated_at = now()
+		    auto_assign = $34, updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.Answers,
@@ -396,7 +401,7 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 		t.RatingPrompt, string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
 		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
 		nullableID(t.ClosedParentID), string(t.ClosedMemberAccess), t.ClosedKeepDays,
-		string(t.NotifyOnOpen), nullableID(t.NotifyRoleID))
+		string(t.NotifyOnOpen), nullableID(t.NotifyRoleID), t.AutoAssign)
 	if err != nil {
 		return err
 	}

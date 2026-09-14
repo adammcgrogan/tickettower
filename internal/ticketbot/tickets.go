@@ -176,6 +176,10 @@ func (b *Bot) openTicket(ctx context.Context, guildID snowflake.ID, user discord
 	// captured in the transcript.
 	b.tickets.put(store.TicketRef{ID: ticket.ID, GuildID: guildID, ChannelID: channelID, OpenerID: user.ID})
 
+	if tt.AutoAssign {
+		b.autoAssign(ctx, &ticket, tt)
+	}
+
 	welcome := welcomeMessage(ticket, tt, answers, b.guildName(ctx, guildID), byID)
 	if _, err := b.rest.CreateMessage(channelID, welcome, rest.WithCtx(ctx)); err != nil {
 		b.log.Warn("failed to send welcome message", slog.Int64("ticket_id", ticket.ID), slog.Any("err", err))
@@ -308,9 +312,15 @@ func welcomeMessage(t store.Ticket, tt store.TicketType, answers []formAnswer, s
 			text = onBehalfNote(*by) + "\n\n" + text
 		}
 	}
+	if t.ClaimedBy != nil {
+		text = assignedNote(*t.ClaimedBy) + "\n\n" + text
+	}
 
 	title := fmt.Sprintf("%s · #%d", tt.Name, t.Number)
-	const footer = "Staff can claim this ticket. Either side can close it when you're done."
+	footer := "Staff can claim this ticket. Either side can close it when you're done."
+	if t.ClaimedBy != nil {
+		footer = "Either side can close it when you're done."
+	}
 	embed := discord.NewEmbed().
 		WithTitle(title).
 		WithColor(colorAccent).
@@ -382,6 +392,9 @@ func welcomeFallback(t store.Ticket, tt store.TicketType, by *snowflake.ID) disc
 	if by != nil {
 		desc = onBehalfNote(*by)
 	}
+	if t.ClaimedBy != nil {
+		desc = assignedNote(*t.ClaimedBy) + "\n\n" + desc
+	}
 	embed := discord.NewEmbed().
 		WithTitle(fmt.Sprintf("%s · #%d", tt.Name, t.Number)).
 		WithDescription(desc).
@@ -392,6 +405,11 @@ func welcomeFallback(t store.Ticket, tt store.TicketType, by *snowflake.ID) disc
 // onBehalfNote starts the welcome of a ticket staff opened for a member.
 func onBehalfNote(by snowflake.ID) string {
 	return discord.UserMention(by) + " opened this ticket for you and will explain what it's about here."
+}
+
+// assignedNote tells the member their ticket was auto-assigned.
+func assignedNote(claimer snowflake.ID) string {
+	return "🙋 " + discord.UserMention(claimer) + " has been assigned this ticket and will help you from here."
 }
 
 // cleanupChannel deletes a half-created ticket channel after a failure.
@@ -444,6 +462,33 @@ func isStaff(m *discord.ResolvedMember, tt *store.TicketType) bool {
 
 func canClose(t store.Ticket, tt *store.TicketType, m *discord.ResolvedMember) bool {
 	return m != nil && (m.User.ID == t.OpenerID || isStaff(m, tt))
+}
+
+// autoAssign claims a freshly opened ticket for the next member of the
+// guild's auto-assign pool, round robin, and updates t if it succeeds.
+// Nobody being available, or the assignment failing, just leaves the ticket
+// unclaimed rather than blocking it from opening.
+func (b *Bot) autoAssign(ctx context.Context, t *store.Ticket, tt store.TicketType) {
+	userID, userName, ok, err := b.store.NextAssignee(ctx, t.GuildID)
+	if err != nil {
+		b.log.Warn("failed to pick an auto-assignee", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+		return
+	}
+	if !ok {
+		return
+	}
+	claimed, err := b.store.ClaimTicket(ctx, t.ID, userID, userName)
+	if err != nil {
+		b.log.Warn("failed to auto-assign ticket", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+		return
+	}
+	if !claimed {
+		return
+	}
+	t.ClaimedBy = &userID
+	t.ClaimedByName = &userName
+	b.applyClaimLock(ctx, *t, &tt, userID)
+	go b.logEvent(t.GuildID, claimedLog(*t, userID))
 }
 
 // toggleClaim claims the ticket for the member, or releases it if they

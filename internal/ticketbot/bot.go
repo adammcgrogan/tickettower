@@ -70,6 +70,7 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 		r.Command("/resume", b.handleResumeCommand)
 		r.Command("/block", b.handleBlockCommand)
 		r.Command("/unblock", b.handleUnblockCommand)
+		r.Command("/available", b.handleAvailableCommand)
 	})
 	r.Command("/close", b.handleCloseCommand)
 	r.Command("/reply", b.handleReplyCommand)

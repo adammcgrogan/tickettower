@@ -63,6 +63,7 @@ type ticketTypeInput struct {
 	ClosedKeepDays         int                 `json:"closed_keep_days"`
 	NotifyOnOpen           store.NotifyMode    `json:"notify_on_open"`
 	NotifyRoleID           *snowflake.ID       `json:"notify_role_id"`
+	AutoAssign             bool                `json:"auto_assign"`
 }
 
 // minuteOptions are the waits offered for reply targets and reminders.
@@ -100,6 +101,7 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.ClosedKeepDays = in.ClosedKeepDays
 	t.NotifyOnOpen = in.NotifyOnOpen
 	t.NotifyRoleID = in.NotifyRoleID
+	t.AutoAssign = in.AutoAssign
 }
 
 // validateQuestions normalises a ticket type's form questions.

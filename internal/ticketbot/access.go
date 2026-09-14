@@ -201,3 +201,23 @@ func (b *Bot) unblockMember(ctx context.Context, guildID snowflake.ID, by *disco
 	}
 	return fmt.Sprintf("%s can open tickets again.", discord.UserMention(target.ID)), nil
 }
+
+// setAvailable opts a support member in or out of a guild's auto-assign
+// pool, used by ticket types with auto-assign on. It returns the message to
+// show them.
+func (b *Bot) setAvailable(ctx context.Context, guildID snowflake.ID, m *discord.ResolvedMember, on bool) (string, error) {
+	ok, err := b.isSupport(ctx, guildID, m)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", userErr("Only support staff can opt in to auto-assignment.")
+	}
+	if err := b.store.SetAvailable(ctx, guildID, m.User.ID, m.EffectiveName(), on); err != nil {
+		return "", err
+	}
+	if !on {
+		return "You won't get tickets assigned to you automatically anymore.", nil
+	}
+	return "You'll now get new tickets assigned to you automatically, sharing them round robin with everyone else who's opted in.", nil
+}

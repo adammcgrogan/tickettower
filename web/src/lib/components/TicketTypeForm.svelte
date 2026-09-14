@@ -101,7 +101,8 @@
 			closed_member_access: source?.closed_member_access ?? 'read',
 			closed_keep_days: source?.closed_keep_days ?? 7,
 			notify_on_open: source?.notify_on_open ?? 'roles',
-			notify_role_id: source?.notify_role_id ?? null
+			notify_role_id: source?.notify_role_id ?? null,
+			auto_assign: source?.auto_assign ?? false
 		}))
 	);
 
@@ -1054,6 +1055,24 @@
 						</Field>
 						<p class="hint">The claimer unclaiming, or the ticket moving, gives the team their access back.</p>
 					{/if}
+				</section>
+
+				<section class="space-y-5 p-5">
+					<div>
+						<h2 class="font-medium">Auto-assign</h2>
+						<p class="hint mt-1">
+							Claim a new ticket for a member of the team automatically, instead of leaving it for someone to notice.
+						</p>
+					</div>
+					<label class="flex cursor-pointer items-start gap-2 text-sm">
+						<input type="checkbox" class="mt-0.5 size-4 accent-accent" bind:checked={form.auto_assign} />
+						<span>
+							Assign new tickets automatically
+							<span class="block text-xs text-muted">
+								Shared out round robin among staff who've opted in with <code>/ticket available</code>. Off by default.
+							</span>
+						</span>
+					</label>
 				</section>
 
 				<section class="space-y-5 p-5">

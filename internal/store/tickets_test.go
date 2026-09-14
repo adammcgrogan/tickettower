@@ -51,6 +51,9 @@ func TestTicketTypeCRUD(t *testing.T) {
 	if got.Answers == nil || len(got.Answers) != 0 {
 		t.Errorf("answers default = %#v, want empty", got.Answers)
 	}
+	if got.AutoAssign {
+		t.Error("auto_assign default = true, want false")
+	}
 
 	questions := []Question{
 		{Label: "Order number", Placeholder: "#1234", Style: QuestionShort, Required: true},
@@ -59,14 +62,17 @@ func TestTicketTypeCRUD(t *testing.T) {
 	answers := []Answer{
 		{Title: "Refund times", Body: "Refunds take 3-5 business days."},
 	}
-	got.Name, got.Mode, got.ParentID, got.SupportRoleIDs, got.Questions, got.Answers =
-		"Payments", ModeThread, nil, nil, questions, answers
+	got.Name, got.Mode, got.ParentID, got.SupportRoleIDs, got.Questions, got.Answers, got.AutoAssign =
+		"Payments", ModeThread, nil, nil, questions, answers, true
 	if err := s.UpdateTicketType(ctx, got); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.GetTicketType(ctx, testGuild, tt.ID)
 	if got.Name != "Payments" || got.Mode != ModeThread || got.ParentID != nil || len(got.SupportRoleIDs) != 0 {
 		t.Errorf("update mismatch: %+v", got)
+	}
+	if !got.AutoAssign {
+		t.Error("auto_assign after update = false, want true")
 	}
 	if !slices.Equal(got.Questions, questions) {
 		t.Errorf("questions = %+v, want %+v", got.Questions, questions)

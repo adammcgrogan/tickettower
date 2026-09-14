@@ -55,6 +55,7 @@
 		if (t.questions.length) out.push(`${t.questions.length} question${t.questions.length === 1 ? '' : 's'}`);
 		if (t.auto_close_hours) out.push(`Auto-closes after ${hoursLabel(t.auto_close_hours)}`);
 		if (t.required_role_ids.length) out.push('Some roles only');
+		if (t.auto_assign) out.push('Auto-assigns');
 		if (!t.ask_rating) out.push('No rating request');
 		return out;
 	}
