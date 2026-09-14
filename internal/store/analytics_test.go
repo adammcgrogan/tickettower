@@ -88,6 +88,9 @@ func TestAnalytics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got.Timezone != "UTC" {
+		t.Errorf("timezone = %q, want UTC when none is requested", got.Timezone)
+	}
 	sm := got.Summary
 	if len(got.Series) != 7 || got.Bucket != "day" || sm.Opened != 4 || sm.Closed != 3 {
 		t.Errorf("series=%d bucket=%s opened=%d closed=%d", len(got.Series), got.Bucket, sm.Opened, sm.Closed)
@@ -186,5 +189,65 @@ func TestAnalytics(t *testing.T) {
 	}
 	if len(empty.Series) != 30 || empty.Summary.RatingAvg != nil || empty.Summary.FirstResponseMedianSec != nil {
 		t.Errorf("empty analytics = %+v", empty)
+	}
+}
+
+// TestAnalyticsTimezone checks that the heatmap, response-by-hour and daily
+// series buckets shift with the requested IANA timezone, that an unknown
+// zone falls back to UTC instead of erroring, and that Timezone reports
+// which one was actually used.
+func TestAnalyticsTimezone(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	tt := newType(t, s, testGuild, "Billing")
+
+	tk := Ticket{GuildID: testGuild, Number: 1, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+		ChannelID: 9001, OpenerID: 42, OpenerName: "adam"}
+	if err := s.CreateTicket(ctx, &tk); err != nil {
+		t.Fatal(err)
+	}
+	// Yesterday at 1am UTC, safely inside a 30 day window either side of
+	// midnight in any zone.
+	now := time.Now().UTC()
+	opened := time.Date(now.Year(), now.Month(), now.Day(), 1, 0, 0, 0, time.UTC).AddDate(0, 0, -1)
+	if _, err := s.pool.Exec(ctx, `UPDATE tickets SET opened_at = $1 WHERE id = $2`, opened, tk.ID); err != nil {
+		t.Fatal(err)
+	}
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := opened.In(loc)
+
+	utc, err := s.Analytics(ctx, testGuild, AnalyticsQuery{Days: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if utc.Timezone != "UTC" {
+		t.Errorf("default timezone = %q, want UTC", utc.Timezone)
+	}
+	if n := utc.Heatmap[int(opened.Weekday())][opened.Hour()]; n != 1 {
+		t.Errorf("UTC heatmap[%s][%d] = %d, want 1: %v", opened.Weekday(), opened.Hour(), n, utc.Heatmap)
+	}
+
+	ny, err := s.Analytics(ctx, testGuild, AnalyticsQuery{Days: 30, Timezone: "America/New_York"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ny.Timezone != "America/New_York" {
+		t.Errorf("timezone = %q, want America/New_York", ny.Timezone)
+	}
+	if n := ny.Heatmap[int(local.Weekday())][local.Hour()]; n != 1 {
+		t.Errorf("NY heatmap[%s][%d] = %d, want 1: %v", local.Weekday(), local.Hour(), n, ny.Heatmap)
+	}
+
+	// An unrecognised zone falls back to UTC instead of erroring.
+	bogus, err := s.Analytics(ctx, testGuild, AnalyticsQuery{Days: 365, Timezone: "Not/AZone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bogus.Timezone != "UTC" {
+		t.Errorf("invalid timezone = %q, want UTC fallback", bogus.Timezone)
 	}
 }

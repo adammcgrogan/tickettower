@@ -176,7 +176,7 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getAnalytics(w http.ResponseWriter, r *http.Request) {
-	q := store.AnalyticsQuery{Days: 30}
+	q := store.AnalyticsQuery{Days: 30, Timezone: r.URL.Query().Get("tz")}
 	switch r.URL.Query().Get("days") {
 	case "7":
 		q.Days = 7

@@ -43,6 +43,10 @@ func (s *Store) GetFeedback(ctx context.Context, ticketID int64) (Feedback, erro
 type AnalyticsQuery struct {
 	Days   int    // 0 means all time
 	TypeID *int64 // nil means every type
+	// Timezone is the IANA zone the heatmap, response-by-hour and daily
+	// series are bucketed in. Empty, or anything Postgres doesn't recognise,
+	// falls back to UTC.
+	Timezone string
 }
 
 // Summary holds the headline figures for one window. Openings, first
@@ -129,6 +133,7 @@ type Analytics struct {
 	Days     int      `json:"days"`
 	From     string   `json:"from"`   // first day of the window, YYYY-MM-DD
 	Bucket   string   `json:"bucket"` // day, week or month
+	Timezone string   `json:"timezone"`
 	Summary  Summary  `json:"summary"`
 	Previous *Summary `json:"previous"` // the window before; nil for all time
 
@@ -140,8 +145,8 @@ type Analytics struct {
 	BacklogAgeMedianSec *float64 `json:"backlog_age_median_seconds"`
 
 	Series         []SeriesPoint `json:"series"`
-	Heatmap        [][]int       `json:"heatmap"`          // [weekday, Sunday first][hour], UTC
-	ResponseByHour []*float64    `json:"response_by_hour"` // median first response by hour opened
+	Heatmap        [][]int       `json:"heatmap"`          // [weekday, Sunday first][hour], in Timezone
+	ResponseByHour []*float64    `json:"response_by_hour"` // median first response by hour opened, in Timezone
 	Ratings        []int         `json:"ratings"`          // count of 1 to 5 star ratings
 	Closures       Closures      `json:"closures"`
 	CloseReasons   []ReasonCount `json:"close_reasons"`
@@ -196,18 +201,33 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 		bucket = "week"
 	}
 
+	tz := "UTC"
+	if q.Timezone != "" {
+		var valid bool
+		if err := s.pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name = $1)`, q.Timezone).Scan(&valid); err != nil {
+			return Analytics{}, err
+		}
+		if valid {
+			tz = q.Timezone
+		}
+	}
+
 	a := Analytics{
-		Days: max(q.Days, 0), From: from.Format(time.DateOnly), Bucket: bucket,
+		Days: max(q.Days, 0), From: from.Format(time.DateOnly), Bucket: bucket, Timezone: tz,
 		Series: []SeriesPoint{}, CloseReasons: []ReasonCount{}, ByType: []TypeStat{}, Staff: []StaffStat{},
 		Heatmap: make([][]int, 7), ResponseByHour: make([]*float64, 24),
 	}
 	for i := range a.Heatmap {
 		a.Heatmap[i] = make([]int, 24)
 	}
-	args := []any{gid, from, now, q.TypeID}
+	// args4 is used by queries that don't bucket by time and so don't need
+	// the timezone; args (with tz as $5) is for the ones that do.
+	args4 := []any{gid, from, now, q.TypeID}
+	args := []any{gid, from, now, q.TypeID, tz}
 
 	var err error
-	if a.Summary, a.Ratings, err = s.summary(ctx, args); err != nil {
+	if a.Summary, a.Ratings, err = s.summary(ctx, args4); err != nil {
 		return a, err
 	}
 	if q.Days > 0 {
@@ -238,15 +258,15 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 	// only counts the days inside. Backlog is measured at the bucket's end,
 	// or now for the current one.
 	rows, err := s.pool.Query(ctx, `
-		SELECT to_char(b AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+		SELECT to_char(b AT TIME ZONE $5, 'YYYY-MM-DD'),
 		       (SELECT count(*) FROM tickets t WHERE `+inScope+`
 		           AND t.opened_at >= GREATEST(b, $2) AND t.opened_at < LEAST(b + step, $3)),
 		       (SELECT count(*) FROM tickets t WHERE `+inScope+`
 		           AND t.closed_at >= GREATEST(b, $2) AND t.closed_at < LEAST(b + step, $3)),
 		       (SELECT count(*) FROM tickets t WHERE `+inScope+`
 		           AND t.opened_at < LEAST(b + step, $3) AND (t.closed_at IS NULL OR t.closed_at >= LEAST(b + step, $3)))
-		FROM (SELECT ('1 ' || $5::text)::interval AS step) i,
-		     generate_series(date_trunc($5::text, $2::timestamptz, 'UTC'), $3::timestamptz, i.step) b
+		FROM (SELECT ('1 ' || $6::text)::interval AS step) i,
+		     generate_series(date_trunc($6::text, $2::timestamptz, $5), $3::timestamptz, i.step) b
 		ORDER BY b`, append(args, bucket)...)
 	err = eachRow(rows, err, func() error {
 		var p SeriesPoint
@@ -259,7 +279,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 	}
 
 	rows, err = s.pool.Query(ctx, `
-		SELECT extract(dow FROM t.opened_at AT TIME ZONE 'UTC')::int, extract(hour FROM t.opened_at AT TIME ZONE 'UTC')::int,
+		SELECT extract(dow FROM t.opened_at AT TIME ZONE $5)::int, extract(hour FROM t.opened_at AT TIME ZONE $5)::int,
 		       count(*)
 		FROM tickets t WHERE `+inScope+openedIn+` GROUP BY 1, 2`, args...)
 	err = eachRow(rows, err, func() error {
@@ -273,7 +293,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 	}
 
 	rows, err = s.pool.Query(ctx, `
-		SELECT extract(hour FROM t.opened_at AT TIME ZONE 'UTC')::int,
+		SELECT extract(hour FROM t.opened_at AT TIME ZONE $5)::int,
 		       percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM t.first_response_at - t.opened_at))
 		FROM tickets t WHERE `+inScope+openedIn+` AND t.first_response_at IS NOT NULL GROUP BY 1`, args...)
 	err = eachRow(rows, err, func() error {
@@ -292,7 +312,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 		       count(*) FILTER (WHERE t.closed_by IS NULL AND NOT t.auto_closed),
 		       count(*) FILTER (WHERE t.closed_by = t.opener_id),
 		       count(*) FILTER (WHERE t.closed_by <> t.opener_id)
-		FROM tickets t WHERE `+inScope+closedIn, args...).
+		FROM tickets t WHERE `+inScope+closedIn, args4...).
 		Scan(&a.Closures.Auto, &a.Closures.Deleted, &a.Closures.Member, &a.Closures.Team)
 	if err != nil {
 		return a, err
@@ -303,7 +323,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 	rows, err = s.pool.Query(ctx, `
 		SELECT mode() WITHIN GROUP (ORDER BY btrim(t.close_reason)), count(*)
 		FROM tickets t WHERE `+inScope+closedIn+` AND t.closed_by IS NOT NULL AND btrim(t.close_reason) <> ''
-		GROUP BY lower(btrim(t.close_reason)) ORDER BY count(*) DESC, 1 LIMIT 8`, args...)
+		GROUP BY lower(btrim(t.close_reason)) ORDER BY count(*) DESC, 1 LIMIT 8`, args4...)
 	err = eachRow(rows, err, func() error {
 		var r ReasonCount
 		err := rows.Scan(&r.Reason, &r.Count)
@@ -316,7 +336,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 
 	err = s.pool.QueryRow(ctx, `
 		SELECT count(*) FILTER (WHERE t.mode = 'thread'), count(*) FILTER (WHERE t.mode = 'channel')
-		FROM tickets t WHERE `+inScope+openedIn, args...).Scan(&a.Threads, &a.Channels)
+		FROM tickets t WHERE `+inScope+openedIn, args4...).Scan(&a.Threads, &a.Channels)
 	if err != nil {
 		return a, err
 	}
@@ -338,7 +358,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 		LEFT JOIN ticket_feedback f ON f.ticket_id = t.id
 		WHERE `+inScope+openedIn+`
 		GROUP BY t.ticket_type_id, CASE WHEN t.ticket_type_id IS NULL THEN t.type_name END
-		ORDER BY count(*) DESC, 2 LIMIT 25`, args...)
+		ORDER BY count(*) DESC, 2 LIMIT 25`, args4...)
 	err = eachRow(rows, err, func() error {
 		var ts TypeStat
 		err := rows.Scan(&ts.TypeID, &ts.Name, &ts.Emoji, &ts.Opened, &ts.FirstResponseMedianSec,
@@ -374,7 +394,7 @@ func (s *Store) Analytics(ctx context.Context, guildID snowflake.ID, q Analytics
 		LEFT JOIN claims c ON c.uid = p.uid
 		LEFT JOIN closes x ON x.uid = p.uid
 		LEFT JOIN replies r ON r.uid = p.uid
-		ORDER BY COALESCE(r.n, 0) + COALESCE(c.n, 0) + COALESCE(x.n, 0) DESC, 2 LIMIT 15`, args...)
+		ORDER BY COALESCE(r.n, 0) + COALESCE(c.n, 0) + COALESCE(x.n, 0) DESC, 2 LIMIT 15`, args4...)
 	err = eachRow(rows, err, func() error {
 		var st StaffStat
 		var uid int64

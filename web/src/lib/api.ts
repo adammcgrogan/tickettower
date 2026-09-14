@@ -442,6 +442,8 @@ export type Analytics = {
 	days: number;
 	from: string;
 	bucket: 'day' | 'week' | 'month';
+	/** The IANA zone the heatmap, response-by-hour and series are bucketed in. */
+	timezone: string;
 	summary: AnalyticsSummary;
 	previous: AnalyticsSummary | null;
 	open_now: number;
@@ -452,7 +454,7 @@ export type Analytics = {
 	/** Median age of tickets open right now. */
 	backlog_age_median_seconds: number | null;
 	series: { date: string; opened: number; closed: number; backlog: number }[];
-	/** [weekday, Sunday first][hour], UTC. */
+	/** [weekday, Sunday first][hour], in timezone. */
 	heatmap: number[][];
 	response_by_hour: (number | null)[];
 	/** Counts of 1 to 5 star ratings. */

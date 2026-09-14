@@ -13,6 +13,9 @@
 	type TypeRow = Analytics['by_type'][number];
 
 	const guildId = page.params.id!;
+	// The browser's IANA zone, so the heatmap and response-by-hour line up
+	// with the team's local time instead of UTC.
+	const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 	const ranges: { value: Range; label: string }[] = [
 		{ value: '7', label: '7 days' },
 		{ value: '30', label: '30 days' },
@@ -45,7 +48,7 @@
 	// skeleton. Only the latest request may update the page.
 	let latest = 0;
 	$effect(() => {
-		const query = `days=${range}${typeId ? `&type=${typeId}` : ''}`;
+		const query = `days=${range}${typeId ? `&type=${typeId}` : ''}&tz=${encodeURIComponent(timezone)}`;
 		const req = ++latest;
 		loading = true;
 		api<Analytics>(`/guilds/${guildId}/analytics?${query}`)
@@ -311,7 +314,7 @@
 
 		<section class="card mt-4 p-5">
 			<h2 class="font-semibold">Busiest times</h2>
-			<p class="hint mt-0.5">Tickets opened by day and hour (UTC)</p>
+			<p class="hint mt-0.5">Tickets opened by day and hour ({data.timezone})</p>
 			<div class="mt-4">
 				<Heatmap data={data.heatmap} label="Tickets opened by day of the week and hour, {period}" />
 			</div>
@@ -320,7 +323,7 @@
 		{#if hasResponses}
 			<section class="card mt-4 p-5">
 				<h2 class="font-semibold">First response by hour</h2>
-				<p class="hint mt-0.5">Median time to the first reply, by the hour the ticket was opened (UTC)</p>
+				<p class="hint mt-0.5">Median time to the first reply, by the hour the ticket was opened ({data.timezone})</p>
 				<div class="mt-4">
 					<ColumnChart
 						data={responseByHour}

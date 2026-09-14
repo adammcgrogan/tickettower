@@ -91,5 +91,4 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 ## Nice to have
 
 - Light theme (the tokens are ready for it)
-- Timezone-aware analytics (currently UTC)
 - Custom bot branding per server
