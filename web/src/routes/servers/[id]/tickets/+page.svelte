@@ -23,6 +23,7 @@
 	import Field from '$lib/components/Field.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Rating from '$lib/components/Rating.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
 	import TicketStub from '$lib/components/TicketStub.svelte';
 	import TicketSummary from '$lib/components/TicketSummary.svelte';
@@ -552,7 +553,8 @@
 							<div class="min-w-0 flex-1">
 								<div class="flex items-baseline justify-between gap-2">
 									<span class="truncate text-sm font-medium">{t.opener_name}</span>
-									<span class="shrink-0 text-xs text-subtle">
+									<span class="flex shrink-0 items-center gap-2 text-xs text-subtle">
+										{#if t.feedback}<Rating rating={t.feedback.rating} compact />{/if}
 										{timeAgo(t.closed_at ?? t.last_activity_at)}
 									</span>
 								</div>

@@ -433,3 +433,44 @@ func TestReopenTicket(t *testing.T) {
 		t.Error("could not close the reopened ticket")
 	}
 }
+
+func TestTicketsCarryFeedback(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	tt := newType(t, s, testGuild, "Billing")
+	rated := Ticket{GuildID: testGuild, Number: 1, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel, ChannelID: 9001, OpenerID: 42}
+	unrated := Ticket{GuildID: testGuild, Number: 2, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel, ChannelID: 9002, OpenerID: 42}
+	for _, tk := range []*Ticket{&rated, &unrated} {
+		if err := s.CreateTicket(ctx, tk); err != nil {
+			t.Fatal(err)
+		}
+		s.CloseTicket(ctx, tk.ID, 100, "staff", "")
+	}
+	if err := s.SetFeedbackRating(ctx, rated.ID, 4); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetFeedbackComment(ctx, rated.ID, "Quick and friendly"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetGuildTicket(ctx, testGuild, rated.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Feedback == nil || got.Feedback.Rating != 4 || got.Feedback.Comment != "Quick and friendly" || got.Feedback.CreatedAt.IsZero() {
+		t.Errorf("feedback = %+v", got.Feedback)
+	}
+	list, err := s.ListTickets(ctx, testGuild, TicketQuery{Status: StatusClosed, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("got %d tickets", len(list))
+	}
+	for _, tk := range list {
+		if (tk.ID == rated.ID) != (tk.Feedback != nil) {
+			t.Errorf("ticket %d feedback = %+v", tk.Number, tk.Feedback)
+		}
+	}
+}

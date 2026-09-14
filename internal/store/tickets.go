@@ -49,11 +49,24 @@ type Ticket struct {
 	// Match is set by ListTickets when a search matched something said in
 	// the ticket rather than its number or names.
 	Match *MessageMatch `json:"match,omitempty"`
+	// Feedback is the opener's rating once the ticket has been rated.
+	Feedback *TicketFeedback `json:"feedback"`
 }
 
-const ticketColumns = `id, guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name,
+// TicketFeedback is the rating and comment the opener left after closing.
+type TicketFeedback struct {
+	Rating    int       `json:"rating"`
+	Comment   string    `json:"comment"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ticketColumns and ticketFrom read a ticket with its feedback, if any.
+// Queries built on them must not alias the tickets table.
+const ticketColumns = `tickets.id, guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name,
 	claimed_by, claimed_by_name, status, close_reason, closed_by, closed_by_name, opened_at, first_response_at, closed_at,
-	last_activity_at, waiting_on_staff, waiting_since, on_hold, hold_reason`
+	last_activity_at, waiting_on_staff, waiting_since, on_hold, hold_reason, fb.rating, fb.comment, fb.created_at`
+
+const ticketFrom = `FROM tickets LEFT JOIN ticket_feedback fb ON fb.ticket_id = tickets.id`
 
 func scanTicket(row pgx.Row) (Ticket, error) {
 	var (
@@ -61,12 +74,19 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		guildID, channelID, opener int64
 		mode, status               string
 		claimedBy, closedBy        *int64
+		rating                     *int
+		comment                    *string
+		ratedAt                    *time.Time
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Number, &t.TicketTypeID, &t.TypeName, &mode, &channelID, &opener,
 		&t.OpenerName, &claimedBy, &t.ClaimedByName, &status, &t.CloseReason, &closedBy, &t.ClosedByName, &t.OpenedAt,
-		&t.FirstResponseAt, &t.ClosedAt, &t.LastActivityAt, &t.WaitingOnStaff, &t.WaitingSince, &t.OnHold, &t.HoldReason)
+		&t.FirstResponseAt, &t.ClosedAt, &t.LastActivityAt, &t.WaitingOnStaff, &t.WaitingSince, &t.OnHold, &t.HoldReason,
+		&rating, &comment, &ratedAt)
 	if err != nil {
 		return t, notFound(err)
+	}
+	if rating != nil {
+		t.Feedback = &TicketFeedback{Rating: *rating, Comment: *comment, CreatedAt: *ratedAt}
 	}
 	t.GuildID = snowflake.ID(guildID)
 	t.ChannelID = snowflake.ID(channelID)
@@ -147,17 +167,17 @@ func (s *Store) ResumeTicket(ctx context.Context, id int64, now time.Time) (bool
 }
 
 func (s *Store) GetTicket(ctx context.Context, id int64) (Ticket, error) {
-	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` FROM tickets WHERE id = $1`, id))
+	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` `+ticketFrom+` WHERE id = $1`, id))
 }
 
 // GetGuildTicket returns one of a guild's tickets.
 func (s *Store) GetGuildTicket(ctx context.Context, guildID snowflake.ID, id int64) (Ticket, error) {
-	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` FROM tickets WHERE guild_id = $1 AND id = $2`,
+	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` `+ticketFrom+` WHERE guild_id = $1 AND id = $2`,
 		int64(guildID), id))
 }
 
 func (s *Store) GetTicketByChannel(ctx context.Context, channelID snowflake.ID) (Ticket, error) {
-	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` FROM tickets WHERE channel_id = $1`, int64(channelID)))
+	return scanTicket(s.pool.QueryRow(ctx, `SELECT `+ticketColumns+` `+ticketFrom+` WHERE channel_id = $1`, int64(channelID)))
 }
 
 // ClaimTicket claims an open, unclaimed ticket. It reports false if someone
@@ -225,7 +245,7 @@ func (s *Store) ReopenTicket(ctx context.Context, id int64, now time.Time) (bool
 // given time so a close still in progress isn't picked up.
 func (s *Store) TicketsToCleanUp(ctx context.Context, closedBefore time.Time) ([]Ticket, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT `+ticketColumns+` FROM tickets
+		SELECT `+ticketColumns+` `+ticketFrom+`
 		WHERE status = 'closed' AND channel_cleaned_at IS NULL AND closed_at <= $1
 		  AND guild_id IN (SELECT id FROM guilds WHERE left_at IS NULL)
 		ORDER BY closed_at LIMIT 50`, closedBefore)
@@ -283,7 +303,7 @@ func (s *Store) ListTickets(ctx context.Context, guildID snowflake.ID, q TicketQ
 		words = searchQuery(q.Search)
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT `+ticketColumns+` FROM tickets
+		SELECT `+ticketColumns+` `+ticketFrom+`
 		WHERE guild_id = $1
 		  AND ($2 = '' OR status = $2)
 		  AND ($3::bigint IS NULL OR ticket_type_id = $3)

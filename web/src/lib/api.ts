@@ -213,6 +213,8 @@ export type Ticket = {
 	hold_reason: string;
 	/** The message that matched a search, when the search matched what was said. */
 	match?: { author_name: string; snippet: string };
+	/** The opener's rating and comment, once the ticket has been rated. */
+	feedback: { rating: number; comment: string; created_at: string } | null;
 };
 
 /** Wrap the matching words in a search snippet; see `snippetParts`. */

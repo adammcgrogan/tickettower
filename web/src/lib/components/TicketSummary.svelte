@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { Ticket } from '$lib/api';
 	import { ticketState, timeAgo } from '$lib/format';
+	import Rating from './Rating.svelte';
 	import TicketStub from './TicketStub.svelte';
 
 	/** The header of a ticket: its number, whose turn it is, and the key facts. */
@@ -58,6 +59,18 @@
 			<div class="col-span-full">
 				<dt class="text-xs text-muted">Close reason</dt>
 				<dd class="mt-0.5">{t.close_reason}</dd>
+			</div>
+		{/if}
+		{#if t.feedback}
+			<div class="col-span-full">
+				<dt class="text-xs text-muted">Rating</dt>
+				<dd class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+					<Rating rating={t.feedback.rating} />
+					<span class="text-xs text-subtle" title={time(t.feedback.created_at)}>{timeAgo(t.feedback.created_at)}</span>
+				</dd>
+				{#if t.feedback.comment}
+					<dd class="mt-1.5 whitespace-pre-wrap text-muted">{t.feedback.comment}</dd>
+				{/if}
 			</div>
 		{/if}
 	</dl>
