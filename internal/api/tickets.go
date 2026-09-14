@@ -2,8 +2,11 @@ package api
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/disgoorg/disgo/rest"
@@ -76,6 +79,114 @@ func (s *Server) closeTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
+}
+
+const (
+	// maxBulkClose is the most tickets one request can close.
+	maxBulkClose = 50
+	// bulkCloseGap spaces closes out, since each posts a message and later
+	// deletes a channel, so a big batch doesn't hit Discord all at once.
+	bulkCloseGap = 300 * time.Millisecond
+	// bulkCloseBudget is how long one request keeps closing. Tickets it
+	// doesn't reach are returned as pending, for the dashboard to send again.
+	bulkCloseBudget = 15 * time.Second
+)
+
+type bulkCloseInput struct {
+	IDs    []int64 `json:"ids"`
+	Reason string  `json:"reason"`
+}
+
+type bulkCloseFailure struct {
+	ID    int64  `json:"id"`
+	Error string `json:"error"`
+}
+
+type bulkCloseResult struct {
+	Closed  []store.Ticket     `json:"closed"`
+	Failed  []bulkCloseFailure `json:"failed"`
+	Pending []int64            `json:"pending"`
+}
+
+// validateBulkClose tidies a bulk close request: the reason trimmed, and
+// the IDs de-duplicated in the order given.
+func validateBulkClose(in *bulkCloseInput) error {
+	in.Reason = strings.TrimSpace(in.Reason)
+	if utf8.RuneCountInString(in.Reason) > 500 {
+		return invalid("reason", "Keep the reason to 500 characters or fewer.")
+	}
+	seen := make(map[int64]bool, len(in.IDs))
+	ids := in.IDs[:0]
+	for _, id := range in.IDs {
+		if id > 0 && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	in.IDs = ids
+	switch {
+	case len(in.IDs) == 0:
+		return invalid("", "Choose at least one ticket to close.")
+	case len(in.IDs) > maxBulkClose:
+		return invalid("", fmt.Sprintf("Close up to %d tickets at a time.", maxBulkClose))
+	}
+	return nil
+}
+
+// closeTickets closes several tickets at once from the dashboard, each just
+// as closeTicket does. It reports which closed, which couldn't and why, and
+// which it ran out of time for.
+func (s *Server) closeTickets(w http.ResponseWriter, r *http.Request) {
+	var in bulkCloseInput
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if err := validateBulkClose(&in); err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+
+	ctx := r.Context()
+	guildID := guildFrom(r).ID
+	user := auth.FromContext(ctx).User
+	res := bulkCloseResult{Closed: []store.Ticket{}, Failed: []bulkCloseFailure{}, Pending: []int64{}}
+	deadline := time.Now().Add(bulkCloseBudget)
+	for i, id := range in.IDs {
+		if i > 0 {
+			if time.Now().Add(bulkCloseGap).After(deadline) || ctx.Err() != nil {
+				res.Pending = in.IDs[i:]
+				break
+			}
+			time.Sleep(bulkCloseGap)
+		}
+		fail := func(msg string) { res.Failed = append(res.Failed, bulkCloseFailure{ID: id, Error: msg}) }
+
+		t, err := s.store.GetGuildTicket(ctx, guildID, id)
+		if errors.Is(err, store.ErrNotFound) {
+			fail("Ticket not found.")
+			continue
+		} else if err != nil {
+			s.log.Error("bulk close: failed to load ticket", slog.Int64("ticket_id", id), slog.Any("err", err))
+			fail("Something went wrong. Try again.")
+			continue
+		}
+		closed := false
+		if t.Status == store.StatusOpen {
+			if closed, err = s.dashboard.Close(ctx, t, user.ID, user.DisplayName, in.Reason); err != nil {
+				s.log.Error("bulk close: failed to close ticket", slog.Int64("ticket_id", id), slog.Any("err", err))
+				fail("Something went wrong. Try again.")
+				continue
+			}
+		}
+		if !closed {
+			fail("Already closed.")
+			continue
+		}
+		if t, err = s.store.GetGuildTicket(ctx, guildID, id); err == nil {
+			res.Closed = append(res.Closed, t)
+		}
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 type moveTicketInput struct {

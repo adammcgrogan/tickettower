@@ -241,6 +241,16 @@ export type Member = { id: string; name: string; avatar_url: string };
 /** Someone with their own access to a ticket. Whoever opened it can't be removed. */
 export type TicketMember = Member & { opener: boolean };
 
+/** The most tickets one bulk close request takes. */
+export const MAX_BULK_CLOSE = 50;
+
+/** What POST /guilds/{id}/tickets/close did. Pending tickets weren't reached in time; send them again. */
+export type BulkCloseResult = {
+	closed: Ticket[];
+	failed: { id: number; error: string }[];
+	pending: number[];
+};
+
 /** Wrap the matching words in a search snippet; see `snippetParts`. */
 export const MATCH_START = '\ue000';
 export const MATCH_END = '\ue001';

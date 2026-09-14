@@ -2,16 +2,19 @@
 	import { getContext, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { SvelteSet } from 'svelte/reactivity';
 	import {
 		api,
 		ApiError,
 		atLeast,
 		canReopen,
 		errorMessage,
+		MAX_BULK_CLOSE,
 		MAX_NOTE,
 		overdueAt,
 		send,
 		snippetParts,
+		type BulkCloseResult,
 		type Guild,
 		type Member,
 		type SavedReply,
@@ -132,6 +135,8 @@
 				if (req !== seq) return;
 				tickets = t;
 				more = t.length === PAGE;
+				// Only tickets on screen stay selected, so nothing hidden is closed.
+				for (const id of picked) if (!t.some((x) => x.id === id)) picked.delete(id);
 			})
 			.catch((e) => {
 				if (req === seq) error = errorMessage(e);
@@ -578,6 +583,100 @@
 		}
 	}
 
+	// --- Closing several at once ---
+	// Selecting works on the open list, where the queue groups make "everything
+	// waiting on the member" an easy pick.
+
+	let selecting = $state(false);
+	const picked = new SvelteSet<number>();
+	let bulkOpen = $state(false);
+	let bulkReason = $state('');
+	let bulkError = $state('');
+	let bulkClosing = $state(false);
+	let bulkTotal = $state(0);
+	let bulkDone = $state(0);
+
+	function stopSelecting() {
+		selecting = false;
+		picked.clear();
+	}
+
+	// Another filter or server ends the selection.
+	$effect(() => {
+		void filter;
+		void guild.id;
+		stopSelecting();
+	});
+
+	function togglePicked(id: number) {
+		if (picked.has(id)) picked.delete(id);
+		else picked.add(id);
+	}
+
+	const allPicked = (items: Ticket[]) => items.every((t) => picked.has(t.id));
+
+	function toggleGroup(items: Ticket[]) {
+		const all = allPicked(items);
+		for (const t of items) {
+			if (all) picked.delete(t.id);
+			else picked.add(t.id);
+		}
+	}
+
+	function openBulkClose() {
+		bulkReason = '';
+		bulkError = '';
+		bulkTotal = picked.size;
+		bulkDone = 0;
+		bulkOpen = true;
+	}
+
+	// The server closes tickets one at a time and hands back any it didn't
+	// reach, so keep sending until none are left.
+	async function closeSelected() {
+		if (bulkClosing || picked.size === 0) return;
+		const queue = [...picked];
+		const failed: BulkCloseResult['failed'] = [];
+		let closed = 0;
+		bulkClosing = true;
+		bulkError = '';
+		try {
+			while (queue.length > 0) {
+				const res = await api<BulkCloseResult>(
+					`/guilds/${guild.id}/tickets/close`,
+					send('POST', { ids: queue.splice(0, MAX_BULK_CLOSE), reason: bulkReason })
+				);
+				for (const t of res.closed) {
+					picked.delete(t.id);
+					closedCache.delete(t.id);
+					if (detail?.ticket.id === t.id) detail = { ...detail, ticket: t };
+					showClosed(t);
+				}
+				failed.push(...res.failed);
+				queue.unshift(...res.pending);
+				closed += res.closed.length;
+				bulkDone = closed + failed.length;
+			}
+		} catch (e) {
+			if (e instanceof ApiError && e.field) {
+				bulkError = e.message;
+				return;
+			}
+			toast(errorMessage(e), 'error');
+		} finally {
+			bulkClosing = false;
+		}
+		bulkOpen = false;
+		if (closed > 0) toast(closed === 1 ? 'Closed 1 ticket' : `Closed ${closed} tickets`);
+		if (failed.length > 0) {
+			// The ones that failed stay selected, to try again.
+			const n = failed.length === 1 ? '1 ticket' : `${failed.length} tickets`;
+			toast(`Couldn't close ${n}: ${failed[0].error}`, 'error');
+		} else if (picked.size === 0) {
+			stopSelecting();
+		}
+	}
+
 	// --- Moving to another ticket type ---
 
 	let moveOpen = $state(false);
@@ -789,6 +888,16 @@
 			{#each types as tt (tt.id)}<option value={String(tt.id)}>{tt.name}</option>{/each}
 		</select>
 	{/if}
+	{#if canAct && filter === 'open' && tickets?.length}
+		<button
+			class="btn btn-secondary ml-auto"
+			onclick={() => (selecting ? stopSelecting() : (selecting = true))}
+			aria-pressed={selecting}
+		>
+			<Icon name="check" size={14} />
+			{selecting ? 'Done selecting' : 'Select'}
+		</button>
+	{/if}
 </div>
 
 <div class="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]">
@@ -815,6 +924,16 @@
 				<p class="mx-auto mt-1 max-w-xs text-sm text-muted">{emptyText.body}</p>
 			</div>
 		{:else}
+			{#if selecting}
+				<div class="mb-2 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-2">
+					<span class="text-sm {picked.size ? '' : 'text-muted'}" aria-live="polite">
+						{picked.size ? `${picked.size} selected` : 'Pick the tickets to close'}
+					</span>
+					<button class="btn btn-primary h-8 px-3" onclick={openBulkClose} disabled={picked.size === 0}>
+						<Icon name="lock" size={13} /> Close selected
+					</button>
+				</div>
+			{/if}
 			<ul
 				aria-busy={loading}
 				class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface transition-opacity lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto {loading
@@ -825,19 +944,45 @@
 					{#if g.label}
 						<li class="flex items-baseline justify-between gap-2 bg-bg/50 px-4 py-2 text-xs">
 							<span class="font-medium {g.label === 'Waiting on your team' ? 'text-accent' : 'text-muted'}">{g.label}</span>
-							<span class="text-subtle tabular-nums">{g.items.length}</span>
+							<span class="flex items-baseline gap-3">
+								{#if selecting}
+									<button
+										class="text-muted underline-offset-4 hover:text-fg hover:underline"
+										onclick={() => toggleGroup(g.items)}
+									>
+										{allPicked(g.items) ? 'Clear' : 'Select all'}
+									</button>
+								{/if}
+								<span class="text-subtle tabular-nums">{g.items.length}</span>
+							</span>
 						</li>
 					{/if}
 				{#each g.items as t (t.id)}
 					{@const state = ticketState(t)}
 					{@const active = t.id === selectedId}
-					<li>
+					<li class="flex">
+						{#if selecting}
+							<label class="flex items-start pt-4 pl-4">
+								<span class="sr-only">Select ticket #{t.number}</span>
+								<input
+									type="checkbox"
+									class="size-4 accent-accent"
+									checked={picked.has(t.id)}
+									onchange={() => togglePicked(t.id)}
+								/>
+							</label>
+						{/if}
 						<a
 							href={hrefWith({ t: String(t.id) })}
 							data-sveltekit-noscroll
 							data-sveltekit-replacestate
 							aria-current={active ? 'true' : undefined}
-							class="relative flex gap-3 px-4 py-3 transition-colors {active
+							onclick={(e) => {
+								if (!selecting) return;
+								e.preventDefault();
+								togglePicked(t.id);
+							}}
+							class="relative flex min-w-0 flex-1 gap-3 px-4 py-3 transition-colors {active
 								? 'bg-elevated'
 								: 'hover:bg-elevated/50'}"
 						>
@@ -1370,6 +1515,32 @@
 		<button class="btn btn-ghost" onclick={() => (closeOpen = false)}>Cancel</button>
 		<button class="btn btn-primary" onclick={closeTicket} disabled={closing}>
 			{closing ? 'Closing…' : 'Close ticket'}
+		</button>
+	{/snippet}
+</Dialog>
+
+<Dialog
+	bind:open={bulkOpen}
+	title="Close {bulkTotal === 1 ? '1 ticket' : `${bulkTotal} tickets`}?"
+	description="Each member is told their ticket is closed and asked to rate it, just as when you close one, and the transcripts are kept. They close one after another, so a big batch takes a little while."
+>
+	<Field label="Reason" for="bulk-close-reason" optional hint="Shown to every member and in the ticket log." error={bulkError}>
+		<textarea
+			id="bulk-close-reason"
+			class="input"
+			rows="3"
+			maxlength="500"
+			bind:value={bulkReason}
+			placeholder="e.g. Closing tickets with no reply for a week"
+			aria-invalid={!!bulkError}
+		></textarea>
+	</Field>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (bulkOpen = false)} disabled={bulkClosing}>Cancel</button>
+		<button class="btn btn-primary" onclick={closeSelected} disabled={bulkClosing}>
+			{bulkClosing
+				? `Closing… ${bulkDone} of ${bulkTotal}`
+				: `Close ${bulkTotal === 1 ? '1 ticket' : `${bulkTotal} tickets`}`}
 		</button>
 	{/snippet}
 </Dialog>
