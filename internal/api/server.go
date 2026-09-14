@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -216,7 +217,12 @@ type guildResponse struct {
 func (s *Server) listGuilds(w http.ResponseWriter, r *http.Request) {
 	sess := auth.FromContext(r.Context())
 	guilds, err := s.auth.Guilds(r.Context(), sess)
-	if err != nil {
+	if errors.Is(err, auth.ErrNoSession) {
+		// The Discord login behind the session is over; the dashboard
+		// sends the user back to log in.
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	} else if err != nil {
 		s.log.Error("fetch guilds", slog.Any("err", err))
 		writeError(w, http.StatusBadGateway, "could not load your servers from Discord")
 		return
@@ -274,7 +280,10 @@ func (s *Server) requireGuild(next http.Handler) http.Handler {
 			return
 		}
 		acc, allowed, err := s.access(r.Context(), auth.FromContext(r.Context()), id)
-		if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		} else if err != nil {
 			s.log.Warn("check guild access", slog.Any("err", err))
 			writeError(w, http.StatusBadGateway, "could not check your access to this server with Discord")
 			return

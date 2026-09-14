@@ -109,37 +109,89 @@ func (m *Manager) Complete(ctx context.Context, w http.ResponseWriter, code, sta
 	return sess, nil
 }
 
-// FromRequest loads the session for a request, refreshing the Discord access
-// token if it has expired.
+// FromRequest loads the session for a request. The Discord token is only
+// refreshed when something needs it (see Guilds), not on every request.
 func (m *Manager) FromRequest(r *http.Request) (*Session, error) {
 	c, err := r.Cookie(cookieName)
 	if err != nil || c.Value == "" {
 		return nil, ErrNoSession
 	}
-	data, err := m.rdb.Get(r.Context(), sessionKey(c.Value)).Bytes()
+	return m.load(r.Context(), c.Value)
+}
+
+// load reads a session from Redis by ID.
+func (m *Manager) load(ctx context.Context, id string) (*Session, error) {
+	data, err := m.rdb.Get(ctx, sessionKey(id)).Bytes()
 	if errors.Is(err, redis.Nil) {
 		return nil, ErrNoSession
 	} else if err != nil {
 		return nil, err
 	}
-
 	var sess Session
 	if err := json.Unmarshal(data, &sess); err != nil {
 		return nil, ErrNoSession
 	}
-	sess.ID = c.Value
+	sess.ID = id
+	return &sess, nil
+}
 
-	if sess.OAuth.Expired() {
-		refreshed, err := m.oauth.RefreshSession(sess.OAuth, rest.WithCtx(r.Context()))
+// refreshLockTTL bounds how long one request may hold a session's refresh
+// lock, and how long others wait for it.
+const refreshLockTTL = 10 * time.Second
+
+// refreshIfExpired makes sure sess carries a usable Discord token. A
+// dashboard page fires several requests at once, and Discord accepts each
+// refresh token only once, so exactly one request refreshes (under a Redis
+// lock) and the rest wait for its result and re-read the session. It returns
+// ErrNoSession only when the refresh itself failed, meaning the login is
+// really over.
+func (m *Manager) refreshIfExpired(ctx context.Context, sess *Session) error {
+	if !sess.OAuth.Expired() {
+		return nil
+	}
+	lockKey := "oauth_refresh:" + sess.ID
+	locked, err := m.rdb.SetNX(ctx, lockKey, "1", refreshLockTTL).Result()
+	if err != nil {
+		return err
+	}
+	if locked {
+		defer m.rdb.Del(context.WithoutCancel(ctx), lockKey)
+		// Another request may have finished refreshing just before we took
+		// the lock.
+		if cur, err := m.load(ctx, sess.ID); err == nil && !cur.OAuth.Expired() {
+			sess.OAuth = cur.OAuth
+			return nil
+		}
+		refreshed, err := m.oauth.RefreshSession(sess.OAuth, rest.WithCtx(ctx))
 		if err != nil {
-			return nil, ErrNoSession
+			return ErrNoSession
 		}
 		sess.OAuth = refreshed
-		if err := m.save(r.Context(), &sess); err != nil {
-			return nil, err
+		return m.save(ctx, sess)
+	}
+
+	// Someone else is refreshing: wait for the lock to go, then use what
+	// they saved.
+	deadline := time.Now().Add(refreshLockTTL)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+		cur, err := m.load(ctx, sess.ID)
+		if err != nil {
+			return err
+		}
+		if !cur.OAuth.Expired() {
+			sess.OAuth = cur.OAuth
+			return nil
+		}
+		if n, _ := m.rdb.Exists(ctx, lockKey).Result(); n == 0 {
+			return ErrNoSession // the refresh failed
 		}
 	}
-	return &sess, nil
+	return errors.New("timed out waiting for the session's token refresh")
 }
 
 func (m *Manager) Logout(w http.ResponseWriter, r *http.Request) error {
@@ -153,7 +205,8 @@ func (m *Manager) Logout(w http.ResponseWriter, r *http.Request) error {
 }
 
 // Guilds returns the guilds the user is in, cached briefly because Discord
-// rate limits this endpoint heavily.
+// rate limits this endpoint heavily. It returns ErrNoSession if the Discord
+// login behind the session can no longer be refreshed.
 func (m *Manager) Guilds(ctx context.Context, sess *Session) ([]discord.OAuth2Guild, error) {
 	key := "user_guilds:" + sess.User.ID.String()
 	if data, err := m.rdb.Get(ctx, key).Bytes(); err == nil {
@@ -163,6 +216,9 @@ func (m *Manager) Guilds(ctx context.Context, sess *Session) ([]discord.OAuth2Gu
 		}
 	}
 
+	if err := m.refreshIfExpired(ctx, sess); err != nil {
+		return nil, err
+	}
 	guilds, err := m.oauth.GetGuilds(sess.OAuth, rest.WithCtx(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("fetch guilds: %w", err)
