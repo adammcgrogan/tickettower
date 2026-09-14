@@ -17,7 +17,7 @@ More detail: `docs/architecture.md` (how it fits together), `docs/development.md
 
 ```sh
 make bot | make api | make web      # run locally (all read .env)
-TEST_DATABASE_URL=postgres://localhost:5432/relay_test?sslmode=disable go test ./...
+TEST_DATABASE_URL=postgres://localhost:5432/relay_test?sslmode=disable go test -p 1 ./...
 go vet ./...
 cd web && npm run check && npm run build
 ```
@@ -58,7 +58,7 @@ web/src/routes        / (landing), /servers, /servers/[id]/{ticket-types,buttons
 - All state-changing API requests must be JSON (`requireJSON` middleware). Together with SameSite=Lax cookies, that's the CSRF protection.
 - Handlers use `r.Context()`; bot handlers wrap `e.Ctx` in a timeout.
 - Race-prone updates are conditional SQL that reports whether it applied (`ClaimTicket`, `CloseTicket`). Keep it that way.
-- Tests: store tests run against real Postgres (`testStore(t)` truncates). The API tests use miniredis. Add tests with new store queries.
+- Tests: store tests run against real Postgres (`testStore(t)` truncates). The API tests use miniredis, except billing tests, which also hit real Postgres directly. Because `internal/store` and `internal/api` share one `TEST_DATABASE_URL` instance, always run `go test` with `-p 1` so their package binaries don't truncate/insert concurrently. Add tests with new store queries.
 
 **Naming**
 - What the code calls a **panel** (the message with buttons or a dropdown that members click to open a ticket) is called **ticket buttons** everywhere people read it: the dashboard, bot replies and API error messages. The code, API routes (`/api/guilds/{id}/panels`), store and tables keep `panel`; the dashboard URL is `/servers/[id]/buttons` (old `/panels` links redirect).
