@@ -44,8 +44,22 @@
 	let {
 		guildId,
 		initial,
+		copyOf,
 		onsaved
-	}: { guildId: string; initial?: TicketType; onsaved?: (name: string) => void } = $props();
+	}: {
+		guildId: string;
+		initial?: TicketType;
+		/** A type to fill a new form from, for duplicating it. Nothing is saved until Create. */
+		copyOf?: TicketType;
+		onsaved?: (name: string) => void;
+	} = $props();
+
+	const NAME_MAX = 80;
+	// The settings the form starts from: the type being edited, or the one being copied.
+	const source = untrack(() => initial ?? copyOf);
+	const startName = untrack(() =>
+		copyOf && !initial ? `${copyOf.name.slice(0, NAME_MAX - ' (copy)'.length)} (copy)` : (initial?.name ?? '')
+	);
 
 	const DEFAULT_WELCOME =
 		'Thanks for reaching out, {user}! Tell us what you need help with and someone from the team will be with you shortly.';
@@ -54,34 +68,34 @@
 
 	let form = $state<TicketTypeInput>(
 		untrack(() => ({
-			name: initial?.name ?? '',
-			emoji: initial?.emoji ?? '',
-			description: initial?.description ?? '',
-			mode: initial?.mode ?? 'channel',
-			parent_id: initial?.parent_id ?? null,
-			support_role_ids: initial?.support_role_ids ?? [],
-			name_format: initial?.name_format ?? 'ticket-{number}',
-			welcome_message: initial?.welcome_message ?? '',
-			max_open_per_user: initial?.max_open_per_user ?? 1,
-			questions: initial?.questions.map((q) => ({ ...q })) ?? [],
-			auto_close_hours: initial?.auto_close_hours ?? null,
-			required_role_ids: initial?.required_role_ids ?? [],
-			blocked_role_ids: initial?.blocked_role_ids ?? [],
-			cooldown_minutes: initial?.cooldown_minutes ?? 0,
-			ask_rating: initial?.ask_rating ?? true,
-			rating_prompt: initial?.rating_prompt ?? '',
-			button_style: initial?.button_style ?? 'primary',
-			button_label: initial?.button_label ?? '',
-			claim_lock: initial?.claim_lock ?? 'off',
-			claim_lock_exempt_role_ids: initial?.claim_lock_exempt_role_ids ?? [],
-			reply_target_minutes: initial?.reply_target_minutes ?? null,
-			reminder_minutes: initial?.reminder_minutes ?? null,
-			reminder_repeat: initial?.reminder_repeat ?? false,
-			reminder_where: initial?.reminder_where ?? 'ticket',
-			reminder_ping: initial?.reminder_ping ?? 'claimer',
-			closed_parent_id: initial?.closed_parent_id ?? null,
-			closed_member_access: initial?.closed_member_access ?? 'read',
-			closed_keep_days: initial?.closed_keep_days ?? 7
+			name: startName,
+			emoji: source?.emoji ?? '',
+			description: source?.description ?? '',
+			mode: source?.mode ?? 'channel',
+			parent_id: source?.parent_id ?? null,
+			support_role_ids: [...(source?.support_role_ids ?? [])],
+			name_format: source?.name_format ?? 'ticket-{number}',
+			welcome_message: source?.welcome_message ?? '',
+			max_open_per_user: source?.max_open_per_user ?? 1,
+			questions: source?.questions.map((q) => ({ ...q })) ?? [],
+			auto_close_hours: source?.auto_close_hours ?? null,
+			required_role_ids: [...(source?.required_role_ids ?? [])],
+			blocked_role_ids: [...(source?.blocked_role_ids ?? [])],
+			cooldown_minutes: source?.cooldown_minutes ?? 0,
+			ask_rating: source?.ask_rating ?? true,
+			rating_prompt: source?.rating_prompt ?? '',
+			button_style: source?.button_style ?? 'primary',
+			button_label: source?.button_label ?? '',
+			claim_lock: source?.claim_lock ?? 'off',
+			claim_lock_exempt_role_ids: [...(source?.claim_lock_exempt_role_ids ?? [])],
+			reply_target_minutes: source?.reply_target_minutes ?? null,
+			reminder_minutes: source?.reminder_minutes ?? null,
+			reminder_repeat: source?.reminder_repeat ?? false,
+			reminder_where: source?.reminder_where ?? 'ticket',
+			reminder_ping: source?.reminder_ping ?? 'claimer',
+			closed_parent_id: source?.closed_parent_id ?? null,
+			closed_member_access: source?.closed_member_access ?? 'read',
+			closed_keep_days: source?.closed_keep_days ?? 7
 		}))
 	);
 
@@ -195,6 +209,8 @@
 			.then((p) => {
 				panels = p;
 				if (initial) addTo = p.filter(onPanel).map((x) => x.id);
+				// A copy starts on the same ticket buttons as the original, where there's room.
+				else if (copyOf) addTo = p.filter((x) => x.ticket_type_ids.includes(copyOf.id) && !isFull(x)).map((x) => x.id);
 				else if (p.length === 1 && !isFull(p[0])) addTo = [p[0].id];
 				saved = snapshot();
 			})
@@ -416,7 +432,7 @@
 								id="name"
 								class="input"
 								bind:value={form.name}
-								maxlength="80"
+								maxlength={NAME_MAX}
 								placeholder="e.g. General support"
 								aria-invalid={!!errors.name}
 								required

@@ -61,6 +61,9 @@
 >
 	{#snippet actions()}
 		{#if type}
+			<a href="/servers/{guildId}/ticket-types/new?from={type.id}" class="btn btn-secondary">
+				<Icon name="copy" size={15} /> Duplicate
+			</a>
 			<button class="btn btn-ghost text-danger hover:text-danger" onclick={() => (confirmDelete = true)}>
 				<Icon name="trash" size={15} /> Delete
 			</button>

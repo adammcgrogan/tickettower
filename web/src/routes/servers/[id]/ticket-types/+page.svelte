@@ -94,10 +94,10 @@
 	{:else}
 		<ul class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
 			{#each types as t (t.id)}
-				<li>
+				<li class="flex items-center">
 					<a
 						href="/servers/{guildId}/ticket-types/{t.id}"
-						class="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-elevated/60"
+						class="group flex min-w-0 flex-1 items-center gap-4 px-4 py-4 transition-colors hover:bg-elevated/60"
 					>
 						<span class="grid size-10 shrink-0 place-items-center rounded-lg bg-elevated text-lg">
 							{#if t.emoji}{emojiText(t.emoji)}{:else}<Icon name="tag" class="text-muted" />{/if}
@@ -125,6 +125,14 @@
 							{/each}
 						</ul>
 						<Icon name="arrow-right" class="text-subtle transition-colors group-hover:text-fg" />
+					</a>
+					<a
+						href="/servers/{guildId}/ticket-types/new?from={t.id}"
+						class="btn btn-ghost mr-2 size-8 shrink-0 p-0"
+						aria-label="Duplicate {t.name}"
+						title="Duplicate"
+					>
+						<Icon name="copy" size={15} />
 					</a>
 				</li>
 			{/each}
