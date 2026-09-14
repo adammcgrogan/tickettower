@@ -24,6 +24,65 @@ type transcriptGuild struct {
 	CanManage bool         `json:"can_manage"`
 }
 
+// transcriptData is a ticket transcript and everything needed to render it,
+// shared by viewing it in the dashboard and downloading it as a file.
+type transcriptData struct {
+	Ticket   store.Ticket
+	Messages []store.TicketMessage
+	// Notes is only set for staff viewing someone else's ticket: notes are
+	// for the team, never for the member who opened the ticket.
+	Notes    []store.TicketNote
+	Guild    transcriptGuild
+	Roles    map[string]string
+	Channels map[string]string
+}
+
+// loadTranscript fetches a ticket transcript, enforcing the access rule
+// shared by viewing and downloading it: the opener, anyone with dashboard
+// access, and the ticket type's support staff. It returns store.ErrNotFound
+// both when the ticket doesn't exist and when the caller may not see it, so
+// ticket IDs can't be probed.
+func (s *Server) loadTranscript(ctx context.Context, sess *auth.Session, ticketID int64) (transcriptData, error) {
+	t, err := s.store.GetTicket(ctx, ticketID)
+	if err != nil {
+		return transcriptData{}, err
+	}
+
+	_, dashboard, err := s.access(ctx, sess, t.GuildID)
+	if err != nil {
+		s.log.Warn("check transcript access", slog.Any("err", err))
+	}
+	opener := sess.User.ID == t.OpenerID
+	staff := dashboard || !opener && s.isSupportStaff(ctx, sess.User.ID, t)
+	if !staff && !opener {
+		return transcriptData{}, store.ErrNotFound
+	}
+
+	messages, err := s.store.ListTicketMessages(ctx, t.ID)
+	if err != nil {
+		return transcriptData{}, err
+	}
+	s.refreshAttachments(ctx, messages)
+	guild := transcriptGuild{ID: t.GuildID, CanManage: dashboard}
+	if g, err := s.store.GetGuild(ctx, t.GuildID); err == nil {
+		guild.Name = g.Name
+		if g.Icon != nil {
+			url := fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.png", g.ID, *g.Icon)
+			guild.IconURL = &url
+		}
+	}
+	roles, channels := s.mentionNames(ctx, t.GuildID)
+	data := transcriptData{Ticket: t, Messages: messages, Guild: guild, Roles: roles, Channels: channels}
+	if staff && !opener {
+		notes, err := s.store.ListTicketNotes(ctx, t.GuildID, t.ID)
+		if err != nil {
+			return transcriptData{}, err
+		}
+		data.Notes = notes
+	}
+	return data, nil
+}
+
 // getTranscript returns a ticket and its messages to anyone allowed to see
 // it: the opener, anyone with dashboard access and the ticket type's support
 // staff.
@@ -34,7 +93,7 @@ func (s *Server) getTranscript(w http.ResponseWriter, r *http.Request) {
 		notFound()
 		return
 	}
-	t, err := s.store.GetTicket(r.Context(), id)
+	data, err := s.loadTranscript(r.Context(), auth.FromContext(r.Context()), id)
 	if errors.Is(err, store.ErrNotFound) {
 		notFound()
 		return
@@ -42,47 +101,38 @@ func (s *Server) getTranscript(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, err)
 		return
 	}
-
-	sess := auth.FromContext(r.Context())
-	_, dashboard, err := s.access(r.Context(), sess, t.GuildID)
-	if err != nil {
-		s.log.Warn("check transcript access", slog.Any("err", err))
+	resp := map[string]any{
+		"ticket": data.Ticket, "messages": data.Messages, "guild": data.Guild,
+		"roles": data.Roles, "channels": data.Channels,
 	}
-	opener := sess.User.ID == t.OpenerID
-	staff := dashboard || !opener && s.isSupportStaff(r.Context(), sess.User.ID, t)
-	// Respond 404 rather than 403 so ticket IDs can't be probed.
-	if !staff && !opener {
+	if data.Notes != nil {
+		resp["notes"] = data.Notes
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// downloadTranscript serves a ticket transcript as a self-contained HTML
+// file, for keeping or sharing outside the dashboard. Access follows the
+// same rule as getTranscript.
+func (s *Server) downloadTranscript(w http.ResponseWriter, r *http.Request) {
+	notFound := func() { writeError(w, http.StatusNotFound, "transcript not found") }
+	id, ok := pathID(r, "ticketID")
+	if !ok {
 		notFound()
 		return
 	}
-
-	messages, err := s.store.ListTicketMessages(r.Context(), t.ID)
-	if err != nil {
+	data, err := s.loadTranscript(r.Context(), auth.FromContext(r.Context()), id)
+	if errors.Is(err, store.ErrNotFound) {
+		notFound()
+		return
+	} else if err != nil {
 		s.writeFailure(w, err)
 		return
 	}
-	s.refreshAttachments(r.Context(), messages)
-	guild := transcriptGuild{ID: t.GuildID, CanManage: dashboard}
-	if g, err := s.store.GetGuild(r.Context(), t.GuildID); err == nil {
-		guild.Name = g.Name
-		if g.Icon != nil {
-			url := fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.png", g.ID, *g.Icon)
-			guild.IconURL = &url
-		}
-	}
-	roles, channels := s.mentionNames(r.Context(), t.GuildID)
-	resp := map[string]any{"ticket": t, "messages": messages, "guild": guild, "roles": roles, "channels": channels}
-	// Staff notes are for the team, never for the member who opened the
-	// ticket, even if they're on the team themselves.
-	if staff && !opener {
-		notes, err := s.store.ListTicketNotes(r.Context(), t.GuildID, t.ID)
-		if err != nil {
-			s.writeFailure(w, err)
-			return
-		}
-		resp["notes"] = notes
-	}
-	writeJSON(w, http.StatusOK, resp)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q",
+		fmt.Sprintf("ticket-%d-transcript.html", data.Ticket.Number)))
+	renderTranscriptHTML(w, data)
 }
 
 // mentionNames returns the guild's current role and channel names by ID, so

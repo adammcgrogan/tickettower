@@ -55,6 +55,9 @@
 						Open in Discord <Icon name="external" size={13} />
 					</a>
 				{/if}
+				<a href="/api/transcripts/{t.id}/download" class="btn btn-secondary h-8 px-3">
+					Download <Icon name="download" size={13} />
+				</a>
 				{#if data!.guild.can_manage}
 					<a href="/servers/{data!.guild.id}/tickets?t={t.id}" class="btn btn-ghost h-8 px-3">
 						View in dashboard

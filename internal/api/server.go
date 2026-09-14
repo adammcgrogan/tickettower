@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/me", s.getMe)
 			r.Get("/guilds", s.listGuilds)
 			r.Get("/transcripts/{ticketID}", s.getTranscript)
+			r.Get("/transcripts/{ticketID}/download", s.downloadTranscript)
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(s.requireSuperadmin)
