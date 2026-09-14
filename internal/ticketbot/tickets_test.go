@@ -142,6 +142,31 @@ func TestWelcomeMessageFitsEmbedLimits(t *testing.T) {
 	}
 }
 
+func TestNotifyRoleIDs(t *testing.T) {
+	custom := snowflake.ID(99)
+	tt := store.TicketType{Mode: store.ModeChannel, SupportRoleIDs: []snowflake.ID{10, 20}, NotifyOnOpen: store.NotifySupportRoles}
+	if got := notifyRoleIDs(tt); !slices.Equal(got, tt.SupportRoleIDs) {
+		t.Errorf("default = %v, want the support roles", got)
+	}
+
+	tt.NotifyOnOpen = store.NotifyNobody
+	if got := notifyRoleIDs(tt); got != nil {
+		t.Errorf("none = %v, want nil", got)
+	}
+
+	tt.NotifyOnOpen, tt.NotifyRoleID = store.NotifyCustomRole, &custom
+	if got := notifyRoleIDs(tt); !slices.Equal(got, []snowflake.ID{custom}) {
+		t.Errorf("custom = %v, want [%d]", got, custom)
+	}
+
+	// A thread ticket always pings the support roles: that ping is what adds
+	// staff to the thread, whatever NotifyOnOpen says.
+	tt.Mode = store.ModeThread
+	if got := notifyRoleIDs(tt); !slices.Equal(got, tt.SupportRoleIDs) {
+		t.Errorf("thread with custom set = %v, want the support roles", got)
+	}
+}
+
 func TestWelcomeMessageOnBehalf(t *testing.T) {
 	ticket := store.Ticket{Number: 7, OpenerID: 1, OpenerName: "Adam"}
 	staff := snowflake.ID(2)

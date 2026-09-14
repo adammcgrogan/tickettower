@@ -108,6 +108,10 @@ export type TicketType = {
 	closed_member_access: 'read' | 'hidden';
 	/** Days a kept channel stays before it's deleted. */
 	closed_keep_days: number;
+	/** Who a new channel ticket pings; thread tickets always ping the support roles. */
+	notify_on_open: 'roles' | 'custom' | 'none';
+	/** The role pinged when notify_on_open is 'custom'. */
+	notify_role_id: string | null;
 	created_at: string;
 };
 

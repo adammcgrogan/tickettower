@@ -61,6 +61,11 @@ type TicketType struct {
 	Mode           TicketMode     `json:"mode"`
 	ParentID       *snowflake.ID  `json:"parent_id"`
 	SupportRoleIDs []snowflake.ID `json:"support_role_ids"`
+	// NotifyOnOpen is who a new channel ticket pings: the support roles
+	// (default), a specific role (NotifyRoleID), or nobody. Thread tickets
+	// always ping the support roles, since that's what gives them access.
+	NotifyOnOpen NotifyMode    `json:"notify_on_open"`
+	NotifyRoleID *snowflake.ID `json:"notify_role_id"`
 	NameFormat     string         `json:"name_format"`
 	WelcomeMessage string         `json:"welcome_message"`
 	MaxOpenPerUser int            `json:"max_open_per_user"`
@@ -146,6 +151,20 @@ const (
 	RemindInBoth   ReminderWhere = "both"
 )
 
+// NotifyMode is who a new ticket's welcome message pings, for channel
+// tickets. Thread tickets always ping the support roles instead.
+type NotifyMode string
+
+const (
+	NotifySupportRoles NotifyMode = "roles"
+	NotifyCustomRole   NotifyMode = "custom"
+	NotifyNobody       NotifyMode = "none"
+)
+
+func (m NotifyMode) Valid() bool {
+	return m == NotifySupportRoles || m == NotifyCustomRole || m == NotifyNobody
+}
+
 // ReminderPing is who a reminder in the ticket mentions.
 type ReminderPing string
 
@@ -195,7 +214,7 @@ const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_
 	name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
 	required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt, button_style, button_label,
 	claim_lock, claim_lock_exempt_role_ids, reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where,
-	reminder_ping, closed_parent_id, closed_member_access, closed_keep_days, created_at`
+	reminder_ping, closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id, created_at`
 
 func scanTicketType(row pgx.Row) (TicketType, error) {
 	var (
@@ -213,12 +232,14 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 		ping     string
 		closedID *int64
 		access   string
+		notify   string
+		notifyID *int64
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Name, &t.Emoji, &t.Description, &mode, &parentID, &roles,
 		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours,
 		&required, &blocked, &t.CooldownMinutes, &t.AskRating, &t.RatingPrompt, &style, &t.ButtonLabel,
 		&lock, &exempt, &t.ReplyTargetMinutes, &t.ReminderMinutes, &t.ReminderRepeat, &where, &ping,
-		&closedID, &access, &t.ClosedKeepDays, &t.CreatedAt)
+		&closedID, &access, &t.ClosedKeepDays, &notify, &notifyID, &t.CreatedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
@@ -233,6 +254,8 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 	t.RequiredRoleIDs = fromInt64s(required)
 	t.BlockedRoleIDs = fromInt64s(blocked)
 	t.Questions = questionsOrEmpty(t.Questions)
+	t.NotifyOnOpen = NotifyMode(notify)
+	t.NotifyRoleID = idFromNullable(notifyID)
 	return t, nil
 }
 
@@ -296,6 +319,9 @@ func (t *TicketType) defaults() {
 	if t.ClosedKeepDays == 0 {
 		t.ClosedKeepDays = 7
 	}
+	if t.NotifyOnOpen == "" {
+		t.NotifyOnOpen = NotifySupportRoles
+	}
 }
 
 // CreateTicketType inserts t and sets its ID and CreatedAt.
@@ -307,9 +333,9 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 		                          required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt,
 		                          button_style, button_label, claim_lock, claim_lock_exempt_role_ids,
 		                          reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where, reminder_ping,
-		                          closed_parent_id, closed_member_access, closed_keep_days)
+		                          closed_parent_id, closed_member_access, closed_keep_days, notify_on_open, notify_role_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
-		        $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+		        $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.AutoCloseHours,
@@ -317,6 +343,7 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 		string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
 		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
 		nullableID(t.ClosedParentID), string(t.ClosedMemberAccess), t.ClosedKeepDays,
+		string(t.NotifyOnOpen), nullableID(t.NotifyRoleID),
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
@@ -330,14 +357,16 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 		    rating_prompt = $18, button_style = $19, button_label = $20, claim_lock = $21,
 		    claim_lock_exempt_role_ids = $22, reply_target_minutes = $23, reminder_minutes = $24,
 		    reminder_repeat = $25, reminder_where = $26, reminder_ping = $27, closed_parent_id = $28,
-		    closed_member_access = $29, closed_keep_days = $30, updated_at = now()
+		    closed_member_access = $29, closed_keep_days = $30, notify_on_open = $31, notify_role_id = $32,
+		    updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions,
 		t.AutoCloseHours, toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating,
 		t.RatingPrompt, string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
 		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
-		nullableID(t.ClosedParentID), string(t.ClosedMemberAccess), t.ClosedKeepDays)
+		nullableID(t.ClosedParentID), string(t.ClosedMemberAccess), t.ClosedKeepDays,
+		string(t.NotifyOnOpen), nullableID(t.NotifyRoleID))
 	if err != nil {
 		return err
 	}

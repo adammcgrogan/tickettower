@@ -341,15 +341,38 @@ func ticketControls() []discord.InteractiveComponent {
 	}
 }
 
-// ticketMentions pings the opener and the support roles in a message's
-// content, which also adds the roles to a private thread.
+// notifyRoleIDs is who a new ticket's welcome message pings, besides the
+// opener. Thread tickets always ping the support roles regardless of
+// NotifyOnOpen: that ping is what adds them to the private thread, so
+// silencing it would leave them locked out.
+func notifyRoleIDs(tt store.TicketType) []snowflake.ID {
+	if tt.Mode == store.ModeThread {
+		return tt.SupportRoleIDs
+	}
+	switch tt.NotifyOnOpen {
+	case store.NotifyCustomRole:
+		if tt.NotifyRoleID == nil {
+			return nil
+		}
+		return []snowflake.ID{*tt.NotifyRoleID}
+	case store.NotifyNobody:
+		return nil
+	default:
+		return tt.SupportRoleIDs
+	}
+}
+
+// ticketMentions pings the opener and, depending on the type's NotifyOnOpen
+// setting, the support roles or a specific role in a message's content,
+// which also adds them to a private thread.
 func ticketMentions(msg discord.MessageCreate, t store.Ticket, tt store.TicketType) discord.MessageCreate {
+	roles := notifyRoleIDs(tt)
 	mentions := []string{discord.UserMention(t.OpenerID)}
-	for _, id := range tt.SupportRoleIDs {
+	for _, id := range roles {
 		mentions = append(mentions, discord.RoleMention(id))
 	}
 	return msg.WithContent(strings.Join(mentions, " ")).
-		WithAllowedMentions(&discord.AllowedMentions{Users: []snowflake.ID{t.OpenerID}, Roles: tt.SupportRoleIDs})
+		WithAllowedMentions(&discord.AllowedMentions{Users: []snowflake.ID{t.OpenerID}, Roles: roles})
 }
 
 // welcomeFallback is posted if Discord rejects the welcome message, so the

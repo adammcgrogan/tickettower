@@ -95,7 +95,9 @@
 			reminder_ping: source?.reminder_ping ?? 'claimer',
 			closed_parent_id: source?.closed_parent_id ?? null,
 			closed_member_access: source?.closed_member_access ?? 'read',
-			closed_keep_days: source?.closed_keep_days ?? 7
+			closed_keep_days: source?.closed_keep_days ?? 7,
+			notify_on_open: source?.notify_on_open ?? 'roles',
+			notify_role_id: source?.notify_role_id ?? null
 		}))
 	);
 
@@ -161,11 +163,24 @@
 		{ value: 'roles', label: 'The support roles' },
 		{ value: 'none', label: 'Nobody' }
 	];
+	const notifyOptions: { value: 'roles' | 'custom' | 'none'; label: string }[] = [
+		{ value: 'roles', label: 'The support roles' },
+		{ value: 'custom', label: 'A specific role' },
+		{ value: 'none', label: 'Nobody' }
+	];
 	const minutesOrNull = (v: string) => (v ? Number(v) : null);
 
 	// A claim lock needs channel tickets, since threads can't restrict a role.
 	$effect(() => {
 		if (form.mode === 'thread' && form.claim_lock !== 'off') form.claim_lock = 'off';
+	});
+	// Thread tickets always ping the support roles: that ping is what adds
+	// them to the thread, so only channel tickets can change who's pinged.
+	$effect(() => {
+		if (form.mode === 'thread' && form.notify_on_open !== 'roles') {
+			form.notify_on_open = 'roles';
+			form.notify_role_id = null;
+		}
 	});
 
 	const answerStyles: { value: QuestionStyle; label: string }[] = [
@@ -355,6 +370,8 @@
 		parent_id: 'basics',
 		name_format: 'basics',
 		support_role_ids: 'basics',
+		notify_on_open: 'basics',
+		notify_role_id: 'basics',
 		button_label: 'button',
 		button_style: 'button',
 		questions: 'welcome',
@@ -574,6 +591,36 @@
 					>
 						<RolePicker id="roles" {roles} bind:value={form.support_role_ids} />
 					</Field>
+					<Field
+						label="Ping on open"
+						for="notify_on_open"
+						hint={form.mode === 'thread'
+							? "Private threads only add staff to a new ticket through this ping, so it always pings the support roles."
+							: undefined}
+						error={errors.notify_on_open}
+					>
+						<select
+							id="notify_on_open"
+							class="input"
+							disabled={form.mode === 'thread'}
+							bind:value={form.notify_on_open}
+						>
+							{#each notifyOptions as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+						</select>
+					</Field>
+					{#if form.notify_on_open === 'custom' && form.mode !== 'thread'}
+						<Field label="Role to ping" for="notify_role" error={errors.notify_role_id}>
+							<RolePicker
+								id="notify_role"
+								{roles}
+								max={1}
+								bind:value={
+									() => (form.notify_role_id ? [form.notify_role_id] : []),
+									(v) => (form.notify_role_id = v[0] ?? null)
+								}
+							/>
+						</Field>
+					{/if}
 				</section>
 			{:else if tab === 'button'}
 				<section class="space-y-5 p-5">

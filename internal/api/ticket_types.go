@@ -60,6 +60,8 @@ type ticketTypeInput struct {
 	ClosedParentID         *snowflake.ID       `json:"closed_parent_id"`
 	ClosedMemberAccess     store.ClosedAccess  `json:"closed_member_access"`
 	ClosedKeepDays         int                 `json:"closed_keep_days"`
+	NotifyOnOpen           store.NotifyMode    `json:"notify_on_open"`
+	NotifyRoleID           *snowflake.ID       `json:"notify_role_id"`
 }
 
 // minuteOptions are the waits offered for reply targets and reminders.
@@ -94,6 +96,8 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.ClosedParentID = in.ClosedParentID
 	t.ClosedMemberAccess = in.ClosedMemberAccess
 	t.ClosedKeepDays = in.ClosedKeepDays
+	t.NotifyOnOpen = in.NotifyOnOpen
+	t.NotifyRoleID = in.NotifyRoleID
 }
 
 // validateQuestions normalises a ticket type's form questions.
@@ -217,6 +221,23 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	if !in.ReminderPing.Valid() {
 		return invalid("reminder_ping", "Choose who reminders mention.")
 	}
+	if in.NotifyOnOpen == "" {
+		in.NotifyOnOpen = store.NotifySupportRoles
+	}
+	if !in.NotifyOnOpen.Valid() {
+		return invalid("notify_on_open", "Choose who new tickets ping.")
+	}
+	// Thread tickets always ping the support roles, since that's what adds
+	// them to the thread, so a custom setting only applies to channel tickets.
+	if in.Mode == store.ModeThread {
+		in.NotifyOnOpen = store.NotifySupportRoles
+		in.NotifyRoleID = nil
+	}
+	if in.NotifyOnOpen != store.NotifyCustomRole {
+		in.NotifyRoleID = nil
+	} else if in.NotifyRoleID == nil {
+		return invalid("notify_role_id", "Choose the role to ping.")
+	}
 	in.RatingPrompt = strings.TrimSpace(in.RatingPrompt)
 	if utf8.RuneCountInString(in.RatingPrompt) > store.MaxRatingPrompt {
 		return invalid("rating_prompt", fmt.Sprintf("Keep the rating request to %d characters or fewer.", store.MaxRatingPrompt))
@@ -289,6 +310,10 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 	in.ClaimLockExemptRoleIDs = slices.DeleteFunc(normaliseIDs(in.ClaimLockExemptRoleIDs), func(id snowflake.ID) bool {
 		return !slices.Contains(in.SupportRoleIDs, id)
 	})
+	var notifyRoleIDs []snowflake.ID
+	if in.NotifyRoleID != nil {
+		notifyRoleIDs = []snowflake.ID{*in.NotifyRoleID}
+	}
 	roleFields := []struct {
 		field string
 		ids   []snowflake.ID
@@ -297,6 +322,7 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 		{"support_role_ids", in.SupportRoleIDs, fmt.Sprintf("Choose up to %d support roles.", maxSupportRoles)},
 		{"required_role_ids", in.RequiredRoleIDs, fmt.Sprintf("Choose up to %d required roles.", maxSupportRoles)},
 		{"blocked_role_ids", in.BlockedRoleIDs, fmt.Sprintf("Choose up to %d blocked roles.", maxSupportRoles)},
+		{"notify_role_id", notifyRoleIDs, "Choose the role to ping."},
 	}
 	var roles []roleResponse
 	for _, f := range roleFields {
