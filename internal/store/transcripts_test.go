@@ -35,6 +35,18 @@ func TestTranscriptMessages(t *testing.T) {
 	if err := s.InsertTicketMessage(ctx, msg); err != nil {
 		t.Fatal(err)
 	}
+	// A bot-posted reply: the capture may land before the dashboard's save,
+	// which then only adds who sent it.
+	staff := snowflake.ID(100)
+	bot := TicketMessage{ID: 902, TicketID: tk.ID, AuthorID: 7, AuthorName: "Ticket Tower", AuthorBot: true, CreatedAt: now,
+		Embeds: []Embed{{Author: &EmbedAuthor{Name: "staff"}, Description: "hello from the dashboard"}}}
+	if err := s.InsertTicketMessage(ctx, bot); err != nil {
+		t.Fatal(err)
+	}
+	bot.SentBy = &staff
+	if err := s.InsertTicketMessage(ctx, bot); err != nil {
+		t.Fatal(err)
+	}
 	fields := []EmbedField{{Name: "Order number", Value: "#1234"}}
 	if err := s.InsertTicketMessage(ctx, TicketMessage{ID: 901, TicketID: tk.ID, AuthorID: 100, AuthorName: "staff", Content: "hey",
 		Embeds: []Embed{{Title: "Support · #1", Fields: fields}}, CreatedAt: now}); err != nil {
@@ -51,8 +63,11 @@ func TestTranscriptMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(msgs) != 2 {
-		t.Fatalf("messages = %d, want 2", len(msgs))
+	if len(msgs) != 3 {
+		t.Fatalf("messages = %d, want 3", len(msgs))
+	}
+	if msgs[2].SentBy == nil || *msgs[2].SentBy != staff {
+		t.Errorf("sent_by of the dashboard reply = %v, want %d", msgs[2].SentBy, staff)
 	}
 	if msgs[0].Content != "hello (edited)" || msgs[0].EditedAt == nil || len(msgs[0].Attachments) != 1 || len(msgs[0].Embeds) != 0 {
 		t.Errorf("first message = %+v", msgs[0])
@@ -88,8 +103,8 @@ func TestTranscriptMessages(t *testing.T) {
 	}
 	s.CloseTicket(ctx, tk.ID, snowflake.ID(100), "staff", "")
 	s.pool.Exec(ctx, `UPDATE tickets SET closed_at = now() - interval '1 hour' WHERE id = $1`, tk.ID)
-	if n, _ := s.PurgeExpiredTranscripts(ctx); n != 2 {
-		t.Errorf("purged %d messages, want 2", n)
+	if n, _ := s.PurgeExpiredTranscripts(ctx); n != 3 {
+		t.Errorf("purged %d messages, want 3", n)
 	}
 	st, _ := s.GetGuildSettings(ctx, testGuild)
 	if st.TranscriptRetentionDays == nil || *st.TranscriptRetentionDays != 0 {

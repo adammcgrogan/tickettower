@@ -44,16 +44,20 @@ type TicketMessage struct {
 	AuthorName   string       `json:"author_name"`
 	AuthorAvatar string       `json:"author_avatar"`
 	AuthorBot    bool         `json:"author_bot"`
-	Content      string       `json:"content"`
-	Embeds       []Embed      `json:"embeds"`
-	Attachments  []Attachment `json:"attachments"`
-	CreatedAt    time.Time    `json:"created_at"`
-	EditedAt     *time.Time   `json:"edited_at"`
-	DeletedAt    *time.Time   `json:"deleted_at"`
+	// SentBy is the staff member a bot-posted reply was sent for (from the
+	// dashboard or /reply); nil when the author wrote it themselves.
+	SentBy      *snowflake.ID `json:"sent_by"`
+	Content     string        `json:"content"`
+	Embeds      []Embed       `json:"embeds"`
+	Attachments []Attachment  `json:"attachments"`
+	CreatedAt   time.Time     `json:"created_at"`
+	EditedAt    *time.Time    `json:"edited_at"`
+	DeletedAt   *time.Time    `json:"deleted_at"`
 }
 
 // InsertTicketMessage stores a message. Duplicates (e.g. after a gateway
-// resume) are ignored.
+// resume, or the bot capturing a reply the dashboard already saved) are
+// ignored, except that a SentBy arriving second is kept.
 func (s *Store) InsertTicketMessage(ctx context.Context, m TicketMessage) error {
 	if m.Embeds == nil {
 		m.Embeds = []Embed{}
@@ -63,11 +67,11 @@ func (s *Store) InsertTicketMessage(ctx context.Context, m TicketMessage) error 
 	}
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO ticket_messages (id, ticket_id, author_id, author_name, author_avatar, author_bot,
-		                             content, embeds, attachments, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (id) DO NOTHING`,
+		                             content, embeds, attachments, created_at, sent_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (id) DO UPDATE SET sent_by = COALESCE(ticket_messages.sent_by, EXCLUDED.sent_by)`,
 		int64(m.ID), m.TicketID, int64(m.AuthorID), m.AuthorName, m.AuthorAvatar, m.AuthorBot,
-		m.Content, m.Embeds, m.Attachments, m.CreatedAt)
+		m.Content, m.Embeds, m.Attachments, m.CreatedAt, nullableID(m.SentBy))
 	return err
 }
 
@@ -92,7 +96,7 @@ func (s *Store) MarkTicketMessageDeleted(ctx context.Context, id snowflake.ID) e
 func (s *Store) ListTicketMessages(ctx context.Context, ticketID int64) ([]TicketMessage, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, author_id, author_name, author_avatar, author_bot, content, embeds, attachments,
-		       created_at, edited_at, deleted_at
+		       created_at, edited_at, deleted_at, sent_by
 		FROM ticket_messages WHERE ticket_id = $1 ORDER BY id`, ticketID)
 	if err != nil {
 		return nil, err
@@ -103,11 +107,13 @@ func (s *Store) ListTicketMessages(ctx context.Context, ticketID int64) ([]Ticke
 	for rows.Next() {
 		var m TicketMessage
 		var id, author int64
+		var sentBy *int64
 		if err := rows.Scan(&id, &author, &m.AuthorName, &m.AuthorAvatar, &m.AuthorBot, &m.Content,
-			&m.Embeds, &m.Attachments, &m.CreatedAt, &m.EditedAt, &m.DeletedAt); err != nil {
+			&m.Embeds, &m.Attachments, &m.CreatedAt, &m.EditedAt, &m.DeletedAt, &sentBy); err != nil {
 			return nil, err
 		}
 		m.ID, m.AuthorID, m.TicketID = snowflake.ID(id), snowflake.ID(author), ticketID
+		m.SentBy = idFromNullable(sentBy)
 		out = append(out, m)
 	}
 	return out, rows.Err()

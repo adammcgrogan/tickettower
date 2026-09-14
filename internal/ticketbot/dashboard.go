@@ -106,9 +106,11 @@ func (d *Dashboard) Reply(ctx context.Context, t store.Ticket, byID snowflake.ID
 		return store.TicketMessage{}, err
 	}
 	msg := toTicketMessage(t.ID, *m)
+	msg.SentBy = &byID
 
 	// The bot captures the message too; whichever insert comes second is
-	// ignored. Saving it here means the transcript has it straight away.
+	// ignored, apart from noting who sent it. Saving it here means the
+	// transcript has it straight away.
 	if err := d.b.store.InsertTicketMessage(ctx, msg); err != nil {
 		d.b.log.Error("failed to save dashboard reply", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
 	}
