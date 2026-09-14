@@ -331,6 +331,47 @@ func TestListTicketsFiltersAndPages(t *testing.T) {
 	}
 }
 
+func TestListTicketsByOpenerAcrossGuilds(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	seedGuild(t, s, 3001)
+	tt1 := newType(t, s, testGuild, "General")
+	tt2 := newType(t, s, 3001, "General")
+
+	channel := snowflake.ID(9000)
+	add := func(guildID snowflake.ID, tt TicketType, number int, openerID snowflake.ID) Ticket {
+		t.Helper()
+		channel++
+		tk := Ticket{GuildID: guildID, Number: number, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+			ChannelID: channel, OpenerID: openerID, OpenerName: "member"}
+		if err := s.CreateTicket(ctx, &tk); err != nil {
+			t.Fatal(err)
+		}
+		return tk
+	}
+	first := add(testGuild, tt1, 1, 42)
+	second := add(3001, tt2, 1, 42)
+	add(testGuild, tt1, 2, 43) // someone else's ticket
+
+	got, err := s.ListTicketsByOpener(ctx, 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	// Newest first.
+	if got[0].ID != second.ID || got[1].ID != first.ID {
+		t.Errorf("got tickets %v, %v; want %v, %v", got[0].ID, got[1].ID, second.ID, first.ID)
+	}
+	for _, tk := range got {
+		if tk.OpenerID != 42 {
+			t.Errorf("got ticket opened by %v, want 42", tk.OpenerID)
+		}
+	}
+}
+
 func TestDeleteTicketTypeRefusesWithOpenTickets(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

@@ -72,6 +72,7 @@ func (s *Server) Handler() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Middleware, newRateLimiter(userLimit, userWindow).middleware(byUser))
 			r.Get("/me", s.getMe)
+			r.Get("/me/tickets", s.getMyTickets)
 			r.Get("/guilds", s.listGuilds)
 			r.Get("/transcripts/{ticketID}", s.getTranscript)
 			r.Get("/transcripts/{ticketID}/download", s.downloadTranscript)

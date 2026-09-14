@@ -385,6 +385,12 @@ export type Transcript = {
 	channels: Record<string, string>;
 };
 
+/** A ticket the current user opened, wherever it is, for the "my tickets" page. */
+export type MyTicket = {
+	ticket: Ticket;
+	guild: { id: string; name: string; icon_url: string | null };
+};
+
 /**
  * Something in a server's setup that stops tickets working. `kind` says where
  * it's fixed: a ticket type or ticket panel (by `id`), a ticket type that

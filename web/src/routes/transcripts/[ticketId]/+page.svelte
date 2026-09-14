@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { api, errorMessage, type Transcript } from '$lib/api';
+	import { api, errorMessage, getMe, type Transcript, type User } from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { discordURL } from '$lib/format';
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
@@ -11,8 +11,10 @@
 
 	let data = $state<Transcript | null>(null);
 	let error = $state('');
+	let user = $state<User | null>(null);
 
 	onMount(async () => {
+		user = await getMe();
 		try {
 			data = await api<Transcript>(`/transcripts/${page.params.ticketId}`);
 		} catch (e) {
@@ -26,6 +28,13 @@
 </svelte:head>
 
 <main class="mx-auto max-w-4xl px-5 py-10">
+	{#if user}
+		<div class="mb-4 flex justify-end">
+			<a href="/me/tickets" class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
+				<Icon name="inbox" size={14} /> My tickets
+			</a>
+		</div>
+	{/if}
 	{#if error}
 		<div class="mx-auto max-w-md py-16 text-center">
 			<h1 class="font-display text-3xl font-bold">Transcript unavailable</h1>

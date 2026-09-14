@@ -172,6 +172,7 @@
 				<a href="#faq" class="btn btn-ghost hidden md:inline-flex">FAQ</a>
 				<a href="/help" class="btn btn-ghost">Help</a>
 				{#if user}
+					<a href="/me/tickets" class="btn btn-ghost">My tickets</a>
 					<a href="/servers" class="btn btn-secondary">Dashboard</a>
 				{:else}
 					<a href={loginURL} data-sveltekit-reload class="btn btn-secondary">Log in</a>

@@ -431,6 +431,34 @@ func (s *Store) ListTickets(ctx context.Context, guildID snowflake.ID, q TicketQ
 	return out, nil
 }
 
+// MaxOpenerTickets caps how many of a member's own tickets are listed, newest
+// first, across every server.
+const MaxOpenerTickets = 100
+
+// ListTicketsByOpener returns tickets a member opened, across every server,
+// newest first. Unlike other ticket queries this isn't scoped to one guild_id:
+// it's the member's own view of their tickets everywhere.
+func (s *Store) ListTicketsByOpener(ctx context.Context, openerID snowflake.ID) ([]Ticket, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+ticketColumns+` `+ticketFrom+`
+		WHERE opener_id = $1
+		ORDER BY opened_at DESC, id DESC LIMIT $2`, int64(openerID), MaxOpenerTickets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []Ticket{}
+	for rows.Next() {
+		t, err := scanTicket(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 type TicketStats struct {
 	Open       int `json:"open"`
 	OpenedWeek int `json:"opened_week"`

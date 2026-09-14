@@ -135,6 +135,50 @@ func (s *Server) downloadTranscript(w http.ResponseWriter, r *http.Request) {
 	renderTranscriptHTML(w, data)
 }
 
+// myTicketGuild is the minimal server info shown next to a ticket on the
+// member's own "my tickets" list.
+type myTicketGuild struct {
+	ID      snowflake.ID `json:"id"`
+	Name    string       `json:"name"`
+	IconURL *string      `json:"icon_url"`
+}
+
+type myTicket struct {
+	Ticket store.Ticket  `json:"ticket"`
+	Guild  myTicketGuild `json:"guild"`
+}
+
+// getMyTickets lists every ticket the caller has opened, across every server,
+// newest first. It's how a member finds their tickets and transcripts again
+// without the closing DM, so it isn't scoped to one guild.
+func (s *Server) getMyTickets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := auth.FromContext(ctx).User.ID
+	tickets, err := s.store.ListTicketsByOpener(ctx, userID)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	guilds := map[snowflake.ID]myTicketGuild{}
+	out := make([]myTicket, 0, len(tickets))
+	for _, t := range tickets {
+		g, ok := guilds[t.GuildID]
+		if !ok {
+			g = myTicketGuild{ID: t.GuildID, Name: "Unknown server"}
+			if sg, err := s.store.GetGuild(ctx, t.GuildID); err == nil {
+				g.Name = sg.Name
+				if sg.Icon != nil {
+					url := fmt.Sprintf("https://cdn.discordapp.com/icons/%s/%s.png", sg.ID, *sg.Icon)
+					g.IconURL = &url
+				}
+			}
+			guilds[t.GuildID] = g
+		}
+		out = append(out, myTicket{Ticket: t, Guild: g})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tickets": out})
+}
+
 // mentionNames returns the guild's current role and channel names by ID, so
 // the transcript can show "@Moderators" and "#billing" instead of bare
 // mentions. Best effort: if the bot has left the guild the maps are empty

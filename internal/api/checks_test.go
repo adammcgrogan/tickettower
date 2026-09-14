@@ -115,9 +115,9 @@ func TestSetupProblems(t *testing.T) {
 			want:   problem{Kind: "ticket_type", ID: 1, Detail: "category its channels open in was deleted"},
 		},
 		{
-			name:   "published buttons' channel deleted",
+			name:   "published panel's channel deleted",
 			change: func(s *setup) { s.panels[0].ChannelID = &gone },
-			want:   problem{Kind: "panel", ID: 7, Detail: "Publish them in another channel"},
+			want:   problem{Kind: "panel", ID: 7, Detail: "Publish it in another channel"},
 		},
 		{
 			name:   "ticket type on no published buttons",
