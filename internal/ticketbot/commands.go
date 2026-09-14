@@ -114,6 +114,18 @@ var commands = []discord.ApplicationCommandCreate{
 				},
 			},
 			discord.ApplicationCommandOptionSubCommand{
+				Name:        "note",
+				Description: "Leave a private note on this ticket that only staff can see",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionString{
+						Name:        "text",
+						Description: "The note",
+						Required:    true,
+						MaxLength:   ptr(store.MaxNoteLength),
+					},
+				},
+			},
+			discord.ApplicationCommandOptionSubCommand{
 				Name:        "hold",
 				Description: "Put this ticket on hold while you wait on something else",
 				Options: []discord.ApplicationCommandOption{

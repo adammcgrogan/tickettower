@@ -287,6 +287,11 @@
 							pinged into it, you're added to it, and the welcome message says you opened it. The type's
 							rules on who can open it don't apply, though the member's limit of open tickets does.
 						</li>
+						<li>
+							<strong>Leave a private note</strong>, such as what was refunded or who should pick it up next,
+							with <code>/ticket note</code> or the Private note tab under a ticket on the Tickets page.
+							Only your team sees notes, there and in the transcript. The member never does.
+						</li>
 					</ul>
 					<p>The same actions are available as slash commands inside a ticket:</p>
 					<ul>
@@ -294,6 +299,7 @@
 						<li><code>/ticket close</code> or <code>/close</code>: close it, with an optional reason</li>
 						<li><code>/ticket add</code> and <code>/ticket remove</code>: give someone access, or take it away</li>
 						<li><code>/ticket rename</code>: rename it (Discord allows two renames every 10 minutes)</li>
+						<li><code>/ticket note</code>: leave a private note that only your team can see</li>
 					<li>
 						<code>/ticket move</code>: move it to another ticket type, which hands it to that type's
 						support team (and category, for channels). You can also move tickets from the Tickets page.
@@ -500,12 +506,16 @@
 						<li>The ticket type's support roles.</li>
 						<li>Anyone who can use your server's dashboard.</li>
 					</ul>
+					<p>
+						Private notes your team leaves on a ticket show in its transcript for the support roles and
+						dashboard users, never for the member who opened it.
+					</p>
 
 					<h2>How long they're kept</h2>
 					<p>
 						By default, forever. Under <strong>Settings → Transcripts</strong> you can delete them
 						automatically 7, 30 or 90 days, 6 months or a year after a ticket closes. Ticket details and
-						analytics are kept either way.
+						analytics are kept either way. A ticket's private notes are deleted along with its transcript.
 					</p>
 
 					<h2>Privacy</h2>

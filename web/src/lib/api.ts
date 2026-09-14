@@ -294,9 +294,23 @@ export type TranscriptMessage = {
 	deleted_at: string | null;
 };
 
+/** A private note staff left on a ticket. Only the team sees notes. */
+export type TicketNote = {
+	id: number;
+	author_id: string;
+	author_name: string;
+	content: string;
+	created_at: string;
+};
+
+/** Matches store.MaxNoteLength. */
+export const MAX_NOTE = 1000;
+
 export type Transcript = {
 	ticket: Ticket;
 	messages: TranscriptMessage[];
+	/** Private staff notes. Only sent to the team, never to the member who opened the ticket. */
+	notes?: TicketNote[];
 	/** can_manage means the viewer has dashboard access to the server. */
 	guild: { id: string; name: string; icon_url: string | null; can_manage: boolean };
 	/** Current role and channel names by ID, for showing mentions. */

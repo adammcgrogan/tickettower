@@ -284,7 +284,7 @@ func (b *Bot) purgeTranscripts(ctx context.Context) {
 		if err != nil && ctx.Err() == nil {
 			b.log.Error("failed to purge transcripts", slog.Any("err", err))
 		} else if n > 0 {
-			b.log.Info("purged expired transcript messages", slog.Int64("count", n))
+			b.log.Info("purged expired transcript messages and notes", slog.Int64("count", n))
 		}
 		n, err = b.store.PurgeLeftGuilds(ctx, leftGuildRetention)
 		if err != nil && ctx.Err() == nil {

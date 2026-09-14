@@ -72,6 +72,8 @@
 
 - Add, remove and rename from the dashboard: Add someone (a member search by name or pasted user ID), Remove someone (a channel's added people or a thread's members, the opener marked) and Rename in the Tickets page's More menu, with the same rules and notices as `/ticket add`, `/ticket remove` and `/ticket rename` (`…/tickets/{id}/members`, `…/tickets/{id}/rename`, `…/members?q=`)
 
+- Private staff notes: `/ticket note` and a Private note tab in the Tickets page's reply box (on closed tickets too) save notes only the team sees (`ticket_notes`, `…/tickets/{id}/notes`). They show between the messages in the dashboard and the transcript for dashboard users and support staff, never for the opener, and are deleted with the transcript
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.

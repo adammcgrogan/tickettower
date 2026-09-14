@@ -26,6 +26,7 @@
 					<li><strong class="text-fg">Servers:</strong> the ID, name and icon of servers the bot is in, plus the settings you configure in the dashboard.</li>
 					<li><strong class="text-fg">Tickets:</strong> who opened, claimed and closed each ticket, when, its type, and any close reason.</li>
 					<li><strong class="text-fg">Transcripts:</strong> messages sent inside ticket channels and threads, including author names, avatars and attachment links, and answers to any questions asked when the ticket was opened. Messages outside tickets are never stored.</li>
+					<li><strong class="text-fg">Staff notes:</strong> private notes a server's team leaves on its tickets, with who wrote them. They're deleted along with the ticket's transcript.</li>
 					<li><strong class="text-fg">Feedback:</strong> ratings and comments members choose to leave after a ticket closes.</li>
 					<li><strong class="text-fg">Dashboard logins:</strong> your Discord user ID, name and avatar, and a session token, for as long as you stay logged in.</li>
 				</ul>
@@ -55,7 +56,8 @@
 					Server data is only visible in the dashboard to people who can manage that server, and to
 					members with a dashboard role the server's managers have chosen. A transcript is visible to
 					the member who opened the ticket, those same dashboard users, and the ticket type's support
-					roles.
+					roles. Private notes the team leaves on a ticket are only shown to those dashboard users and
+					support roles, never to the member who opened it.
 				</p>
 			</section>
 

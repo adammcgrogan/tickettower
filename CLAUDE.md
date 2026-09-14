@@ -32,7 +32,7 @@ cd web && npm run check && npm run build
 ```
 internal/config       env config, BotPermissions
 internal/store        all SQL. One file per area (guilds, settings, ticket_types, panels, tickets, transcripts, analytics,
-                      saved_replies)
+                      saved_replies, notes)
 internal/ticketbot    bot: bot.go (wiring/events), tickets.go (ticket logic), commands.go (slash/buttons),
                       transcripts.go (message capture, retention), feedback.go (ratings), log.go (log channel),
                       forms.go (pre-ticket question modals), autoclose.go (inactivity warnings and closing),

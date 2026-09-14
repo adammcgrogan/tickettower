@@ -223,3 +223,32 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"message": msg, "ticket": t})
 }
+
+type noteInput struct {
+	Content string `json:"content"`
+}
+
+// addTicketNote saves a private note on a ticket from the dashboard, open or
+// closed, and returns it.
+func (s *Server) addTicketNote(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.guildTicket(w, r)
+	if !ok {
+		return
+	}
+	var in noteInput
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	user := auth.FromContext(r.Context()).User
+	// Notes are signed with the staff member's server nickname, as notes
+	// left in Discord are.
+	name := user.DisplayName
+	if m, err := s.discord.GetMember(t.GuildID, user.ID, rest.WithCtx(r.Context())); err == nil {
+		name = m.EffectiveName()
+	}
+	note, err := s.dashboard.AddNote(r.Context(), t, user.ID, name, in.Content)
+	if s.actionFailed(w, err, "content") {
+		return
+	}
+	writeJSON(w, http.StatusCreated, note)
+}

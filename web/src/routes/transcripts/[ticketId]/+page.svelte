@@ -65,6 +65,7 @@
 		<div class="mt-4">
 			<TranscriptView
 				messages={data.messages}
+				notes={data.notes ?? []}
 				openerId={t.opener_id}
 				openerName={t.opener_name}
 				roles={data.roles}

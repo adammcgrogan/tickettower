@@ -48,8 +48,10 @@ func (s *Server) getTranscript(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.log.Warn("check transcript access", slog.Any("err", err))
 	}
+	opener := sess.User.ID == t.OpenerID
+	staff := dashboard || !opener && s.isSupportStaff(r.Context(), sess.User.ID, t)
 	// Respond 404 rather than 403 so ticket IDs can't be probed.
-	if !dashboard && sess.User.ID != t.OpenerID && !s.isSupportStaff(r.Context(), sess.User.ID, t) {
+	if !staff && !opener {
 		notFound()
 		return
 	}
@@ -69,9 +71,18 @@ func (s *Server) getTranscript(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	roles, channels := s.mentionNames(r.Context(), t.GuildID)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ticket": t, "messages": messages, "guild": guild, "roles": roles, "channels": channels,
-	})
+	resp := map[string]any{"ticket": t, "messages": messages, "guild": guild, "roles": roles, "channels": channels}
+	// Staff notes are for the team, never for the member who opened the
+	// ticket, even if they're on the team themselves.
+	if staff && !opener {
+		notes, err := s.store.ListTicketNotes(r.Context(), t.GuildID, t.ID)
+		if err != nil {
+			s.writeFailure(w, err)
+			return
+		}
+		resp["notes"] = notes
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // mentionNames returns the guild's current role and channel names by ID, so

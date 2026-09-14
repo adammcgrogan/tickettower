@@ -8,6 +8,7 @@
 		atLeast,
 		canReopen,
 		errorMessage,
+		MAX_NOTE,
 		overdueAt,
 		send,
 		snippetParts,
@@ -16,6 +17,7 @@
 		type SavedReply,
 		type Ticket,
 		type TicketMember,
+		type TicketNote,
 		type TicketType,
 		type Transcript
 	} from '$lib/api';
@@ -631,6 +633,21 @@
 	let sending = $state(false);
 	let replyBox = $state<HTMLTextAreaElement>();
 
+	// --- Private notes, written in the same box ---
+	// A note has its own draft, so switching back to Reply can never send it
+	// to the member.
+	let note = $state('');
+	let noteError = $state('');
+	let savingNote = $state(false);
+	let composeMode = $state<'reply' | 'note'>('reply');
+	const composeModes: { value: 'reply' | 'note'; label: string }[] = [
+		{ value: 'reply', label: 'Reply' },
+		{ value: 'note', label: 'Private note' }
+	];
+	// Closed tickets only take notes.
+	const noting = $derived(composeMode === 'note' || detail?.ticket.status !== 'open');
+	const composeError = $derived(noting ? noteError : replyError);
+
 	// The bot fills these in when the reply is sent (replyText in ticketbot).
 	const hasPlaceholders = $derived(/\{(user|username|number|type|server|staff)\}/.test(reply));
 
@@ -659,6 +676,9 @@
 		moreOpen = false;
 		reply = '';
 		replyError = '';
+		note = '';
+		noteError = '';
+		composeMode = 'reply';
 	});
 
 	async function sendReply(e?: SubmitEvent) {
@@ -687,6 +707,32 @@
 		} finally {
 			sending = false;
 		}
+	}
+
+	async function addNote() {
+		if (!detail || savingNote || !note.trim()) return;
+		const t = detail.ticket;
+		savingNote = true;
+		noteError = '';
+		try {
+			const saved = await api<TicketNote>(`/guilds/${guild.id}/tickets/${t.id}/notes`, send('POST', { content: note }));
+			if (detail?.ticket.id === t.id) {
+				detail = { ...detail, notes: [...(detail.notes ?? []), saved] };
+				if (closedCache.has(t.id)) closedCache.set(t.id, detail);
+			}
+			note = '';
+		} catch (err) {
+			if (err instanceof ApiError && err.field) noteError = err.message;
+			else toast(errorMessage(err), 'error');
+		} finally {
+			savingNote = false;
+		}
+	}
+
+	function submitCompose(e?: SubmitEvent) {
+		e?.preventDefault();
+		if (noting) addNote();
+		else sendReply();
 	}
 
 	async function refreshClosed(id: number) {
@@ -978,58 +1024,91 @@
 				<div class="mt-4">
 					<TranscriptView
 						messages={detail.messages}
+						notes={detail.notes ?? []}
 						openerId={t.opener_id}
 						openerName={t.opener_name}
 						roles={detail.roles}
 						channels={detail.channels}
 					/>
 				</div>
-				{#if t.status === 'open' && canAct}
+				{#if canAct}
 					<form
-						onsubmit={sendReply}
-						class="mt-4 rounded-xl border bg-surface p-3 transition-colors focus-within:border-border-strong {replyError
+						onsubmit={submitCompose}
+						class="mt-4 rounded-xl border bg-surface p-3 transition-colors focus-within:border-border-strong {composeError
 							? 'border-danger/50'
-							: 'border-border'}"
+							: noting
+								? 'border-dashed border-border-strong'
+								: 'border-border'}"
 					>
-						<label for="reply" class="sr-only">Reply to {t.opener_name}</label>
-						<textarea
-							id="reply"
-							rows="3"
-							maxlength="2000"
-							bind:this={replyBox}
-							bind:value={reply}
-							placeholder="Reply to {t.opener_name}…"
-							aria-invalid={!!replyError}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendReply();
-							}}
-							class="block w-full resize-y bg-transparent px-1 text-sm outline-none placeholder:text-subtle"
-						></textarea>
+						{#if t.status === 'open'}
+							<div class="mb-2">
+								<Segmented options={composeModes} bind:value={composeMode} label="Write a reply or a private note" />
+							</div>
+						{/if}
+						{#if noting}
+							<label for="note" class="sr-only">Private note on ticket #{t.number}</label>
+							<textarea
+								id="note"
+								rows="3"
+								maxlength={MAX_NOTE}
+								bind:value={note}
+								placeholder="Add a private note for your team…"
+								aria-invalid={!!noteError}
+								onkeydown={(e) => {
+									if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitCompose();
+								}}
+								class="block w-full resize-y bg-transparent px-1 text-sm outline-none placeholder:text-subtle"
+							></textarea>
+						{:else}
+							<label for="reply" class="sr-only">Reply to {t.opener_name}</label>
+							<textarea
+								id="reply"
+								rows="3"
+								maxlength="2000"
+								bind:this={replyBox}
+								bind:value={reply}
+								placeholder="Reply to {t.opener_name}…"
+								aria-invalid={!!replyError}
+								onkeydown={(e) => {
+									if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitCompose();
+								}}
+								class="block w-full resize-y bg-transparent px-1 text-sm outline-none placeholder:text-subtle"
+							></textarea>
+						{/if}
 						<div class="mt-2 flex items-center justify-between gap-3">
-							<p class="text-xs {replyError ? 'text-danger' : 'text-subtle'}">
-								{replyError ||
-									(hasPlaceholders
-										? "Placeholders are filled in when it's sent. ⌘ or Ctrl + Enter sends."
-										: `${APP_NAME} posts it in the ticket under your name. ⌘ or Ctrl + Enter sends.`)}
+							<p class="text-xs {composeError ? 'text-danger' : 'text-subtle'}">
+								{composeError ||
+									(noting
+										? 'Only your team sees notes, here and in the transcript. The member never does.'
+										: hasPlaceholders
+											? "Placeholders are filled in when it's sent. ⌘ or Ctrl + Enter sends."
+											: `${APP_NAME} posts it in the ticket under your name. ⌘ or Ctrl + Enter sends.`)}
 							</p>
 							<div class="flex shrink-0 items-center gap-2">
-								{#if savedReplies.length > 0}
-									<select
-										class="input h-8 w-auto max-w-44 py-0 text-sm"
-										aria-label="Insert a saved reply"
-										onchange={(e) => {
-											insertSaved(Number(e.currentTarget.value));
-											e.currentTarget.value = '';
-										}}
-									>
-										<option value="" selected disabled>Saved replies</option>
-										{#each savedReplies as r (r.id)}<option value={String(r.id)}>{r.name}</option>{/each}
-									</select>
+								{#if noting}
+									<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={savingNote || !note.trim()}>
+										<Icon name="lock" size={13} />
+										{savingNote ? 'Saving…' : 'Add note'}
+									</button>
+								{:else}
+									{#if savedReplies.length > 0}
+										<select
+											class="input h-8 w-auto max-w-44 py-0 text-sm"
+											aria-label="Insert a saved reply"
+											onchange={(e) => {
+												insertSaved(Number(e.currentTarget.value));
+												e.currentTarget.value = '';
+											}}
+										>
+											<option value="" selected disabled>Saved replies</option>
+											{#each savedReplies as r (r.id)}<option value={String(r.id)}>{r.name}</option>{/each}
+										</select>
+									{/if}
+									<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={sending || !reply.trim()}>
+										<Icon name="send" size={13} />
+										{sending ? 'Sending…' : 'Send'}
+									</button>
 								{/if}
-								<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={sending || !reply.trim()}>
-									<Icon name="send" size={13} />
-									{sending ? 'Sending…' : 'Send'}
-								</button>
 							</div>
 						</div>
 					</form>

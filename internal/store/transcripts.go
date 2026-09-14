@@ -160,15 +160,23 @@ func (s *Store) SetFirstResponse(ctx context.Context, ticketID int64, at time.Ti
 	return err
 }
 
-// PurgeExpiredTranscripts deletes stored messages for tickets closed longer
-// ago than their guild's retention period.
+// PurgeExpiredTranscripts deletes the stored messages, and the staff notes,
+// of tickets closed longer ago than their guild's retention period. It
+// returns how many rows went.
 func (s *Store) PurgeExpiredTranscripts(ctx context.Context) (int64, error) {
-	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM ticket_messages m
-		USING tickets t, guild_settings gs
-		WHERE m.ticket_id = t.id
-		  AND gs.guild_id = t.guild_id
-		  AND gs.transcript_retention_days IS NOT NULL
-		  AND t.closed_at < now() - make_interval(days => gs.transcript_retention_days)`)
-	return tag.RowsAffected(), err
+	var purged int64
+	for _, table := range []string{"ticket_messages", "ticket_notes"} {
+		tag, err := s.pool.Exec(ctx, `
+			DELETE FROM `+table+` m
+			USING tickets t, guild_settings gs
+			WHERE m.ticket_id = t.id
+			  AND gs.guild_id = t.guild_id
+			  AND gs.transcript_retention_days IS NOT NULL
+			  AND t.closed_at < now() - make_interval(days => gs.transcript_retention_days)`)
+		if err != nil {
+			return purged, err
+		}
+		purged += tag.RowsAffected()
+	}
+	return purged, nil
 }

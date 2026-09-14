@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { intToHex, type Attachment, type TranscriptMessage } from '$lib/api';
+	import { intToHex, type Attachment, type TicketNote, type TranscriptMessage } from '$lib/api';
 	import { timeAgo } from '$lib/format';
 	import { renderMarkdown } from '$lib/markdown';
 	import Icon from './Icon.svelte';
@@ -7,12 +7,15 @@
 	/** A ticket's saved messages, laid out the way Discord shows them. */
 	let {
 		messages,
+		notes = [],
 		openerId,
 		openerName,
 		roles = {},
 		channels = {}
 	}: {
 		messages: TranscriptMessage[];
+		/** Private staff notes, shown between the messages by time. */
+		notes?: TicketNote[];
 		openerId: string;
 		openerName: string;
 		/** Role and channel names by ID, so mentions read as they did in Discord. */
@@ -29,17 +32,27 @@
 	const channelNames = $derived(new Map(Object.entries(channels)));
 	const md = (text: string) => renderMarkdown(text, users, roleNames, channelNames);
 
-	// Group consecutive messages from the same author, as Discord does.
-	const groups = $derived.by(() => {
-		const out: TranscriptMessage[][] = [];
+	type Item = { kind: 'messages'; messages: TranscriptMessage[] } | { kind: 'note'; note: TicketNote };
+	const at = (iso: string) => new Date(iso).getTime();
+
+	// Group consecutive messages from the same author, as Discord does. Notes
+	// go between the messages by time, starting a new group.
+	const items = $derived.by(() => {
+		const out: Item[] = [];
+		const queue = [...notes].sort((a, b) => at(a.created_at) - at(b.created_at));
+		let n = 0;
 		for (const msg of messages) {
+			while (n < queue.length && at(queue[n].created_at) <= at(msg.created_at)) {
+				out.push({ kind: 'note', note: queue[n++] });
+			}
 			const last = out.at(-1);
-			const prev = last?.at(-1);
+			const prev = last?.kind === 'messages' ? last.messages.at(-1) : undefined;
 			const sameAuthor = prev && prev.author_id === msg.author_id;
-			const close = prev && new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 7 * 60_000;
-			if (last && sameAuthor && close) last.push(msg);
-			else out.push([msg]);
+			const close = prev && at(msg.created_at) - at(prev.created_at) < 7 * 60_000;
+			if (last?.kind === 'messages' && sameAuthor && close) last.messages.push(msg);
+			else out.push({ kind: 'messages', messages: [msg] });
 		}
+		while (n < queue.length) out.push({ kind: 'note', note: queue[n++] });
 		return out;
 	});
 
@@ -61,95 +74,118 @@
 			the server's retention setting.
 		</p>
 	{/if}
-	{#each groups as group (group[0].id)}
-		{@const first = group[0]}
-		<article class="group/msg mt-4 flex gap-4 px-4 py-0.5 first:mt-0 hover:bg-[#2e3035]">
-			{#if first.author_avatar}
-				<img src={first.author_avatar} alt="" class="mt-0.5 size-10 shrink-0 rounded-full" loading="lazy" />
-			{:else}
-				<div class="mt-0.5 size-10 shrink-0 rounded-full bg-[#5865f2]"></div>
-			{/if}
-			<div class="min-w-0 flex-1">
-				<div class="flex items-baseline gap-2">
-					<span class="font-medium text-white">{first.author_name}</span>
-					{#if first.author_bot}
-						<span class="rounded bg-[#5865f2] px-1.5 py-px text-[10px] font-semibold text-white">APP</span>
-					{/if}
-					<time class="text-xs text-[#949ba4]" datetime={first.created_at}>{time(first.created_at)}</time>
+	{#each items as item (item.kind === 'note' ? `note-${item.note.id}` : item.messages[0].id)}
+		{#if item.kind === 'note'}
+			{@const note = item.note}
+			<aside
+				class="mx-4 mt-4 rounded-md border border-dashed border-[#4e5058] bg-[#2b2d31] px-3 py-2 first:mt-0"
+				aria-label="Private note from {note.author_name}"
+			>
+				<div class="flex items-center gap-2 text-xs text-[#949ba4]">
+					<Icon name="lock" size={12} />
+					<span class="min-w-0 truncate">
+						Private note from <span class="font-medium text-[#dbdee1]">{note.author_name}</span>
+					</span>
+					<time class="ml-auto shrink-0" datetime={note.created_at} title="Only your team can see notes">
+						{time(note.created_at)}
+					</time>
 				</div>
-				{#each group as msg, i (msg.id)}
-					<div class="relative {i > 0 ? 'mt-1' : ''} {msg.deleted_at ? 'opacity-60' : ''}">
-						{#if i > 0}
-							<time
-								class="absolute top-0.5 -left-14 hidden w-10 text-right text-[10px] text-[#949ba4] group-hover/msg:block"
-								datetime={msg.created_at}>{clock(msg.created_at)}</time
-							>
+				<div class="mt-1 text-sm break-words whitespace-pre-wrap">
+					<!-- Safe: renderMarkdown escapes all input before formatting. -->
+					{@html md(note.content)}
+				</div>
+			</aside>
+		{:else}
+			{@const group = item.messages}
+			{@const first = group[0]}
+			<article class="group/msg mt-4 flex gap-4 px-4 py-0.5 first:mt-0 hover:bg-[#2e3035]">
+				{#if first.author_avatar}
+					<img src={first.author_avatar} alt="" class="mt-0.5 size-10 shrink-0 rounded-full" loading="lazy" />
+				{:else}
+					<div class="mt-0.5 size-10 shrink-0 rounded-full bg-[#5865f2]"></div>
+				{/if}
+				<div class="min-w-0 flex-1">
+					<div class="flex items-baseline gap-2">
+						<span class="font-medium text-white">{first.author_name}</span>
+						{#if first.author_bot}
+							<span class="rounded bg-[#5865f2] px-1.5 py-px text-[10px] font-semibold text-white">APP</span>
 						{/if}
-						{#if msg.content}
-							<div class="break-words whitespace-pre-wrap {msg.deleted_at ? 'line-through' : ''}">
-								<!-- Safe: renderMarkdown escapes all input before formatting. -->
-								{@html md(msg.content)}
-								{#if msg.edited_at}<span class="text-[10px] text-[#949ba4]"> (edited)</span>{/if}
-							</div>
-						{/if}
-						{#if msg.deleted_at}
-							<div class="text-[11px] text-[#f0616d]">Deleted {timeAgo(msg.deleted_at)}</div>
-						{/if}
-
-						{#each msg.embeds as embed, j (j)}
-							<div
-								class="mt-1 max-w-[520px] rounded border-l-4 bg-[#2b2d31] py-2.5 pr-4 pl-3"
-								style="border-color:{embed.color ? intToHex(embed.color) : '#1e1f22'}"
-							>
-								{#if embed.author}
-									<div class="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
-										{#if embed.author.icon_url}
-											<img src={embed.author.icon_url} alt="" class="size-6 rounded-full" loading="lazy" />
-										{/if}
-										{embed.author.name}
-									</div>
-								{/if}
-								{#if embed.title}<div class="font-semibold text-white">{embed.title}</div>{/if}
-								{#if embed.description}
-									<div class="mt-1 text-sm break-words whitespace-pre-wrap">
-										{@html md(embed.description)}
-									</div>
-								{/if}
-								{#each embed.fields ?? [] as field, k (k)}
-									<div class="mt-2 text-sm">
-										<div class="font-semibold text-white">{field.name}</div>
-										<div class="break-words whitespace-pre-wrap">
-											{@html md(field.value)}
-										</div>
-									</div>
-								{/each}
-								{#if embed.footer}<div class="mt-2 text-xs text-[#949ba4]">{embed.footer}</div>{/if}
-							</div>
-						{/each}
-
-						{#each msg.attachments as a (a.url)}
-							{#if isImage(a)}
-								<a href={a.url} target="_blank" rel="noopener noreferrer" class="mt-1 block w-fit">
-									<img src={a.url} alt={a.name} class="max-h-72 max-w-full rounded-md" loading="lazy" />
-								</a>
-							{:else}
-								<a
-									href={a.url}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="mt-1 flex w-fit max-w-full items-center gap-3 rounded-md border border-[#1e1f22] bg-[#2b2d31] px-3 py-2"
-								>
-									<Icon name="transcript" size={22} class="text-[#949ba4]" />
-									<span class="min-w-0">
-										<span class="block truncate text-sm text-[#00a8fc]">{a.name}</span>
-										<span class="block text-xs text-[#949ba4]">{size(a.size)}</span>
-									</span>
-								</a>
-							{/if}
-						{/each}
+						<time class="text-xs text-[#949ba4]" datetime={first.created_at}>{time(first.created_at)}</time>
 					</div>
-				{/each}
-			</div>
-		</article>
+					{#each group as msg, i (msg.id)}
+						<div class="relative {i > 0 ? 'mt-1' : ''} {msg.deleted_at ? 'opacity-60' : ''}">
+							{#if i > 0}
+								<time
+									class="absolute top-0.5 -left-14 hidden w-10 text-right text-[10px] text-[#949ba4] group-hover/msg:block"
+									datetime={msg.created_at}>{clock(msg.created_at)}</time
+								>
+							{/if}
+							{#if msg.content}
+								<div class="break-words whitespace-pre-wrap {msg.deleted_at ? 'line-through' : ''}">
+									<!-- Safe: renderMarkdown escapes all input before formatting. -->
+									{@html md(msg.content)}
+									{#if msg.edited_at}<span class="text-[10px] text-[#949ba4]"> (edited)</span>{/if}
+								</div>
+							{/if}
+							{#if msg.deleted_at}
+								<div class="text-[11px] text-[#f0616d]">Deleted {timeAgo(msg.deleted_at)}</div>
+							{/if}
+
+							{#each msg.embeds as embed, j (j)}
+								<div
+									class="mt-1 max-w-[520px] rounded border-l-4 bg-[#2b2d31] py-2.5 pr-4 pl-3"
+									style="border-color:{embed.color ? intToHex(embed.color) : '#1e1f22'}"
+								>
+									{#if embed.author}
+										<div class="mb-1 flex items-center gap-2 text-sm font-semibold text-white">
+											{#if embed.author.icon_url}
+												<img src={embed.author.icon_url} alt="" class="size-6 rounded-full" loading="lazy" />
+											{/if}
+											{embed.author.name}
+										</div>
+									{/if}
+									{#if embed.title}<div class="font-semibold text-white">{embed.title}</div>{/if}
+									{#if embed.description}
+										<div class="mt-1 text-sm break-words whitespace-pre-wrap">
+											{@html md(embed.description)}
+										</div>
+									{/if}
+									{#each embed.fields ?? [] as field, k (k)}
+										<div class="mt-2 text-sm">
+											<div class="font-semibold text-white">{field.name}</div>
+											<div class="break-words whitespace-pre-wrap">
+												{@html md(field.value)}
+											</div>
+										</div>
+									{/each}
+									{#if embed.footer}<div class="mt-2 text-xs text-[#949ba4]">{embed.footer}</div>{/if}
+								</div>
+							{/each}
+
+							{#each msg.attachments as a (a.url)}
+								{#if isImage(a)}
+									<a href={a.url} target="_blank" rel="noopener noreferrer" class="mt-1 block w-fit">
+										<img src={a.url} alt={a.name} class="max-h-72 max-w-full rounded-md" loading="lazy" />
+									</a>
+								{:else}
+									<a
+										href={a.url}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="mt-1 flex w-fit max-w-full items-center gap-3 rounded-md border border-[#1e1f22] bg-[#2b2d31] px-3 py-2"
+									>
+										<Icon name="transcript" size={22} class="text-[#949ba4]" />
+										<span class="min-w-0">
+											<span class="block truncate text-sm text-[#00a8fc]">{a.name}</span>
+											<span class="block text-xs text-[#949ba4]">{size(a.size)}</span>
+										</span>
+									</a>
+								{/if}
+							{/each}
+						</div>
+					{/each}
+				</div>
+			</article>
+		{/if}
 	{/each}
 </section>

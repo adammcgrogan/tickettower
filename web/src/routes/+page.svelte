@@ -94,6 +94,7 @@
 		{ name: '/ticket remove', body: 'Take away their access again' },
 		{ name: '/ticket move', body: 'Change the ticket type' },
 		{ name: '/ticket rename', body: 'Give the channel a clearer name' },
+		{ name: '/ticket note', body: 'Leave a private note only your team can see' },
 		{ name: '/ticket hold', body: 'Park a ticket waiting on something else' },
 		{ name: '/ticket closerequest', body: 'Ask the member to confirm it can close' },
 		{ name: '/reply', body: 'Send one of your saved replies' },
