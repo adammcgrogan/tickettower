@@ -151,6 +151,15 @@ func setupProblems(s setup) []problem {
 					Title:  fmt.Sprintf("%s tickets won't ping the team", t.Name),
 					Detail: fmt.Sprintf("%s can't be mentioned, so staff aren't notified of new tickets. %s", "T"+roles[1:], fix)})
 			}
+		case missing == "" && t.KeepsClosedChannels() && s.channel(*t.ClosedParentID) == nil:
+			out = append(out, problem{Kind: "ticket_type", ID: t.ID,
+				Title:  fmt.Sprintf("Closed %s tickets can't be kept", t.Name),
+				Detail: "The category closed tickets are kept in was deleted, so closed channels are deleted straight away instead. Choose another category."})
+		case missing == "" && t.KeepsClosedChannels() && s.childCount(*t.ClosedParentID) >= discordx.MaxChannelsPerCategory:
+			out = append(out, problem{Kind: "ticket_type", ID: t.ID,
+				Title: fmt.Sprintf("Closed %s tickets can't be kept", t.Name),
+				Detail: fmt.Sprintf("The %s category is full: Discord allows %d channels per category, so closed tickets can't move there. Keep them for less time, or choose another category.",
+					s.channel(*t.ClosedParentID).Name(), discordx.MaxChannelsPerCategory)})
 		case missing == "" && t.Mode == store.ModeChannel && parent != nil:
 			// Discord caps a category at 50 channels, and busy servers reach
 			// it with open tickets alone. Warn before it stops tickets.

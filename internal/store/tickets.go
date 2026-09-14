@@ -52,6 +52,10 @@ type Ticket struct {
 	Match *MessageMatch `json:"match,omitempty"`
 	// Feedback is the opener's rating once the ticket has been rated.
 	Feedback *TicketFeedback `json:"feedback"`
+	// ChannelKeptUntil is set while a closed channel ticket's channel is
+	// kept in its type's closed category: when it will be deleted, and until
+	// when the ticket can be reopened.
+	ChannelKeptUntil *time.Time `json:"reopen_until"`
 }
 
 // TicketFeedback is the rating and comment the opener left after closing.
@@ -65,7 +69,8 @@ type TicketFeedback struct {
 // Queries built on them must not alias the tickets table.
 const ticketColumns = `tickets.id, guild_id, number, ticket_type_id, type_name, mode, channel_id, opener_id, opener_name,
 	claimed_by, claimed_by_name, status, close_reason, closed_by, closed_by_name, opened_at, first_response_at, closed_at,
-	last_activity_at, waiting_on_staff, waiting_since, on_hold, hold_reason, fb.rating, fb.comment, fb.created_at`
+	last_activity_at, waiting_on_staff, waiting_since, on_hold, hold_reason, channel_kept_until,
+	fb.rating, fb.comment, fb.created_at`
 
 const ticketFrom = `FROM tickets LEFT JOIN ticket_feedback fb ON fb.ticket_id = tickets.id`
 
@@ -82,7 +87,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 	err := row.Scan(&t.ID, &guildID, &t.Number, &t.TicketTypeID, &t.TypeName, &mode, &channelID, &opener,
 		&t.OpenerName, &claimedBy, &t.ClaimedByName, &status, &t.CloseReason, &closedBy, &t.ClosedByName, &t.OpenedAt,
 		&t.FirstResponseAt, &t.ClosedAt, &t.LastActivityAt, &t.WaitingOnStaff, &t.WaitingSince, &t.OnHold, &t.HoldReason,
-		&rating, &comment, &ratedAt)
+		&t.ChannelKeptUntil, &rating, &comment, &ratedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
@@ -258,18 +263,58 @@ func (s *Store) CloseTicketsOfLeftGuilds(ctx context.Context, reason string) (in
 	return tag.RowsAffected(), err
 }
 
-// ReopenTicket reopens a closed thread ticket. It reports false if the
-// ticket is open, or is a channel ticket (its channel is gone). The ticket
-// starts as waiting on the team, with any auto-close warning forgotten.
+// ReopenTicket reopens a closed ticket. It reports false if the ticket is
+// open, or is a channel ticket whose channel is gone (only kept channels can
+// come back). The ticket starts as waiting on the team, with any auto-close
+// warning forgotten.
 func (s *Store) ReopenTicket(ctx context.Context, id int64, now time.Time) (bool, error) {
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE tickets
 		SET status = 'open', closed_by = NULL, closed_by_name = NULL, close_reason = '', closed_at = NULL,
-		    auto_closed = false, channel_cleaned_at = NULL, auto_close_warned_at = NULL,
+		    auto_closed = false, channel_cleaned_at = NULL, auto_close_warned_at = NULL, channel_kept_until = NULL,
 		    waiting_on_staff = true, waiting_since = $2, last_activity_at = $2, reopened_at = $2,
 		    on_hold = false, hold_reason = '', staff_reminded_at = NULL, reminders_sent = 0
-		WHERE id = $1 AND status = 'closed' AND mode = 'thread'`, id, now)
+		WHERE id = $1 AND status = 'closed' AND (mode = 'thread' OR channel_kept_until IS NOT NULL)`, id, now)
 	return tag.RowsAffected() == 1, err
+}
+
+// KeepChannel records that a closed ticket's channel has been moved to the
+// closed category, to be deleted at until. That counts as cleaned up.
+func (s *Store) KeepChannel(ctx context.Context, ticketID int64, until time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE tickets SET channel_cleaned_at = now(), channel_kept_until = $2
+		WHERE id = $1 AND status = 'closed'`, ticketID, until)
+	return err
+}
+
+// KeptChannelsToDelete returns closed tickets whose kept channel is due to
+// be deleted.
+func (s *Store) KeptChannelsToDelete(ctx context.Context, now time.Time) ([]Ticket, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+ticketColumns+` `+ticketFrom+`
+		WHERE status = 'closed' AND channel_kept_until <= $1
+		  AND guild_id IN (SELECT id FROM guilds WHERE left_at IS NULL)
+		ORDER BY channel_kept_until LIMIT 50`, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Ticket
+	for rows.Next() {
+		t, err := scanTicket(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ForgetKeptChannel records that a kept channel is gone (deleted by the
+// sweep or by hand), so the ticket can no longer be reopened.
+func (s *Store) ForgetKeptChannel(ctx context.Context, channelID snowflake.ID) error {
+	_, err := s.pool.Exec(ctx, `UPDATE tickets SET channel_kept_until = NULL WHERE channel_id = $1`, int64(channelID))
+	return err
 }
 
 // TicketsToCleanUp returns closed tickets whose channel the bot hasn't

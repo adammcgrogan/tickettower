@@ -45,7 +45,7 @@ func (d *Dashboard) Close(ctx context.Context, t store.Ticket, byID snowflake.ID
 	now := time.Now()
 	t.Status, t.ClosedBy, t.ClosedByName, t.CloseReason, t.ClosedAt = store.StatusClosed, &byID, &byName, reason, &now
 
-	_, err = d.b.rest.CreateMessage(t.ChannelID, closedMessage(t), rest.WithCtx(ctx))
+	_, err = d.b.rest.CreateMessage(t.ChannelID, closedMessage(t, d.b.typeOf(ctx, t)), rest.WithCtx(ctx))
 	if err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
 		d.b.log.Warn("failed to post close message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
 	}
@@ -53,9 +53,9 @@ func (d *Dashboard) Close(ctx context.Context, t store.Ticket, byID snowflake.ID
 	return true, nil
 }
 
-// Reopen reopens a closed thread ticket for a dashboard user and posts the
-// reopen message in the thread. The bot picks the thread up again when it
-// sees it unarchived.
+// Reopen reopens a closed ticket for a dashboard user and posts the reopen
+// message in it. The bot picks a thread up again when it sees it
+// unarchived, and a kept channel when the ticket's next message arrives.
 func (d *Dashboard) Reopen(ctx context.Context, t store.Ticket, byID snowflake.ID) (store.Ticket, error) {
 	t, err := d.b.reopenTicket(ctx, t, byID, nil)
 	if err != nil {

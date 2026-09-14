@@ -6,6 +6,7 @@
 		api,
 		ApiError,
 		atLeast,
+		canReopen,
 		errorMessage,
 		overdueAt,
 		send,
@@ -362,7 +363,7 @@
 		}
 	}
 
-	// --- Reopening (thread tickets only: channels are deleted on close) ---
+	// --- Reopening (threads, and channels the type keeps after closing) ---
 	let reopening = $state(false);
 
 	async function reopenTicket() {
@@ -386,6 +387,18 @@
 			reopening = false;
 		}
 	}
+
+	// What closing does to the channel, from the ticket's type.
+	const closeEffect = $derived.by(() => {
+		const t = detail?.ticket;
+		if (!t) return '';
+		if (t.mode === 'thread') return 'The thread is archived';
+		const tt = types.find((x) => x.id === t.ticket_type_id);
+		if (tt?.closed_parent_id) {
+			return `The channel is kept, read only, for ${tt.closed_keep_days === 1 ? '1 day' : `${tt.closed_keep_days} days`} so it can be reopened`;
+		}
+		return 'The channel is deleted after a few seconds';
+	});
 
 	function openClose() {
 		closeReason = '';
@@ -735,7 +748,7 @@
 									<Icon name="lock" size={13} /> Close ticket
 								</button>
 							{/if}
-						{:else if t.mode === 'thread' && canAct}
+						{:else if canReopen(t) && canAct}
 							<button class="btn btn-secondary h-8 px-3" onclick={reopenTicket} disabled={reopening}>
 								<Icon name="unlock" size={13} /> {reopening ? 'Reopening…' : 'Reopen'}
 							</button>
@@ -953,10 +966,7 @@
 <Dialog
 	bind:open={closeOpen}
 	title="Close ticket #{detail?.ticket.number ?? ''}?"
-	description="{detail?.ticket.opener_name ?? 'The member'} is told it's closed and asked to rate it. {detail?.ticket
-		.mode === 'thread'
-		? 'The thread is archived'
-		: 'The channel is deleted after a few seconds'}, and the transcript is kept."
+	description="{detail?.ticket.opener_name ?? 'The member'} is told it's closed and asked to rate it. {closeEffect}, and the transcript is kept."
 >
 	<Field label="Reason" for="close-reason" optional hint="Shown to the member and in the ticket log." error={closeError}>
 		<textarea

@@ -58,6 +58,8 @@
 
 - Easier dashboard navigation: the ticket type editor is split into tabs (Basics, Button, Questions and welcome, Who can open, While open, Closing) with the button and welcome previews always beside it; a save error opens the tab with the problem. Its Button tab shows and changes which ticket buttons the type is on, for new and existing types, and the Ticket types list says where each type appears. The open Tickets queue is grouped by whose turn it is, with rarer ticket actions in a More menu. Settings uses quiet rows with a save bar scoped to the settings it saves, apart from Blocked members, which apply straight away
 
+- Reopen channel tickets: per ticket type (Closing tab), a closed channel can be kept in a closed category, read only (or hidden from the member), for 1–30 days before it's deleted (`closed_parent_id`, `closed_member_access`, `closed_keep_days`; `tickets.channel_kept_until`). Kept tickets reopen from the close message, the DM or the Tickets page, which restores the channel's access and category; the auto-close sweep deletes kept channels when due. The setup check warns when the closed category is deleted or full
+
 - Claim and assign from the dashboard: Claim and Unclaim next to Close ticket on the Tickets page, and "Assign to someone" in the More menu with a name search of the type's support staff and server managers (`…/tickets/{id}/claim` with an optional `user_id`, `…/unclaim`, `…/assignees?q=`). The bot posts the usual claim message, moves any claim lock and logs it (`Dashboard.Claim/Assign/Unclaim`)
 
 - Ratings next to the ticket: a closed ticket's stars, comment and when it was rated show in its summary on the Tickets page and the transcript, and the Tickets list marks rated tickets with their score (`Ticket.feedback`, a `LEFT JOIN ticket_feedback` in every ticket read)
@@ -71,10 +73,9 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 ## Next up (suggested order)
 
 1. **Deploy to Railway**: set up the services and env vars, set a real `PUBLIC_URL` (which enables transcript links in DMs), unset `DEV_GUILD_ID`, and add the production OAuth redirect. Reset the bot token/secret first (they were shared in a chat).
-2. **Reopen channel tickets**: threads reopen today; channels are deleted on close, so reopening them would need a delay or a closed category instead.
-3. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
-4. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile. The auto-close job is already safe to run in several processes.
-5. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.
+2. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
+3. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile. The auto-close job is already safe to run in several processes.
+4. **Premium**: Discord App Subscriptions → `entitlements` rows → higher `Limits`.
 
 ## Nice to have
 

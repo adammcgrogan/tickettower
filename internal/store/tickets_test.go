@@ -498,3 +498,57 @@ func TestTicketsCarryFeedback(t *testing.T) {
 		}
 	}
 }
+
+func TestKeptChannelsReopenAndExpire(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	tt := newType(t, s, testGuild, "Billing")
+	kept := Ticket{GuildID: testGuild, Number: 1, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel, ChannelID: 9101, OpenerID: 42}
+	deleted := Ticket{GuildID: testGuild, Number: 2, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel, ChannelID: 9102, OpenerID: 42}
+	for _, tk := range []*Ticket{&kept, &deleted} {
+		if err := s.CreateTicket(ctx, tk); err != nil {
+			t.Fatal(err)
+		}
+		s.CloseTicket(ctx, tk.ID, 100, "staff", "")
+	}
+	now := time.Now()
+
+	// A channel ticket whose channel was deleted can't reopen.
+	if ok, _ := s.ReopenTicket(ctx, deleted.ID, now); ok {
+		t.Error("reopened a channel ticket whose channel is gone")
+	}
+
+	// A kept one can, until its channel is deleted.
+	if err := s.KeepChannel(ctx, kept.ID, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetTicket(ctx, kept.ID)
+	if got.ChannelKeptUntil == nil {
+		t.Fatal("kept until not set")
+	}
+	if due, _ := s.KeptChannelsToDelete(ctx, now); len(due) != 0 {
+		t.Errorf("%d channels due before their time", len(due))
+	}
+	due, err := s.KeptChannelsToDelete(ctx, now.Add(2*time.Hour))
+	if err != nil || len(due) != 1 || due[0].ID != kept.ID {
+		t.Fatalf("due = %v, err %v", due, err)
+	}
+	if ok, err := s.ReopenTicket(ctx, kept.ID, now); err != nil || !ok {
+		t.Fatalf("reopen kept: ok=%v err=%v", ok, err)
+	}
+	got, _ = s.GetTicket(ctx, kept.ID)
+	if got.Status != StatusOpen || got.ChannelKeptUntil != nil {
+		t.Errorf("reopened ticket = status %s, kept until %v", got.Status, got.ChannelKeptUntil)
+	}
+
+	// Once the sweep (or someone) deletes the channel, it's forgotten.
+	s.CloseTicket(ctx, kept.ID, 100, "staff", "")
+	s.KeepChannel(ctx, kept.ID, now)
+	if err := s.ForgetKeptChannel(ctx, kept.ChannelID); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.ReopenTicket(ctx, kept.ID, now); ok {
+		t.Error("reopened after the kept channel was deleted")
+	}
+}

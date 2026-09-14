@@ -98,7 +98,34 @@ type TicketType struct {
 	ReminderRepeat     bool          `json:"reminder_repeat"`
 	ReminderWhere      ReminderWhere `json:"reminder_where"`
 	ReminderPing       ReminderPing  `json:"reminder_ping"`
+	// ClosedParentID is the category a closed channel ticket is kept in,
+	// read only, for ClosedKeepDays before it's deleted; nil deletes the
+	// channel straight away. ClosedMemberAccess is whether the opener can
+	// still read it while it's kept.
+	ClosedParentID     *snowflake.ID `json:"closed_parent_id"`
+	ClosedMemberAccess ClosedAccess  `json:"closed_member_access"`
+	ClosedKeepDays     int           `json:"closed_keep_days"`
 	CreatedAt          time.Time     `json:"created_at"`
+}
+
+// ClosedAccess is what the opener can do with a closed ticket's channel
+// while it's kept.
+type ClosedAccess string
+
+const (
+	ClosedRead   ClosedAccess = "read"   // read only
+	ClosedHidden ClosedAccess = "hidden" // can't see it
+)
+
+func (a ClosedAccess) Valid() bool { return a == ClosedRead || a == ClosedHidden }
+
+// ClosedKeepDayOptions are the keep times the dashboard offers.
+var ClosedKeepDayOptions = []int{1, 3, 7, 14, 30}
+
+// KeepsClosedChannels reports whether closed tickets of this type keep their
+// channel for a while instead of deleting it.
+func (t TicketType) KeepsClosedChannels() bool {
+	return t.Mode == ModeChannel && t.ClosedParentID != nil
 }
 
 // ClaimLock is what claiming a channel ticket does to other support staff.
@@ -168,7 +195,7 @@ const ticketTypeColumns = `id, guild_id, name, emoji, description, mode, parent_
 	name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
 	required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt, button_style, button_label,
 	claim_lock, claim_lock_exempt_role_ids, reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where,
-	reminder_ping, created_at`
+	reminder_ping, closed_parent_id, closed_member_access, closed_keep_days, created_at`
 
 func scanTicketType(row pgx.Row) (TicketType, error) {
 	var (
@@ -184,15 +211,19 @@ func scanTicketType(row pgx.Row) (TicketType, error) {
 		lock     string
 		where    string
 		ping     string
+		closedID *int64
+		access   string
 	)
 	err := row.Scan(&t.ID, &guildID, &t.Name, &t.Emoji, &t.Description, &mode, &parentID, &roles,
 		&t.NameFormat, &t.WelcomeMessage, &t.MaxOpenPerUser, &t.Questions, &t.AutoCloseHours,
 		&required, &blocked, &t.CooldownMinutes, &t.AskRating, &t.RatingPrompt, &style, &t.ButtonLabel,
-		&lock, &exempt, &t.ReplyTargetMinutes, &t.ReminderMinutes, &t.ReminderRepeat, &where, &ping, &t.CreatedAt)
+		&lock, &exempt, &t.ReplyTargetMinutes, &t.ReminderMinutes, &t.ReminderRepeat, &where, &ping,
+		&closedID, &access, &t.ClosedKeepDays, &t.CreatedAt)
 	if err != nil {
 		return t, notFound(err)
 	}
 	t.ClaimLock, t.ReminderWhere, t.ReminderPing = ClaimLock(lock), ReminderWhere(where), ReminderPing(ping)
+	t.ClosedParentID, t.ClosedMemberAccess = idFromNullable(closedID), ClosedAccess(access)
 	t.ClaimLockExemptRoleIDs = fromInt64s(exempt)
 	t.GuildID = snowflake.ID(guildID)
 	t.Mode = TicketMode(mode)
@@ -259,6 +290,12 @@ func (t *TicketType) defaults() {
 	if t.ReminderPing == "" {
 		t.ReminderPing = PingClaimer
 	}
+	if t.ClosedMemberAccess == "" {
+		t.ClosedMemberAccess = ClosedRead
+	}
+	if t.ClosedKeepDays == 0 {
+		t.ClosedKeepDays = 7
+	}
 }
 
 // CreateTicketType inserts t and sets its ID and CreatedAt.
@@ -269,15 +306,17 @@ func (s *Store) CreateTicketType(ctx context.Context, t *TicketType) error {
 		                          name_format, welcome_message, max_open_per_user, questions, auto_close_hours,
 		                          required_role_ids, blocked_role_ids, cooldown_minutes, ask_rating, rating_prompt,
 		                          button_style, button_label, claim_lock, claim_lock_exempt_role_ids,
-		                          reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where, reminder_ping)
+		                          reply_target_minutes, reminder_minutes, reminder_repeat, reminder_where, reminder_ping,
+		                          closed_parent_id, closed_member_access, closed_keep_days)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
-		        $20, $21, $22, $23, $24, $25, $26)
+		        $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
 		RETURNING id, created_at`,
 		int64(t.GuildID), t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions, t.AutoCloseHours,
 		toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating, t.RatingPrompt,
 		string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
 		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
+		nullableID(t.ClosedParentID), string(t.ClosedMemberAccess), t.ClosedKeepDays,
 	).Scan(&t.ID, &t.CreatedAt)
 }
 
@@ -290,13 +329,15 @@ func (s *Store) UpdateTicketType(ctx context.Context, t TicketType) error {
 		    required_role_ids = $14, blocked_role_ids = $15, cooldown_minutes = $16, ask_rating = $17,
 		    rating_prompt = $18, button_style = $19, button_label = $20, claim_lock = $21,
 		    claim_lock_exempt_role_ids = $22, reply_target_minutes = $23, reminder_minutes = $24,
-		    reminder_repeat = $25, reminder_where = $26, reminder_ping = $27, updated_at = now()
+		    reminder_repeat = $25, reminder_where = $26, reminder_ping = $27, closed_parent_id = $28,
+		    closed_member_access = $29, closed_keep_days = $30, updated_at = now()
 		WHERE guild_id = $1 AND id = $2`,
 		int64(t.GuildID), t.ID, t.Name, t.Emoji, t.Description, string(t.Mode), nullableID(t.ParentID),
 		toInt64s(t.SupportRoleIDs), t.NameFormat, t.WelcomeMessage, t.MaxOpenPerUser, t.Questions,
 		t.AutoCloseHours, toInt64s(t.RequiredRoleIDs), toInt64s(t.BlockedRoleIDs), t.CooldownMinutes, t.AskRating,
 		t.RatingPrompt, string(t.ButtonStyle), t.ButtonLabel, string(t.ClaimLock), toInt64s(t.ClaimLockExemptRoleIDs),
-		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing))
+		t.ReplyTargetMinutes, t.ReminderMinutes, t.ReminderRepeat, string(t.ReminderWhere), string(t.ReminderPing),
+		nullableID(t.ClosedParentID), string(t.ClosedMemberAccess), t.ClosedKeepDays)
 	if err != nil {
 		return err
 	}

@@ -56,6 +56,7 @@ func (b *Bot) runAutoClose(ctx context.Context, now time.Time) {
 
 	b.remindStaff(ctx, now)
 	b.cleanUpClosedTickets(ctx, now)
+	b.deleteKeptChannels(ctx, now)
 }
 
 func (b *Bot) warnInactive(ctx context.Context, it store.InactiveTicket, now time.Time) {
@@ -104,7 +105,7 @@ func (b *Bot) autoClose(ctx context.Context, it store.InactiveTicket, now time.T
 		b.log.Error("failed to load auto-closed ticket", slog.Any("err", err))
 		return
 	}
-	_, err = b.rest.CreateMessage(t.ChannelID, closedMessage(t), rest.WithCtx(ctx))
+	_, err = b.rest.CreateMessage(t.ChannelID, closedMessage(t, b.typeOf(ctx, t)), rest.WithCtx(ctx))
 	if err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
 		b.log.Warn("failed to post auto-close message", slog.Any("err", err))
 	}

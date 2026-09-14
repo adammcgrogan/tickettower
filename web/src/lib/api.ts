@@ -102,8 +102,17 @@ export type TicketType = {
 	reminder_repeat: boolean;
 	reminder_where: 'ticket' | 'log' | 'both';
 	reminder_ping: 'claimer' | 'roles' | 'none';
+	/** Category closed channel tickets are kept in, read only; null deletes the channel. */
+	closed_parent_id: string | null;
+	/** Whether the opener can still read a kept channel. */
+	closed_member_access: 'read' | 'hidden';
+	/** Days a kept channel stays before it's deleted. */
+	closed_keep_days: number;
 	created_at: string;
 };
+
+/** The keep times offered for closed channels, matching the API. */
+export const CLOSED_KEEP_DAYS = [1, 3, 7, 14, 30];
 
 export type ClaimLock = 'off' | 'read_only' | 'hidden';
 
@@ -215,7 +224,16 @@ export type Ticket = {
 	match?: { author_name: string; snippet: string };
 	/** The opener's rating and comment, once the ticket has been rated. */
 	feedback: { rating: number; comment: string; created_at: string } | null;
+	/** For a closed channel ticket whose channel is kept: when it's deleted. Reopen works until then. */
+	reopen_until: string | null;
 };
+
+/** Whether a closed ticket can be reopened: threads always, kept channels until they're deleted. */
+export function canReopen(t: Ticket): boolean {
+	if (t.status !== 'closed') return false;
+	if (t.mode === 'thread') return true;
+	return !!t.reopen_until && new Date(t.reopen_until) > new Date();
+}
 
 /** A staff member who can take a ticket, from the assignee search. */
 export type Assignee = { id: string; name: string; avatar_url: string };

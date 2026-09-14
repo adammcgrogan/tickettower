@@ -440,13 +440,14 @@ func (b *Bot) closeTicket(ctx context.Context, channelID snowflake.ID, m *discor
 		return t, discord.MessageCreate{}, userErr("This ticket is already closed.")
 	}
 	t.Status, t.ClosedBy, t.CloseReason = store.StatusClosed, &closer, reason
-	return t, closedMessage(t), nil
+	return t, closedMessage(t, tt), nil
 }
 
 // closedMessage is posted in a ticket as it closes. Tickets without a closer
-// were closed automatically. Thread tickets get a Reopen button, since the
-// thread is only archived.
-func closedMessage(t store.Ticket) discord.MessageCreate {
+// were closed automatically. Tickets that can come back (threads, which are
+// only archived, and channels the type keeps for a while) get a Reopen
+// button. tt is nil if the type was deleted.
+func closedMessage(t store.Ticket, tt *store.TicketType) discord.MessageCreate {
 	desc := "Closed automatically"
 	if t.ClosedBy != nil {
 		desc = "Closed by " + discord.UserMention(*t.ClosedBy)
@@ -455,15 +456,49 @@ func closedMessage(t store.Ticket) discord.MessageCreate {
 		desc += "\n**Reason:** " + t.CloseReason
 	}
 	if t.Mode == store.ModeChannel {
-		desc += "\n\nThis channel will be deleted in a few seconds."
+		if keepsChannel(t, tt) {
+			desc += fmt.Sprintf("\n\nThis channel is kept, read only, for %s and then deleted. It can be reopened until then.", daysLabel(tt.ClosedKeepDays))
+		} else {
+			desc += "\n\nThis channel will be deleted in a few seconds."
+		}
 	}
 	msg := discord.NewMessageCreate().
 		WithEmbeds(discord.NewEmbed().WithTitle("Ticket closed").WithDescription(desc).WithColor(colorMuted)).
 		WithAllowedMentions(&discord.AllowedMentions{})
-	if t.Mode == store.ModeThread {
+	if canComeBack(t, tt) {
 		msg = msg.AddActionRow(reopenButton(t.ID))
 	}
 	return msg
+}
+
+// keepsChannel reports whether a channel ticket's channel is kept after
+// closing rather than deleted.
+func keepsChannel(t store.Ticket, tt *store.TicketType) bool {
+	return t.Mode == store.ModeChannel && tt != nil && tt.KeepsClosedChannels()
+}
+
+// canComeBack reports whether a closing ticket will be reopenable.
+func canComeBack(t store.Ticket, tt *store.TicketType) bool {
+	return t.Mode == store.ModeThread || keepsChannel(t, tt)
+}
+
+func daysLabel(n int) string {
+	if n == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", n)
+}
+
+// typeOf loads a ticket's type, or nil if it was deleted.
+func (b *Bot) typeOf(ctx context.Context, t store.Ticket) *store.TicketType {
+	if t.TicketTypeID == nil {
+		return nil
+	}
+	tt, err := b.store.GetTicketType(ctx, t.GuildID, *t.TicketTypeID)
+	if err != nil {
+		return nil
+	}
+	return &tt
 }
 
 // reopenButton reopens a closed thread ticket. It's on the close message and
@@ -473,30 +508,45 @@ func reopenButton(ticketID int64) discord.ButtonComponent {
 		WithEmoji(discord.ComponentEmoji{Name: "🔓"})
 }
 
-// reopenTicket reopens a closed thread ticket: the thread is unarchived and
-// unlocked, and the ticket tracked again. permitted decides, given the
-// ticket's type (nil if deleted), whether the person may; dashboard users
-// have already been checked. It returns the reopened ticket.
+// reopenTicket reopens a closed ticket: a thread is unarchived and unlocked,
+// a kept channel gets its access back and moves out of the closed category,
+// and the ticket is tracked again. permitted decides, given the ticket's
+// type (nil if deleted), whether the person may; dashboard users have
+// already been checked. It returns the reopened ticket.
 func (b *Bot) reopenTicket(ctx context.Context, t store.Ticket, byID snowflake.ID, permitted func(*store.TicketType) bool) (store.Ticket, error) {
-	if t.Mode != store.ModeThread {
+	if t.Mode == store.ModeChannel && t.ChannelKeptUntil == nil {
 		return t, userErr("This ticket's channel was deleted when it closed, so it can't be reopened. Open a new ticket instead.")
 	}
 	if t.Status == store.StatusOpen {
 		return t, userErr("This ticket is already open.")
 	}
-	var tt *store.TicketType
-	if t.TicketTypeID != nil {
-		if v, err := b.store.GetTicketType(ctx, t.GuildID, *t.TicketTypeID); err == nil {
-			tt = &v
-		}
-	}
+	tt := b.typeOf(ctx, t)
 	if permitted != nil && !permitted(tt) {
 		return t, userErr("Only the person who opened this ticket or support staff can reopen it.")
 	}
-	archived, locked := false, false
-	_, err := b.rest.UpdateChannel(t.ChannelID, discord.GuildThreadUpdate{Archived: &archived, Locked: &locked}, rest.WithCtx(ctx))
+	var err error
+	if t.Mode == store.ModeThread {
+		archived, locked := false, false
+		_, err = b.rest.UpdateChannel(t.ChannelID, discord.GuildThreadUpdate{Archived: &archived, Locked: &locked}, rest.WithCtx(ctx))
+	} else {
+		var roles []snowflake.ID
+		update := discord.GuildTextChannelUpdate{}
+		if tt != nil {
+			roles = tt.SupportRoleIDs
+			// A type without a category can't have the channel moved out of
+			// the closed one (the API can't clear a parent), so it stays
+			// there with its access restored.
+			update.ParentID = tt.ParentID
+		}
+		overwrites := channelOverwrites(t.GuildID, b.botID(), t.OpenerID, roles)
+		update.PermissionOverwrites = &overwrites
+		_, err = b.rest.UpdateChannel(t.ChannelID, update, rest.WithCtx(ctx))
+	}
 	if discordx.IsCode(err, discordx.CodeUnknownChannel) {
-		return t, userErr("This ticket's thread was deleted, so it can't be reopened. Open a new ticket instead.")
+		if t.Mode == store.ModeChannel {
+			b.forgetKeptChannel(ctx, t.ChannelID)
+		}
+		return t, userErr("This ticket's channel was deleted, so it can't be reopened. Open a new ticket instead.")
 	} else if err != nil {
 		return t, err
 	}
@@ -548,17 +598,33 @@ func (b *Bot) finishClose(t store.Ticket) {
 	b.cleanUpChannel(ctx, t)
 }
 
-// cleanUpChannel deletes a closed ticket's channel, or archives and locks
-// its thread, and records that it's done. A failure is only logged: the
-// cleanup sweep retries it, so a restart or a revoked permission never
-// leaves a channel behind for good.
+// cleanUpChannel puts a closed ticket's channel away and records that it's
+// done: a thread is archived and locked; a channel is deleted, or, when its
+// type keeps closed tickets, moved to the closed category and made read
+// only until the sweep deletes it. A failure is only logged: the cleanup
+// sweep retries it, so a restart or a revoked permission never leaves a
+// channel behind for good.
 func (b *Bot) cleanUpChannel(ctx context.Context, t store.Ticket) {
 	var err error
-	switch t.Mode {
-	case store.ModeThread:
+	switch {
+	case t.Mode == store.ModeThread:
 		archived, locked := true, true
 		_, err = b.rest.UpdateChannel(t.ChannelID, discord.GuildThreadUpdate{Archived: &archived, Locked: &locked}, rest.WithCtx(ctx))
 	default:
+		if tt := b.typeOf(ctx, t); keepsChannel(t, tt) {
+			overwrites := closedOverwrites(t.GuildID, b.botID(), t.OpenerID, tt.SupportRoleIDs, tt.ClosedMemberAccess)
+			_, err = b.rest.UpdateChannel(t.ChannelID, discord.GuildTextChannelUpdate{
+				ParentID: tt.ClosedParentID, PermissionOverwrites: &overwrites,
+			}, rest.WithCtx(ctx))
+			if err == nil {
+				until := time.Now().Add(time.Duration(tt.ClosedKeepDays) * 24 * time.Hour)
+				if err := b.store.KeepChannel(ctx, t.ID, until); err != nil {
+					b.log.Error("failed to record kept ticket channel", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+				}
+				return
+			}
+			break
+		}
 		err = b.rest.DeleteChannel(t.ChannelID, rest.WithCtx(ctx))
 	}
 	if err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
@@ -567,6 +633,52 @@ func (b *Bot) cleanUpChannel(ctx context.Context, t store.Ticket) {
 	}
 	if err := b.store.MarkChannelCleaned(ctx, t.ID); err != nil {
 		b.log.Error("failed to mark ticket channel cleaned", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+	}
+}
+
+// closedOverwrites are a kept channel's permissions: nobody but the bot can
+// write, support roles can read, and the opener can read or is shut out.
+func closedOverwrites(guildID, botID, openerID snowflake.ID, supportRoles []snowflake.ID, access store.ClosedAccess) []discord.PermissionOverwrite {
+	readOnly := discord.PermissionViewChannel | discord.PermissionReadMessageHistory
+	overwrites := []discord.PermissionOverwrite{
+		discord.RolePermissionOverwrite{RoleID: guildID, Deny: discord.PermissionViewChannel},
+		discord.MemberPermissionOverwrite{UserID: botID, Allow: ticketMemberPerms | discord.PermissionManageChannels},
+	}
+	if access != store.ClosedHidden {
+		overwrites = append(overwrites, discord.MemberPermissionOverwrite{UserID: openerID, Allow: readOnly, Deny: discord.PermissionSendMessages})
+	}
+	for _, id := range supportRoles {
+		overwrites = append(overwrites, discord.RolePermissionOverwrite{RoleID: id, Allow: readOnly, Deny: discord.PermissionSendMessages})
+	}
+	return overwrites
+}
+
+// deleteKeptChannels deletes the kept channels of closed tickets whose time
+// is up.
+func (b *Bot) deleteKeptChannels(ctx context.Context, now time.Time) {
+	due, err := b.store.KeptChannelsToDelete(ctx, now)
+	if err != nil {
+		if ctx.Err() == nil {
+			b.log.Error("failed to find kept channels to delete", slog.Any("err", err))
+		}
+		return
+	}
+	for _, t := range due {
+		err := b.rest.DeleteChannel(t.ChannelID, rest.WithCtx(ctx))
+		if err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
+			b.log.Warn("failed to delete kept ticket channel, will retry", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+			continue
+		}
+		b.forgetKeptChannel(ctx, t.ChannelID)
+	}
+	if len(due) > 0 {
+		b.log.Info("deleted kept channels of closed tickets", slog.Int("count", len(due)))
+	}
+}
+
+func (b *Bot) forgetKeptChannel(ctx context.Context, channelID snowflake.ID) {
+	if err := b.store.ForgetKeptChannel(ctx, channelID); err != nil {
+		b.log.Error("failed to forget kept ticket channel", slog.String("channel_id", channelID.String()), slog.Any("err", err))
 	}
 }
 
@@ -594,12 +706,7 @@ func (b *Bot) notifyOpener(ctx context.Context, t store.Ticket) {
 	if err != nil {
 		return
 	}
-	var tt *store.TicketType
-	if t.TicketTypeID != nil {
-		if v, err := b.store.GetTicketType(ctx, t.GuildID, *t.TicketTypeID); err == nil {
-			tt = &v
-		}
-	}
+	tt := b.typeOf(ctx, t)
 	desc, ask := closedDM(t, tt, b.guildName(ctx, t.GuildID))
 	embed := discord.NewEmbed().WithTitle("Ticket closed").WithDescription(desc).WithColor(colorMuted)
 	msg := discord.NewMessageCreate().WithEmbeds(embed)
@@ -608,7 +715,7 @@ func (b *Bot) notifyOpener(ctx context.Context, t store.Ticket) {
 	} else {
 		msg = msg.WithComponents(b.transcriptRow(t.ID)...)
 	}
-	if t.Mode == store.ModeThread {
+	if canComeBack(t, tt) {
 		msg = msg.AddActionRow(reopenButton(t.ID))
 	}
 	_, err = b.rest.CreateMessage(dm.ID(), msg, rest.WithCtx(ctx))
@@ -762,4 +869,14 @@ func (b *Bot) renameTicket(ctx context.Context, channelID snowflake.ID, m *disco
 		return userErr("Discord only allows renaming a channel twice every 10 minutes. Try again later.")
 	}
 	return err
+}
+
+// botID is the bot's user ID, for permission overwrites. The dashboard's
+// Bot has no gateway client, so it falls back to the configured client ID
+// (a bot's user ID is its application ID).
+func (b *Bot) botID() snowflake.ID {
+	if b.client != nil {
+		return b.client.ApplicationID
+	}
+	return b.cfg.DiscordClientID
 }

@@ -57,6 +57,9 @@ type ticketTypeInput struct {
 	ReminderRepeat         bool                `json:"reminder_repeat"`
 	ReminderWhere          store.ReminderWhere `json:"reminder_where"`
 	ReminderPing           store.ReminderPing  `json:"reminder_ping"`
+	ClosedParentID         *snowflake.ID       `json:"closed_parent_id"`
+	ClosedMemberAccess     store.ClosedAccess  `json:"closed_member_access"`
+	ClosedKeepDays         int                 `json:"closed_keep_days"`
 }
 
 // minuteOptions are the waits offered for reply targets and reminders.
@@ -88,6 +91,9 @@ func (in ticketTypeInput) apply(t *store.TicketType) {
 	t.ReminderRepeat = in.ReminderRepeat
 	t.ReminderWhere = in.ReminderWhere
 	t.ReminderPing = in.ReminderPing
+	t.ClosedParentID = in.ClosedParentID
+	t.ClosedMemberAccess = in.ClosedMemberAccess
+	t.ClosedKeepDays = in.ClosedKeepDays
 }
 
 // validateQuestions normalises a ticket type's form questions.
@@ -240,6 +246,40 @@ func (s *Server) validateTicketType(ctx context.Context, guildID snowflake.ID, i
 		if in.ParentID != nil && (parent == nil || parent.Kind != "category") {
 			return invalid("parent_id", "Choose a category for ticket channels, or leave it empty.")
 		}
+	}
+
+	// Closed channels can be kept in a category (channel tickets only).
+	if in.ClosedParentID != nil && *in.ClosedParentID == 0 {
+		in.ClosedParentID = nil
+	}
+	if in.Mode == store.ModeThread {
+		in.ClosedParentID = nil
+	}
+	if in.ClosedParentID != nil {
+		var closed *channelResponse
+		for i := range channels {
+			if channels[i].ID == *in.ClosedParentID {
+				closed = &channels[i]
+			}
+		}
+		if closed == nil || closed.Kind != "category" {
+			return invalid("closed_parent_id", "Choose the category closed tickets are kept in.")
+		}
+		if in.ParentID != nil && *in.ParentID == *in.ClosedParentID {
+			return invalid("closed_parent_id", "Keep closed tickets in a different category from open ones, so the open category doesn't fill up.")
+		}
+	}
+	if in.ClosedMemberAccess == "" {
+		in.ClosedMemberAccess = store.ClosedRead
+	}
+	if !in.ClosedMemberAccess.Valid() {
+		return invalid("closed_member_access", "Choose whether the member can still read a closed ticket.")
+	}
+	if in.ClosedKeepDays == 0 {
+		in.ClosedKeepDays = 7
+	}
+	if !slices.Contains(store.ClosedKeepDayOptions, in.ClosedKeepDays) {
+		return invalid("closed_keep_days", "Choose one of the listed times to keep closed tickets.")
 	}
 
 	in.SupportRoleIDs = normaliseIDs(in.SupportRoleIDs)

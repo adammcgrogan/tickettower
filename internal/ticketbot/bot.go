@@ -305,7 +305,10 @@ func (b *Bot) closeDeletedChannel(channelID snowflake.ID) {
 		return
 	}
 	if !closed {
-		return // not a ticket, or the bot already closed it
+		// Not a ticket, or already closed: if its channel was being kept,
+		// it can't be reopened any more.
+		b.forgetKeptChannel(ctx, channelID)
+		return
 	}
 	if t, err := b.store.GetTicketByChannel(ctx, channelID); err == nil {
 		go b.logEvent(t.GuildID, b.closedLog(t))

@@ -5,6 +5,7 @@
 		api,
 		ApiError,
 		errorMessage,
+		CLOSED_KEEP_DAYS,
 		MAX_BUTTON_LABEL,
 		MAX_QUESTIONS,
 		MAX_RATING_PROMPT,
@@ -77,9 +78,18 @@
 			reminder_minutes: initial?.reminder_minutes ?? null,
 			reminder_repeat: initial?.reminder_repeat ?? false,
 			reminder_where: initial?.reminder_where ?? 'ticket',
-			reminder_ping: initial?.reminder_ping ?? 'claimer'
+			reminder_ping: initial?.reminder_ping ?? 'claimer',
+			closed_parent_id: initial?.closed_parent_id ?? null,
+			closed_member_access: initial?.closed_member_access ?? 'read',
+			closed_keep_days: initial?.closed_keep_days ?? 7
 		}))
 	);
+
+	const closedAccess: { value: 'read' | 'hidden'; label: string; body: string }[] = [
+		{ value: 'read', label: 'Can read it', body: "The member sees the closed ticket but can't write in it." },
+		{ value: 'hidden', label: 'Hidden from them', body: 'Only the support team can see the closed ticket.' }
+	];
+	const keepDaysLabel = (d: number) => (d === 1 ? '1 day' : `${d} days`);
 
 	const autoCloseOptions = [
 		{ value: '', label: 'Never' },
@@ -345,7 +355,10 @@
 		reminder_ping: 'handling',
 		auto_close_hours: 'handling',
 		ask_rating: 'closing',
-		rating_prompt: 'closing'
+		rating_prompt: 'closing',
+		closed_parent_id: 'closing',
+		closed_member_access: 'closing',
+		closed_keep_days: 'closing'
 	};
 	const tabHasError = (t: Tab) => Object.keys(errors).some((f) => fieldTab[f] === t);
 
@@ -974,6 +987,90 @@
 							</span>
 						</span>
 					</label>
+					{#if form.mode === 'channel'}
+						<div class="border-t border-border pt-5">
+							{@render heading(
+								'The ticket channel',
+								'What happens to the channel once the ticket is closed and the transcript is saved.'
+							)}
+						</div>
+						<div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="After closing">
+							<button
+								type="button"
+								role="radio"
+								aria-checked={form.closed_parent_id === null}
+								onclick={() => (form.closed_parent_id = null)}
+								class="rounded-xl border p-4 text-left transition-colors {form.closed_parent_id === null
+									? 'border-accent bg-accent/5'
+									: 'border-border hover:border-border-strong'}"
+							>
+								<span class="block text-sm font-medium">Delete the channel</span>
+								<span class="mt-0.5 block text-xs text-muted">
+									A few seconds after closing. Closed tickets can't be reopened.
+								</span>
+							</button>
+							<button
+								type="button"
+								role="radio"
+								aria-checked={form.closed_parent_id !== null}
+								onclick={() => {
+									if (form.closed_parent_id === null) form.closed_parent_id = '';
+								}}
+								class="rounded-xl border p-4 text-left transition-colors {form.closed_parent_id !== null
+									? 'border-accent bg-accent/5'
+									: 'border-border hover:border-border-strong'}"
+							>
+								<span class="block text-sm font-medium">Keep it in a category</span>
+								<span class="mt-0.5 block text-xs text-muted">
+									Read only, for a while, so the ticket can be reopened. Then it's deleted.
+								</span>
+							</button>
+						</div>
+						{#if form.closed_parent_id !== null}
+							<Field
+								label="Closed tickets category"
+								for="closed_parent"
+								hint="Use a different category from open tickets: Discord allows 50 channels per category."
+								error={errors.closed_parent_id}
+							>
+								<ChannelSelect
+									id="closed_parent"
+									{channels}
+									kinds={['category']}
+									bind:value={form.closed_parent_id}
+									placeholder="Select a category"
+									invalid={!!errors.closed_parent_id}
+								/>
+							</Field>
+							<div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Who can see a closed ticket">
+								{#each closedAccess as c (c.value)}
+									{@const selected = form.closed_member_access === c.value}
+									<button
+										type="button"
+										role="radio"
+										aria-checked={selected}
+										onclick={() => (form.closed_member_access = c.value)}
+										class="rounded-xl border p-4 text-left transition-colors {selected
+											? 'border-accent bg-accent/5'
+											: 'border-border hover:border-border-strong'}"
+									>
+										<span class="block text-sm font-medium">{c.label}</span>
+										<span class="mt-0.5 block text-xs text-muted">{c.body}</span>
+									</button>
+								{/each}
+							</div>
+							<Field
+								label="Delete after"
+								for="closed_keep_days"
+								hint="Reopening is possible until then, from the closing message, the member's DM or the Tickets page."
+								error={errors.closed_keep_days}
+							>
+								<select id="closed_keep_days" class="input sm:w-56" bind:value={form.closed_keep_days}>
+									{#each CLOSED_KEEP_DAYS as d (d)}<option value={d}>{keepDaysLabel(d)}</option>{/each}
+								</select>
+							</Field>
+						{/if}
+					{/if}
 					{#if form.ask_rating}
 						<Field
 							label="Rating request"
