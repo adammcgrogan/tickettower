@@ -94,16 +94,21 @@ func requireJSON(next http.Handler) http.Handler {
 }
 
 // ttlCache is a small in-memory cache for Discord data such as channel and
-// role lists.
+// role lists. Expired entries are swept out on writes, so keys that are never
+// read again (a member checked once, an attachment viewed once) don't pile up.
 type ttlCache struct {
 	mu    sync.Mutex
 	items map[string]cacheItem
+	swept time.Time
 }
 
 type cacheItem struct {
 	value   any
 	expires time.Time
 }
+
+// cacheSweepEvery is how often set looks for expired entries.
+const cacheSweepEvery = time.Minute
 
 func newTTLCache() *ttlCache { return &ttlCache{items: make(map[string]cacheItem)} }
 
@@ -121,5 +126,21 @@ func (c *ttlCache) get(key string) (any, bool) {
 func (c *ttlCache) set(key string, v any, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.items[key] = cacheItem{value: v, expires: time.Now().Add(ttl)}
+	now := time.Now()
+	if now.Sub(c.swept) > cacheSweepEvery {
+		for k, it := range c.items {
+			if now.After(it.expires) {
+				delete(c.items, k)
+			}
+		}
+		c.swept = now
+	}
+	c.items[key] = cacheItem{value: v, expires: now.Add(ttl)}
+}
+
+// size is how many entries the cache holds, expired or not.
+func (c *ttlCache) size() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.items)
 }

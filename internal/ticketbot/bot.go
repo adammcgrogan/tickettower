@@ -41,8 +41,9 @@ type Bot struct {
 	readyGuilds []snowflake.ID
 
 	// openLocks serialises ticket creation per guild member so double
-	// clicks can't bypass the open ticket limit.
-	openLocks sync.Map
+	// clicks can't bypass the open ticket limit. Keys are dropped once
+	// nobody holds them.
+	openLocks keyedLocks
 
 	tickets *ticketCache
 }

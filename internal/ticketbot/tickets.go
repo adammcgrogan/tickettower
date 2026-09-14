@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -64,10 +63,7 @@ func (b *Bot) describe(err error) string {
 }
 
 func (b *Bot) lockMember(guildID, userID snowflake.ID) func() {
-	v, _ := b.openLocks.LoadOrStore(guildID.String()+":"+userID.String(), &sync.Mutex{})
-	mu := v.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+	return b.openLocks.lock(guildID.String() + ":" + userID.String())
 }
 
 // openTicket creates a ticket channel or thread for user and returns its ID.
