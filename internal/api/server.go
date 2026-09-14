@@ -29,6 +29,7 @@ type Server struct {
 	discord rest.Rest // authenticated as the bot
 	// dashboard closes and replies to tickets as the bot does in Discord.
 	dashboard *ticketbot.Dashboard
+	stripe    stripeClient
 	cache     *ttlCache
 	log       *slog.Logger
 }
@@ -40,6 +41,7 @@ func NewServer(cfg config.Config, st *store.Store, am *auth.Manager, discordRest
 		auth:      am,
 		discord:   discordRest,
 		dashboard: ticketbot.NewDashboard(cfg, st, discordRest, log),
+		stripe:    newStripeClient(cfg),
 		cache:     newTTLCache(),
 		log:       log,
 	}
@@ -50,6 +52,11 @@ func (s *Server) Handler() http.Handler {
 	r.Use(clientIP(s.cfg.TrustedProxies), middleware.Recoverer, securityHeaders)
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+
+	// Stripe calls this directly, not a browser, so it sits outside the
+	// /api group: no session cookie, and no requireJSON (it needs the raw
+	// body to verify Stripe's signature before anything else touches it).
+	r.Post("/stripe/webhook", s.stripeWebhook)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(requireJSON)
@@ -118,6 +125,9 @@ func (s *Server) Handler() http.Handler {
 					r.Use(requireLevel(store.LevelAdmin))
 					r.Patch("/settings", s.updateSettings)
 
+					r.Post("/billing/checkout", s.createCheckoutSession)
+					r.Post("/billing/portal", s.createPortalSession)
+
 					r.Post("/ticket-types", s.createTicketType)
 					r.Patch("/ticket-types/{typeID}", s.updateTicketType)
 					r.Delete("/ticket-types/{typeID}", s.deleteTicketType)
@@ -149,8 +159,9 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"app_name":  s.cfg.AppName,
-		"client_id": s.cfg.DiscordClientID,
+		"app_name":        s.cfg.AppName,
+		"client_id":       s.cfg.DiscordClientID,
+		"billing_enabled": s.cfg.BillingEnabled(),
 	})
 }
 

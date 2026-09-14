@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -159,10 +160,18 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 		s.writeFailure(w, err)
 		return
 	}
+	_, err = s.store.GuildBillingCustomer(r.Context(), g.ID)
+	hasBillingCustomer := err == nil
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		s.writeFailure(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"tickets": stats,
-		"tier":    tier,
-		"limits":  entitlements.ForTier(tier),
+		"tickets":              stats,
+		"tier":                 tier,
+		"limits":               entitlements.ForTier(tier),
+		"has_billing_customer": hasBillingCustomer,
+		"billing_enabled":      s.cfg.BillingEnabled(),
 	})
 }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import {
 		api,
 		ApiError,
@@ -47,6 +48,9 @@
 
 	let settings = $state<GuildSettings | null>(null);
 	let limits = $state<Stats['limits'] | null>(null);
+	let tier = $state<Stats['tier']>('free');
+	let hasBillingCustomer = $state(false);
+	let billingEnabled = $state(false);
 	let roles = $state<Role[]>([]);
 	let channels = $state<Channel[]>([]);
 	const retentionCap = $derived(limits?.max_transcript_retention_days || Infinity);
@@ -98,9 +102,53 @@
 			channels = c;
 			blocks = b;
 			limits = st.limits;
+			tier = st.tier;
+			hasBillingCustomer = st.has_billing_customer;
+			billingEnabled = st.billing_enabled;
 			reset(s);
+			checkBillingRedirect();
 		} catch (e) {
 			loadError = errorMessage(e);
+		}
+	}
+
+	function checkBillingRedirect() {
+		const billing = page.url.searchParams.get('billing');
+		if (!billing) return;
+		// history.replaceState, not goto: goto re-enters SvelteKit's router for
+		// what looks like a fresh navigation to this route, which can reset the
+		// dialog's open state before it ever renders. This just edits the URL.
+		const url = new URL(page.url);
+		url.searchParams.delete('billing');
+		history.replaceState(history.state, '', url);
+		if (billing === 'success') welcomeOpen = true;
+		else if (billing === 'cancel') toast('Checkout was cancelled.');
+	}
+
+	// --- Billing ---
+	let checkingOut = $state(false);
+	let openingPortal = $state(false);
+	let welcomeOpen = $state(false);
+
+	async function upgrade() {
+		checkingOut = true;
+		try {
+			const { url } = await api<{ url: string }>(`/guilds/${guild.id}/billing/checkout`, send('POST'));
+			window.location.href = url;
+		} catch (err) {
+			toast(errorMessage(err), 'error');
+			checkingOut = false;
+		}
+	}
+
+	async function manageBilling() {
+		openingPortal = true;
+		try {
+			const { url } = await api<{ url: string }>(`/guilds/${guild.id}/billing/portal`, send('POST'));
+			window.location.href = url;
+		} catch (err) {
+			toast(errorMessage(err), 'error');
+			openingPortal = false;
 		}
 	}
 
@@ -223,6 +271,36 @@
 		{/each}
 	</div>
 {:else}
+	{#if billingEnabled}
+		<section class="mt-8 max-w-3xl grid gap-4 border-b border-border pb-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+			<div>
+				<h2 class="font-medium">Plan</h2>
+				<p class="hint mt-1">
+					{tier === 'premium'
+						? "This server is on the premium plan."
+						: `Free plans get up to ${limits?.max_ticket_types ?? 25} ticket types and ${limits?.max_panels ?? 10} sets of ticket buttons.`}
+				</p>
+			</div>
+			<div>
+				{#if tier === 'premium'}
+					{#if hasBillingCustomer}
+						<button class="btn btn-secondary h-9" onclick={manageBilling} disabled={openingPortal}>
+							{openingPortal ? 'Opening…' : 'Manage billing'}
+						</button>
+					{:else}
+						<p class="text-sm text-muted">Premium was granted by the {APP_NAME} team.</p>
+					{/if}
+				{:else if guild.can_manage}
+					<button class="btn btn-primary h-9" onclick={upgrade} disabled={checkingOut}>
+						{checkingOut ? 'Starting checkout…' : 'Upgrade to premium'}
+					</button>
+				{:else}
+					<p class="text-sm text-subtle">Only someone with Manage Server can upgrade this server.</p>
+				{/if}
+			</div>
+		</section>
+	{/if}
+
 	<form onsubmit={save} class="mt-8 max-w-3xl">
 		<div class="divide-y divide-border border-y border-border">
 			<section class="grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
@@ -494,5 +572,27 @@
 		>
 			{blocking ? 'Blocking…' : 'Block member'}
 		</button>
+	{/snippet}
+</Dialog>
+
+<Dialog bind:open={welcomeOpen} title="Welcome to premium" description="Thanks for supporting {APP_NAME}. Here's what's unlocked for this server:">
+	<ul class="space-y-3">
+		{#each [
+			`Up to ${limits?.max_ticket_types ?? 100} ticket types`,
+			`Up to ${limits?.max_panels ?? 50} sets of ticket buttons`,
+			`Up to ${limits?.max_saved_replies ?? 200} saved replies`,
+			'Transcripts kept forever, not just 90 days',
+			`No "Powered by ${APP_NAME}" footer on ticket buttons`
+		] as benefit (benefit)}
+			<li class="flex items-start gap-3 text-sm">
+				<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+					<Icon name="check" size={12} />
+				</span>
+				{benefit}
+			</li>
+		{/each}
+	</ul>
+	{#snippet footer()}
+		<button class="btn btn-primary" onclick={() => (welcomeOpen = false)}>Let's go</button>
 	{/snippet}
 </Dialog>

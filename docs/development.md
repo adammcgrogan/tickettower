@@ -46,9 +46,14 @@ Variables on both: `DATABASE_URL` (reference to Postgres), `DISCORD_TOKEN`,
 `DISCORD_CLIENT_ID`, `PUBLIC_URL=https://tickettower.net`, `APP_NAME`, and
 `RAILWAY_DOCKERFILE_PATH`. On the API also: `REDIS_URL`, `DISCORD_CLIENT_SECRET`,
 `PORT=8080`, `TRUSTED_PROXIES=1` (Railway's edge proxy, so the per-IP login
-limit sees real client addresses) and `SUPERADMIN_USER_ID` (your Discord user
-ID; unlocks the `/admin` install/usage panel for you only). `DEV_GUILD_ID`
-stays unset so commands register globally.
+limit sees real client addresses), `SUPERADMIN_USER_ID` (your Discord user
+ID; unlocks the `/admin` install/usage panel for you only) and, for premium
+billing, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (from the webhook
+endpoint's settings in the Stripe dashboard, pointed at
+`https://tickettower.net/stripe/webhook`) and `STRIPE_PRICE_ID` (the premium
+plan's price). All three are optional — leaving them unset just hides the
+dashboard's Plan section. `DEV_GUILD_ID` stays unset so commands register
+globally.
 
 The production Discord application has `https://tickettower.net/api/auth/callback`
 as its OAuth2 redirect.

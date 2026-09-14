@@ -105,7 +105,7 @@
 	const faqs: { q: string; a: string; link?: { href: string; label: string } }[] = [
 		{
 			q: 'Is it really free?',
-			a: 'Yes. Every feature is free today, including transcripts, analytics and replying from the dashboard. There is nothing to unlock.'
+			a: 'The free plan covers everything most servers need: transcripts, analytics and replying from the dashboard, with generous limits on ticket types and ticket buttons. A paid premium plan raises those limits for larger servers.'
 		},
 		{
 			q: 'How long does setup take?',

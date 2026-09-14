@@ -384,6 +384,10 @@ export type Stats = {
 		max_transcript_retention_days: number;
 		branding: boolean;
 	};
+	/** Whether this server has ever started a Stripe subscription. */
+	has_billing_customer: boolean;
+	/** Whether the dashboard is running with Stripe billing configured at all. */
+	billing_enabled: boolean;
 };
 
 export type AnalyticsSummary = {

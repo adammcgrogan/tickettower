@@ -56,7 +56,19 @@ type Config struct {
 	// SuperadminUserID, if set, is the only Discord user who can open the
 	// /admin panel (install and usage stats across every guild).
 	SuperadminUserID snowflake.ID
+
+	// Stripe billing. All optional: a self-host without these set simply
+	// never shows the billing UI (see BillingEnabled).
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	// StripePriceID is the one premium monthly price. It's fixed here,
+	// server-side, and never accepted from a client request.
+	StripePriceID string
 }
+
+// BillingEnabled reports whether Stripe billing is configured, so the
+// dashboard knows whether to show the upgrade UI at all.
+func (c Config) BillingEnabled() bool { return c.StripePriceID != "" }
 
 func (c Config) IsDev() bool { return c.Env != "production" }
 
@@ -83,6 +95,9 @@ func Load(required ...string) (Config, error) {
 		PublicURL:           strings.TrimRight(get("PUBLIC_URL", "http://localhost:5173"), "/"),
 		Port:                get("PORT", "8080"),
 		StaticDir:           get("STATIC_DIR", "web/build"),
+		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
+		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		StripePriceID:       os.Getenv("STRIPE_PRICE_ID"),
 	}
 
 	var err error

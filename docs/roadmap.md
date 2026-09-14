@@ -76,6 +76,8 @@
 
 - Tier plumbing (issue #77): free plans cap transcript retention at 90 days and keep the "Powered by" panel footer; premium (set by hand for now, `entitlements.tier`) drops both. A `/admin` panel, visible only to `SUPERADMIN_USER_ID`, shows install/usage/plan totals across every server and lets the owner move a server between plans until billing exists
 
+- Stripe billing (issue #51): a "Plan" section in Settings starts a Stripe Checkout subscription for a server and links to Stripe's billing portal to manage or cancel it. A webhook (`POST /stripe/webhook`, signature-verified) keeps `entitlements` in sync as the subscription starts, renews or lapses (`guild_billing` remembers the Stripe customer across a cancellation, so resubscribing and the portal link keep working). Discord's own App Subscriptions billing wasn't available (the app's Monetization tab isn't unlocked), so this is Stripe rather than Discord; the `/admin` manual override from #77 stays for support/testing. Opt-in: unset without `STRIPE_PRICE_ID` etc. configured, and the dashboard hides the Plan section entirely
+
 ## Not yet verified by hand
 
 Click through a real ticket end to end in Discord: open from a panel in both channel and thread modes, claim, add/remove, rename, close, the DM rating and comment, then the transcript in the dashboard.
@@ -85,7 +87,6 @@ Click through a real ticket end to end in Discord: open from a panel in both cha
 1. **Deploy to Railway**: set up the services and env vars, set a real `PUBLIC_URL` (which enables transcript links in DMs), unset `DEV_GUILD_ID`, and add the production OAuth redirect. Reset the bot token/secret first (they were shared in a chat).
 2. **Transcript attachments**: archive attachments to object storage (e.g. Cloudflare R2), since Discord CDN links expire.
 3. **Sharding**: before large scale, remove the single-process assumptions (the `onGuildsReady` reconcile, in-memory `ticketCache` and `openLocks`). Options are Redis-backed locks and cache, or per-shard reconcile. The auto-close job is already safe to run in several processes.
-4. **Premium billing**: the plan limits and `/admin` panel exist (issue #77); what's left is real payment — Discord App Subscriptions or Stripe — so premium isn't only set by hand.
 
 ## Nice to have
 
