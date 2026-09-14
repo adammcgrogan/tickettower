@@ -23,17 +23,17 @@
 
 	/**
 	 * Sets a server up in one step: ticket types from a template (or one named
-	 * type), and with `publish`, ticket buttons for them posted in a channel.
-	 * Home shows it for a new server; an empty ticket types page shows it
-	 * without publishing.
+	 * type), plus ticket buttons for them posted in a channel. A suggested
+	 * starting point, not the only option — Home shows it for a new server,
+	 * and everything it creates can be freely rebuilt afterwards from Ticket
+	 * types and Ticket buttons.
 	 */
 	let {
 		guildId,
 		channels,
 		roles,
-		publish = true,
 		ondone
-	}: { guildId: string; channels: Channel[]; roles: Role[]; publish?: boolean; ondone: () => void } = $props();
+	}: { guildId: string; channels: Channel[]; roles: Role[]; ondone: () => void } = $props();
 
 	let templateId = $state('simple');
 	let qs = $state({
@@ -73,7 +73,7 @@
 			errors = { parent_id: 'Choose the channel that ticket threads will be created in.' };
 			return;
 		}
-		if (publish && !qs.panelChannel) {
+		if (!qs.panelChannel) {
 			errors = { panel_channel: 'Choose where to post the buttons.' };
 			return;
 		}
@@ -87,11 +87,6 @@
 					send('POST', { ...types[i], mode: qs.mode, parent_id: parent, support_role_ids: qs.roles })
 				);
 				created.types.push(t);
-			}
-			if (!publish) {
-				toast(`Created ${plural(types.length, 'ticket type')}. Add them to ticket buttons so members can use them.`);
-				ondone();
-				return;
 			}
 			created.panel ??= await api<Panel>(
 				`${g}/panels`,
@@ -115,20 +110,17 @@
 	<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_24rem]">
 		<form onsubmit={submit} class="space-y-6 p-6 sm:p-8">
 			<div>
-				<h2 class="text-lg font-semibold">{publish ? 'Get your ticket buttons live' : 'Start with a template'}</h2>
+				<h2 class="text-lg font-semibold">Get your ticket buttons live</h2>
 				<p class="mt-1 max-w-lg text-sm text-muted">
-					{#if publish}
-						Answer a few questions and {APP_NAME} will create your ticket types and post buttons members can
-						click to open a ticket. You can change everything afterwards.
-					{:else}
-						Create a few ticket types in one go, with questions and welcome messages ready to use. You can
-						change everything afterwards.
-					{/if}
+					Answer a few questions and {APP_NAME} will create your ticket types and post buttons members can
+					click to open a ticket. These are a starting point — rename, add or remove types, questions and
+					buttons freely afterwards.
 				</p>
 			</div>
 
 			<fieldset>
 				<legend class="label">What kind of server is it?</legend>
+				<p class="hint mt-0.5">Just a starting shape — pick the closest match, then adjust anything afterwards.</p>
 				<div class="mt-2 grid gap-2 sm:grid-cols-2">
 					{#each templates as t (t.id)}
 						{@const on = t.id === templateId}
@@ -231,36 +223,30 @@
 				</div>
 			</Field>
 
-			{#if publish}
-				<Field
-					label="Where should the buttons go?"
-					for="qs-channel"
-					hint="Usually a public channel, like #support."
-					error={errors.panel_channel}
-				>
-					<div class="sm:max-w-sm">
-						<ChannelSelect
-							id="qs-channel"
-							{channels}
-							kinds={['text', 'announcement']}
-							bind:value={qs.panelChannel}
-							placeholder="Choose a channel"
-							invalid={!!errors.panel_channel}
-						/>
-					</div>
-				</Field>
-			{/if}
+			<Field
+				label="Where should the buttons go?"
+				for="qs-channel"
+				hint="Usually a public channel, like #support."
+				error={errors.panel_channel}
+			>
+				<div class="sm:max-w-sm">
+					<ChannelSelect
+						id="qs-channel"
+						{channels}
+						kinds={['text', 'announcement']}
+						bind:value={qs.panelChannel}
+						placeholder="Choose a channel"
+						invalid={!!errors.panel_channel}
+					/>
+				</div>
+			</Field>
 
 			<div class="flex flex-wrap items-center gap-4 pt-1">
 				<button type="submit" class="btn btn-primary" disabled={busy}>
-					{#if publish}
-						{busy ? 'Publishing…' : 'Create and publish'}
-					{:else}
-						{busy ? 'Creating…' : `Create ${plural(types.length, 'ticket type')}`}
-					{/if}
+					{busy ? 'Publishing…' : 'Create and publish'}
 				</button>
 				<a href="/servers/{guildId}/ticket-types/new" class="text-sm text-muted hover:text-fg">
-					{publish ? 'Set things up step by step instead' : 'Create one from scratch instead'}
+					Set things up step by step instead
 				</a>
 			</div>
 		</form>
