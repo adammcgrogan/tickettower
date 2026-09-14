@@ -35,7 +35,7 @@ func (s *Store) TicketsToRemind(ctx context.Context, now time.Time) ([]WaitingTi
 		       t.waiting_since, tt.reminder_minutes, tt.reminder_where, tt.reminder_ping, t.reminders_sent
 		FROM tickets t JOIN ticket_types tt ON tt.id = t.ticket_type_id
 		WHERE t.status = 'open' AND t.waiting_on_staff AND NOT t.on_hold AND t.waiting_since IS NOT NULL
-		  AND tt.reminder_minutes IS NOT NULL
+		  AND tt.reminder_minutes IS NOT NULL AND `+inActiveGuild+`
 		  AND t.waiting_since + make_interval(mins => tt.reminder_minutes) <= $1
 		  AND (t.staff_reminded_at IS NULL
 		       OR (tt.reminder_repeat AND t.staff_reminded_at + make_interval(mins => tt.reminder_minutes) <= $1))

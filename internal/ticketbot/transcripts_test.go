@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/disgoorg/disgo/discord"
+
+	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
 func TestCapturedMessageTypes(t *testing.T) {
@@ -42,5 +44,22 @@ func TestAuthorNameUsesServerNickname(t *testing.T) {
 		if got := authorName(discord.Message{Author: user, Member: tt.member}); got != tt.want {
 			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestTicketCacheByGuild(t *testing.T) {
+	c := newTicketCache()
+	c.put(store.TicketRef{ID: 1, GuildID: 10, ChannelID: 100})
+	c.put(store.TicketRef{ID: 2, GuildID: 10, ChannelID: 101})
+	c.put(store.TicketRef{ID: 3, GuildID: 20, ChannelID: 200})
+	if got := c.channelIDs(10); len(got) != 2 {
+		t.Errorf("guild 10 channels = %v", got)
+	}
+	if got := c.channelIDs(0); len(got) != 3 {
+		t.Errorf("all channels = %v", got)
+	}
+	c.removeGuild(10)
+	if got := c.channelIDs(0); len(got) != 1 || got[0] != 200 {
+		t.Errorf("after removing guild 10: %v", got)
 	}
 }

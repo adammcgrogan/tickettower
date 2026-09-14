@@ -116,6 +116,7 @@ func (s *Store) ListTicketMessages(ctx context.Context, ticketID int64) ([]Ticke
 // TicketRef is the minimal state the bot tracks for each open ticket.
 type TicketRef struct {
 	ID               int64
+	GuildID          snowflake.ID
 	ChannelID        snowflake.ID
 	OpenerID         snowflake.ID
 	HasFirstResponse bool
@@ -123,7 +124,7 @@ type TicketRef struct {
 
 func (s *Store) OpenTicketRefs(ctx context.Context) ([]TicketRef, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, channel_id, opener_id, first_response_at IS NOT NULL FROM tickets WHERE status = 'open'`)
+		SELECT id, guild_id, channel_id, opener_id, first_response_at IS NOT NULL FROM tickets WHERE status = 'open'`)
 	if err != nil {
 		return nil, err
 	}
@@ -132,11 +133,11 @@ func (s *Store) OpenTicketRefs(ctx context.Context) ([]TicketRef, error) {
 	var out []TicketRef
 	for rows.Next() {
 		var r TicketRef
-		var channel, opener int64
-		if err := rows.Scan(&r.ID, &channel, &opener, &r.HasFirstResponse); err != nil {
+		var guild, channel, opener int64
+		if err := rows.Scan(&r.ID, &guild, &channel, &opener, &r.HasFirstResponse); err != nil {
 			return nil, err
 		}
-		r.ChannelID, r.OpenerID = snowflake.ID(channel), snowflake.ID(opener)
+		r.GuildID, r.ChannelID, r.OpenerID = snowflake.ID(guild), snowflake.ID(channel), snowflake.ID(opener)
 		out = append(out, r)
 	}
 	return out, rows.Err()

@@ -14,7 +14,12 @@ const autoCloseLead = `LEAST(make_interval(hours => tt.auto_close_hours) / 4, in
 
 // autoCloseEligible matches open tickets whose type auto-closes and where the
 // team is waiting on the member, not the other way round.
-const autoCloseEligible = `t.status = 'open' AND NOT t.waiting_on_staff AND NOT t.on_hold AND tt.auto_close_hours IS NOT NULL`
+const autoCloseEligible = `t.status = 'open' AND NOT t.waiting_on_staff AND NOT t.on_hold AND tt.auto_close_hours IS NOT NULL
+	AND ` + inActiveGuild
+
+// inActiveGuild keeps the loops off tickets in servers the bot has left,
+// where it can't post or delete anything.
+const inActiveGuild = `t.guild_id IN (SELECT id FROM guilds WHERE left_at IS NULL)`
 
 // autoCloseWarnDue matches tickets entering the warning period ($1 is now).
 const autoCloseWarnDue = `t.auto_close_warned_at IS NULL

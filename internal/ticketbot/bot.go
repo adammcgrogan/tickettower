@@ -171,15 +171,34 @@ func (b *Bot) onGuildsReady(_ *events.GuildsReady) {
 		b.log.Error("failed to reconcile guilds", slog.Any("err", err))
 	}
 	b.log.Info("guilds ready", slog.Int("count", len(ids)))
-	go b.closeMissingTickets()
+	b.closeTicketsOfLeftGuilds(ctx)
+	go b.closeMissingTickets(0)
+}
+
+// leftReason is the close reason of tickets the bot could no longer serve.
+const leftReason = "The bot was removed from the server"
+
+// closeTicketsOfLeftGuilds closes the open tickets of every server the bot
+// has left, so they leave the queues, the loops and the ticket cache. Their
+// channels are out of reach, so they're not touched.
+func (b *Bot) closeTicketsOfLeftGuilds(ctx context.Context) {
+	n, err := b.store.CloseTicketsOfLeftGuilds(ctx, leftReason)
+	if err != nil {
+		b.log.Error("failed to close tickets of left guilds", slog.Any("err", err))
+		return
+	}
+	if n > 0 {
+		b.log.Info("closed tickets in servers the bot has left", slog.Int64("count", n))
+	}
 }
 
 // closeMissingTickets closes tickets whose channel was deleted while the bot
-// was offline (a restart or deploy), since Discord's delete event never
-// reached it.
-func (b *Bot) closeMissingTickets() {
+// was away (a restart or deploy, or between leaving and rejoining a server),
+// since Discord's delete event never reached it. guildID limits it to one
+// server; 0 checks every tracked ticket.
+func (b *Bot) closeMissingTickets(guildID snowflake.ID) {
 	closed := 0
-	for _, id := range b.tickets.channelIDs() {
+	for _, id := range b.tickets.channelIDs(guildID) {
 		if !b.channelExists(id) {
 			b.closeDeletedChannel(id)
 			closed++
@@ -207,6 +226,9 @@ func (b *Bot) channelExists(id snowflake.ID) bool {
 func (b *Bot) onGuildJoin(e *events.GuildJoin) {
 	b.log.Info("joined guild", slog.String("guild_id", e.Guild.ID.String()), slog.String("name", e.Guild.Name))
 	b.upsertGuild(e.Guild.Guild)
+	// Tickets from before the bot left are closed by now; tickets opened
+	// while it was here before a restart may have lost their channel.
+	go b.closeMissingTickets(e.Guild.ID)
 	if e.Guild.SystemChannelID != nil {
 		go b.welcome(e.Guild.ID, *e.Guild.SystemChannelID)
 	}
@@ -243,7 +265,10 @@ func (b *Bot) onGuildLeave(e *events.GuildLeave) {
 	defer cancel()
 	if err := b.store.MarkGuildLeft(ctx, e.GuildID); err != nil {
 		b.log.Error("failed to mark guild left", slog.Any("err", err))
+		return
 	}
+	b.tickets.removeGuild(e.GuildID)
+	b.closeTicketsOfLeftGuilds(ctx)
 }
 
 func (b *Bot) onChannelDelete(e *events.GuildChannelDelete) { b.closeDeletedChannel(e.ChannelID) }
@@ -264,7 +289,7 @@ func (b *Bot) onThreadUpdate(e *events.ThreadUpdate) {
 	if err != nil || t.Status != store.StatusOpen {
 		return
 	}
-	b.tickets.put(store.TicketRef{ID: t.ID, ChannelID: t.ChannelID, OpenerID: t.OpenerID, HasFirstResponse: t.FirstResponseAt != nil})
+	b.tickets.put(store.TicketRef{ID: t.ID, GuildID: t.GuildID, ChannelID: t.ChannelID, OpenerID: t.OpenerID, HasFirstResponse: t.FirstResponseAt != nil})
 }
 func (b *Bot) onThreadDelete(e *events.ThreadDelete) { b.closeDeletedChannel(e.ThreadID) }
 

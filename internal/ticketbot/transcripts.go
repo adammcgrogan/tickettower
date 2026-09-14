@@ -47,14 +47,28 @@ func (c *ticketCache) remove(channelID snowflake.ID) {
 	delete(c.refs, channelID)
 }
 
-func (c *ticketCache) channelIDs() []snowflake.ID {
+// channelIDs lists the tracked channels, or only a guild's if guildID isn't 0.
+func (c *ticketCache) channelIDs(guildID snowflake.ID) []snowflake.ID {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	ids := make([]snowflake.ID, 0, len(c.refs))
-	for id := range c.refs {
-		ids = append(ids, id)
+	for id, r := range c.refs {
+		if guildID == 0 || r.GuildID == guildID {
+			ids = append(ids, id)
+		}
 	}
 	return ids
+}
+
+// removeGuild forgets every ticket of a guild, e.g. when the bot leaves it.
+func (c *ticketCache) removeGuild(guildID snowflake.ID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for id, r := range c.refs {
+		if r.GuildID == guildID {
+			delete(c.refs, id)
+		}
+	}
 }
 
 func (c *ticketCache) replace(refs []store.TicketRef) {
