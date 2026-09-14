@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/jackc/pgx/v5"
@@ -93,4 +94,48 @@ func (s *Store) GuildTier(ctx context.Context, guildID snowflake.ID) (string, er
 		return "free", nil
 	}
 	return tier, err
+}
+
+// DeleteGuildData removes everything stored for a guild the bot is still in:
+// tickets (with their transcripts and feedback), ticket types, panels, saved
+// replies, blocks and the settings, which go back to their defaults. The
+// guild row itself stays so the dashboard keeps working. It returns
+// *ErrOpenTickets if any ticket is open, since the bot is still serving
+// those. The check and the deletes run in one transaction.
+func (s *Store) DeleteGuildData(ctx context.Context, guildID snowflake.ID) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var open int
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM tickets WHERE guild_id = $1 AND status = 'open'`, int64(guildID)).Scan(&open)
+	if err != nil {
+		return err
+	}
+	if open > 0 {
+		return &ErrOpenTickets{Count: open}
+	}
+	for _, q := range []string{
+		`DELETE FROM tickets WHERE guild_id = $1`,
+		`DELETE FROM panels WHERE guild_id = $1`,
+		`DELETE FROM ticket_types WHERE guild_id = $1`,
+		`DELETE FROM saved_replies WHERE guild_id = $1`,
+		`DELETE FROM ticket_blocks WHERE guild_id = $1`,
+		`DELETE FROM guild_settings WHERE guild_id = $1`,
+		`INSERT INTO guild_settings (guild_id) VALUES ($1)`,
+	} {
+		if _, err := tx.Exec(ctx, q, int64(guildID)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// PurgeLeftGuilds deletes every guild the bot left more than keep ago, and
+// with it everything stored for it. It returns how many were removed.
+func (s *Store) PurgeLeftGuilds(ctx context.Context, keep time.Duration) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM guilds WHERE left_at IS NOT NULL AND left_at < now() - $1::interval`, keep)
+	return tag.RowsAffected(), err
 }

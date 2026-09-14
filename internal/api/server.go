@@ -114,6 +114,10 @@ func (s *Server) Handler() http.Handler {
 					r.Patch("/saved-replies/{replyID}", s.updateSavedReply)
 					r.Delete("/saved-replies/{replyID}", s.deleteSavedReply)
 				})
+
+				// Wiping the server's data is for managers only (checked in
+				// the handler, since it's stricter than any dashboard role).
+				r.Delete("/data", s.deleteGuildData)
 			})
 		})
 

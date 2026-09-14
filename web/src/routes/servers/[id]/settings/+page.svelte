@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getContext, onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import {
 		api,
 		ApiError,
@@ -141,6 +142,35 @@
 			toast(errorMessage(err), 'error');
 		} finally {
 			unblocking = null;
+		}
+	}
+
+	// --- Delete server data ---
+	let deleteOpen = $state(false);
+	let deleteConfirm = $state('');
+	let deleteError = $state('');
+	let deleting = $state(false);
+
+	function openDelete() {
+		deleteConfirm = '';
+		deleteError = '';
+		deleteOpen = true;
+	}
+
+	async function deleteData(e: SubmitEvent) {
+		e.preventDefault();
+		if (deleteConfirm.trim() !== guild.name) return;
+		deleting = true;
+		deleteError = '';
+		try {
+			await api(`/guilds/${guild.id}/data`, send('DELETE'));
+			deleteOpen = false;
+			toast('All server data has been deleted');
+			await goto(`/servers/${guild.id}`, { invalidateAll: true });
+		} catch (err) {
+			deleteError = errorMessage(err);
+		} finally {
+			deleting = false;
 		}
 	}
 
@@ -353,7 +383,57 @@
 			</button>
 		</div>
 	</section>
+
+	{#if guild.can_manage}
+		<section class="max-w-3xl border-t border-border grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+			<div>
+				<h2 class="font-medium">Delete server data</h2>
+				<p class="hint mt-1">
+					Removes every ticket and transcript, rating, ticket type, set of ticket buttons, saved reply,
+					blocked member and setting stored for this server. The bot stays in the server.
+				</p>
+			</div>
+			<div class="space-y-3">
+				<p class="text-sm text-muted">
+					This can't be undone. Close any open tickets first. If you remove the bot instead, its data is
+					deleted automatically after 30 days.
+				</p>
+				<button class="btn btn-danger h-8 px-3" onclick={openDelete}>Delete all server data</button>
+			</div>
+		</section>
+	{/if}
 {/if}
+
+<Dialog
+	bind:open={deleteOpen}
+	title="Delete all server data?"
+	description="Every ticket, transcript, ticket type, set of ticket buttons, saved reply and setting for this server will be deleted for good."
+>
+	<form id="delete-data" onsubmit={deleteData} class="space-y-4">
+		{#if deleteError}<p class="text-sm text-danger">{deleteError}</p>{/if}
+		<Field label={`Type ${guild.name} to confirm`} for="delete-confirm">
+			<input
+				id="delete-confirm"
+				class="input"
+				bind:value={deleteConfirm}
+				placeholder={guild.name}
+				autocomplete="off"
+				required
+			/>
+		</Field>
+	</form>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (deleteOpen = false)}>Cancel</button>
+		<button
+			type="submit"
+			form="delete-data"
+			class="btn btn-danger"
+			disabled={deleting || deleteConfirm.trim() !== guild.name}
+		>
+			{deleting ? 'Deleting…' : 'Delete everything'}
+		</button>
+	{/snippet}
+</Dialog>
 
 <Dialog
 	bind:open={blockOpen}

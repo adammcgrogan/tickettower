@@ -62,9 +62,16 @@
 			<section>
 				<h2>Removing your data</h2>
 				<p>
-					Removing the bot from a server stops all collection. To have stored data deleted, open an
-					issue on <a href={GITHUB_URL} class="text-accent hover:underline">GitHub</a> or contact the
-					bot's operator, and include the server or user ID.
+					Server managers can delete everything stored for their server at any time from the
+					dashboard's Settings page. Removing the bot from a server stops all collection, and the
+					server's data is deleted automatically 30 days later (it's kept that long so re-adding the
+					bot restores the setup).
+				</p>
+				<p>
+					To have your own messages or ratings deleted from a server's transcripts, ask that server's
+					managers. For anything else, open an issue on
+					<a href={GITHUB_URL} class="text-accent hover:underline">GitHub</a> or contact the bot's
+					operator, and include the server or user ID.
 				</p>
 			</section>
 		</div>

@@ -3,12 +3,17 @@ package api
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
+	"github.com/adammcgrogan/tickettower/internal/auth"
+	"github.com/adammcgrogan/tickettower/internal/discordx"
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
@@ -128,4 +133,47 @@ func clonePtr[T any](p *T) *T {
 	}
 	v := *p
 	return &v
+}
+
+// deleteGuildData wipes everything stored for the server: tickets and
+// transcripts, ticket types, ticket buttons (their messages are removed from
+// Discord too), saved replies, blocks and settings. Server managers only, and
+// only once every ticket is closed, since the bot is still serving open ones.
+func (s *Server) deleteGuildData(w http.ResponseWriter, r *http.Request) {
+	g := guildFrom(r)
+	if !isManager(r) {
+		writeError(w, http.StatusForbidden, "Only server managers can delete the server's data.")
+		return
+	}
+	panels, err := s.store.ListPanels(r.Context(), g.ID)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	var open *store.ErrOpenTickets
+	if err := s.store.DeleteGuildData(r.Context(), g.ID); errors.As(err, &open) {
+		writeError(w, http.StatusConflict, openTicketsBeforeDeleteMessage(open.Count))
+		return
+	} else if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	for _, p := range panels {
+		if p.ChannelID == nil || p.MessageID == nil {
+			continue
+		}
+		err := s.discord.DeleteMessage(*p.ChannelID, *p.MessageID, rest.WithCtx(r.Context()))
+		if err != nil && !discordx.IsCode(err, discordx.CodeUnknownMessage, discordx.CodeUnknownChannel) {
+			s.log.Warn("delete panel message", slog.Any("err", err))
+		}
+	}
+	s.log.Info("deleted server data", slog.String("guild_id", g.ID.String()), slog.String("user_id", auth.FromContext(r.Context()).User.ID.String()))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func openTicketsBeforeDeleteMessage(n int) string {
+	if n == 1 {
+		return "There is still 1 open ticket. Close it first, then delete the server's data."
+	}
+	return fmt.Sprintf("There are still %d open tickets. Close them first, then delete the server's data.", n)
 }

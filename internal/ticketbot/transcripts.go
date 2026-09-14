@@ -268,8 +268,14 @@ func toEmbeds(in []discord.Embed) []store.Embed {
 	return out
 }
 
-// purgeTranscripts applies each guild's transcript retention setting, once at
-// startup and then hourly.
+// leftGuildRetention is how long a server's data is kept after the bot is
+// removed from it, so re-adding the bot soon after restores the setup. The
+// privacy page states it.
+const leftGuildRetention = 30 * 24 * time.Hour
+
+// purgeTranscripts applies each guild's transcript retention setting and
+// deletes the data of servers the bot left over leftGuildRetention ago, once
+// at startup and then hourly.
 func (b *Bot) purgeTranscripts(ctx context.Context) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
@@ -279,6 +285,12 @@ func (b *Bot) purgeTranscripts(ctx context.Context) {
 			b.log.Error("failed to purge transcripts", slog.Any("err", err))
 		} else if n > 0 {
 			b.log.Info("purged expired transcript messages", slog.Int64("count", n))
+		}
+		n, err = b.store.PurgeLeftGuilds(ctx, leftGuildRetention)
+		if err != nil && ctx.Err() == nil {
+			b.log.Error("failed to purge left guilds", slog.Any("err", err))
+		} else if n > 0 {
+			b.log.Info("deleted the data of servers the bot left", slog.Int64("count", n))
 		}
 		select {
 		case <-ctx.Done():

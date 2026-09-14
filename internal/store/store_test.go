@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -139,5 +140,79 @@ func TestLeavingClosesOpenTickets(t *testing.T) {
 	}
 	if refs, _ := s.OpenTicketRefs(ctx); len(refs) != 1 || refs[0].GuildID != kept {
 		t.Errorf("open refs = %+v", refs)
+	}
+}
+
+func TestDeleteGuildData(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	other := snowflake.ID(2002)
+	seedGuild(t, s, testGuild)
+	seedGuild(t, s, other)
+	tt := newType(t, s, testGuild, "Billing")
+	ott := newType(t, s, other, "Other")
+
+	tk := Ticket{GuildID: testGuild, TicketTypeID: &tt.ID, ChannelID: 1, Mode: ModeChannel, OpenerID: 42}
+	if err := s.CreateTicket(ctx, &tk); err != nil {
+		t.Fatal(err)
+	}
+	var open *ErrOpenTickets
+	if err := s.DeleteGuildData(ctx, testGuild); !errors.As(err, &open) || open.Count != 1 {
+		t.Fatalf("delete with an open ticket: %v", err)
+	}
+	if _, err := s.GetTicketType(ctx, testGuild, tt.ID); err != nil {
+		t.Fatalf("a refused delete removed data: %v", err)
+	}
+
+	if _, err := s.CloseTicket(ctx, tk.ID, 100, "staff", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteGuildData(ctx, testGuild); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetTicketType(ctx, testGuild, tt.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("ticket type after delete: %v", err)
+	}
+	if _, err := s.GetTicket(ctx, tk.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("ticket after delete: %v", err)
+	}
+	if _, err := s.GetGuildSettings(ctx, testGuild); err != nil {
+		t.Errorf("settings should be recreated: %v", err)
+	}
+	assertActive(t, s, map[snowflake.ID]bool{testGuild: true, other: true})
+	if _, err := s.GetTicketType(ctx, other, ott.ID); err != nil {
+		t.Errorf("another guild's data was touched: %v", err)
+	}
+}
+
+func TestPurgeLeftGuilds(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	recent, old, active := snowflake.ID(3001), snowflake.ID(3002), snowflake.ID(3003)
+	for _, id := range []snowflake.ID{recent, old, active} {
+		seedGuild(t, s, id)
+	}
+	tt := newType(t, s, old, "Gone")
+	if err := s.MarkGuildsLeftExcept(ctx, []snowflake.ID{active}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE guilds SET left_at = now() - interval '31 days' WHERE id = $1`, int64(old)); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := s.PurgeLeftGuilds(ctx, 30*24*time.Hour)
+	if err != nil || n != 1 {
+		t.Fatalf("purged %d, err %v; want 1", n, err)
+	}
+	if _, err := s.GetGuild(ctx, old); !errors.Is(err, ErrNotFound) {
+		t.Errorf("old guild after purge: %v", err)
+	}
+	if _, err := s.GetTicketType(ctx, old, tt.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("old guild's type after purge: %v", err)
+	}
+	for _, id := range []snowflake.ID{recent, active} {
+		if _, err := s.GetGuild(ctx, id); err != nil {
+			t.Errorf("guild %d after purge: %v", id, err)
+		}
 	}
 }
