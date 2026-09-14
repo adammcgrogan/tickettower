@@ -296,6 +296,11 @@
 							something other than the member or your team, and pick it back up.
 						</li>
 						<li>
+							<code>/ticket closerequest</code>: ask the member to confirm the ticket is resolved. They
+							get Close ticket and Keep open buttons, and if they don't answer within the time you
+							choose (a day by default) it closes on your behalf.
+						</li>
+						<li>
 							<code>/ticket block</code> and <code>/ticket unblock</code>: stop someone opening tickets in
 							the server, or let them again. These work anywhere, not just inside a ticket.
 						</li>

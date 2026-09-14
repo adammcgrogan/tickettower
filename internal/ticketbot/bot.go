@@ -57,6 +57,7 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 	r.Route("/ticket", func(r handler.Router) {
 		r.Command("/close", b.handleCloseCommand)
 		r.Command("/claim", b.handleClaimCommand)
+		r.Command("/closerequest", b.handleCloseRequestCommand)
 		r.Command("/add", b.handleAddCommand)
 		r.Command("/remove", b.handleRemoveCommand)
 		r.Command("/move", b.handleMoveCommand)
@@ -78,6 +79,8 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 	r.Component(closeConfirmButtonID, b.handleCloseConfirm)
 	r.Component(reopenButtonPrefix+"{ticketID}", b.handleReopenButton)
 	r.Component(keepOpenButtonID, b.handleKeepOpen)
+	r.Component(closeRequestAcceptID, b.handleCloseRequestAccept)
+	r.Component(closeRequestKeepID, b.handleCloseRequestKeep)
 	r.Modal(closeModalID, b.handleCloseModal)
 	r.Component(rateButtonPrefix+"{ticketID}/{rating}", b.handleRate)
 	r.Component(commentButtonPrefix+"{ticketID}", b.handleCommentButton)

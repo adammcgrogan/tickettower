@@ -99,9 +99,9 @@ func (s *Store) ClearAutoCloseWarning(ctx context.Context, ticketID int64) error
 // RecordActivity notes a message (or "keep open" click) in a ticket. It
 // restarts the auto-close clock and cancels any pending warning. byOpener
 // marks the ticket as waiting on staff, which pauses auto-close entirely,
-// starts the wait clock if it isn't running, and takes the ticket off hold
-// (the member has news). A staff message ends the wait and clears any
-// reminder.
+// starts the wait clock if it isn't running, takes the ticket off hold (the
+// member has news) and withdraws any close request (the member has more to
+// say). A staff message ends the wait and clears any reminder.
 func (s *Store) RecordActivity(ctx context.Context, ticketID int64, at time.Time, byOpener bool) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE tickets
@@ -110,7 +110,11 @@ func (s *Store) RecordActivity(ctx context.Context, ticketID int64, at time.Time
 		    staff_reminded_at = CASE WHEN $3 THEN staff_reminded_at END,
 		    reminders_sent = CASE WHEN $3 THEN reminders_sent ELSE 0 END,
 		    on_hold = on_hold AND NOT $3,
-		    hold_reason = CASE WHEN $3 THEN '' ELSE hold_reason END
+		    hold_reason = CASE WHEN $3 THEN '' ELSE hold_reason END,
+		    close_request_by = CASE WHEN $3 THEN NULL ELSE close_request_by END,
+		    close_request_by_name = CASE WHEN $3 THEN '' ELSE close_request_by_name END,
+		    close_request_reason = CASE WHEN $3 THEN '' ELSE close_request_reason END,
+		    close_request_closes_at = CASE WHEN $3 THEN NULL ELSE close_request_closes_at END
 		WHERE id = $1 AND status = 'open'`, ticketID, at, byOpener)
 	return err
 }

@@ -94,6 +94,7 @@
 		{ name: '/ticket move', body: 'Change the ticket type' },
 		{ name: '/ticket rename', body: 'Give the channel a clearer name' },
 		{ name: '/ticket hold', body: 'Park a ticket waiting on something else' },
+		{ name: '/ticket closerequest', body: 'Ask the member to confirm it can close' },
 		{ name: '/reply', body: 'Send one of your saved replies' },
 		{ name: '/ticket block', body: 'Stop someone opening tickets' },
 		{ name: '/close', body: 'Close the ticket, with an optional reason' }

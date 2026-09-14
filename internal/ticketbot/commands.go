@@ -48,6 +48,22 @@ var commands = []discord.ApplicationCommandCreate{
 				Options:     []discord.ApplicationCommandOption{reasonOption},
 			},
 			discord.ApplicationCommandOptionSubCommand{
+				Name:        "closerequest",
+				Description: "Ask the member to confirm this ticket can be closed",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionString{
+						Name:        "reason",
+						Description: "Why you think it's resolved",
+						MaxLength:   ptr(500),
+					},
+					discord.ApplicationCommandOptionInt{
+						Name:        "close_after",
+						Description: "Close anyway if they don't answer (default: 1 day)",
+						Choices:     closeAfterChoices,
+					},
+				},
+			},
+			discord.ApplicationCommandOptionSubCommand{
 				Name:        "claim",
 				Description: "Claim this ticket, or unclaim it if it's yours",
 			},

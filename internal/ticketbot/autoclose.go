@@ -54,6 +54,7 @@ func (b *Bot) runAutoClose(ctx context.Context, now time.Time) {
 		b.autoClose(ctx, it, now)
 	}
 
+	b.closeUnansweredRequests(ctx, now)
 	b.remindStaff(ctx, now)
 	b.cleanUpClosedTickets(ctx, now)
 	b.deleteKeptChannels(ctx, now)

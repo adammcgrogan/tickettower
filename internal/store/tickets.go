@@ -273,7 +273,8 @@ func (s *Store) ReopenTicket(ctx context.Context, id int64, now time.Time) (bool
 		SET status = 'open', closed_by = NULL, closed_by_name = NULL, close_reason = '', closed_at = NULL,
 		    auto_closed = false, channel_cleaned_at = NULL, auto_close_warned_at = NULL, channel_kept_until = NULL,
 		    waiting_on_staff = true, waiting_since = $2, last_activity_at = $2, reopened_at = $2,
-		    on_hold = false, hold_reason = '', staff_reminded_at = NULL, reminders_sent = 0
+		    on_hold = false, hold_reason = '', staff_reminded_at = NULL, reminders_sent = 0,
+		    close_request_by = NULL, close_request_by_name = '', close_request_reason = '', close_request_closes_at = NULL
 		WHERE id = $1 AND status = 'closed' AND (mode = 'thread' OR channel_kept_until IS NOT NULL)`, id, now)
 	return tag.RowsAffected() == 1, err
 }
