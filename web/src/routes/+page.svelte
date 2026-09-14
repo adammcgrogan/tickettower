@@ -84,19 +84,11 @@
 		}
 	];
 
-	const commands = [
-		{ name: '/ticket open', body: 'Open a ticket without the buttons, or one for a member' },
-		{ name: '/ticket claim', body: "Take a ticket, or hand it back if it's yours" },
-		{ name: '/ticket add', body: 'Bring someone else into the ticket' },
-		{ name: '/ticket remove', body: 'Take away their access again' },
-		{ name: '/ticket move', body: 'Change the ticket type' },
-		{ name: '/ticket rename', body: 'Give the channel a clearer name' },
-		{ name: '/ticket note', body: 'Leave a private note only your team can see' },
-		{ name: '/ticket hold', body: 'Park a ticket waiting on something else' },
-		{ name: '/ticket closerequest', body: 'Ask the member to confirm it can close' },
-		{ name: '/reply', body: 'Send one of your saved replies' },
-		{ name: '/ticket block', body: 'Stop someone opening tickets' },
-		{ name: '/close', body: 'Close the ticket, with an optional reason' }
+	const comparison: { label: string; tower: string | boolean; a: string | boolean; b: string | boolean }[] = [
+		{ label: 'Starting price', tower: 'Free', a: 'Free, Pro from $8/mo', b: 'Free, Premium from $2.99/mo' },
+		{ label: 'Source code', tower: 'Public on GitHub', a: 'Closed', b: 'Closed' },
+		{ label: 'Reply to tickets from a browser', tower: true, a: false, b: true },
+		{ label: 'Analytics and response times', tower: true, a: false, b: false }
 	];
 
 	const faqs: { q: string; a: string; link?: { href: string; label: string } }[] = [
@@ -306,26 +298,6 @@
 		</section>
 
 		<section class="border-t border-border">
-			<div class="mx-auto grid max-w-6xl gap-8 px-5 py-16 lg:grid-cols-[1fr_1.6fr] lg:items-start">
-				<div>
-					<h2 class="font-display text-2xl font-bold">Works from Discord too</h2>
-					<p class="mt-3 max-w-md text-sm text-muted">
-						Your team doesn't have to leave Discord. Every ticket has Claim and Close buttons, and slash commands
-						cover the rest.
-					</p>
-				</div>
-				<dl class="divide-y divide-border border-y border-border">
-					{#each commands as c (c.name)}
-						<div class="flex flex-col gap-1 py-3.5 sm:flex-row sm:items-baseline sm:gap-6">
-							<dt class="w-36 shrink-0 font-mono text-sm text-fg">{c.name}</dt>
-							<dd class="text-sm text-muted">{c.body}</dd>
-						</div>
-					{/each}
-				</dl>
-			</div>
-		</section>
-
-		<section class="border-t border-border">
 			<div class="mx-auto max-w-6xl px-5 py-20">
 				<h2 class="font-display text-4xl font-bold">Open, and careful with your data</h2>
 				<div class="mt-10 grid gap-x-12 gap-y-10 md:grid-cols-3">
@@ -377,37 +349,43 @@
 				<p class="mt-3 max-w-xl text-muted">
 					{APP_NAME} against the two bots most servers switch from.
 				</p>
+
+				{#snippet cell(value: string | boolean, muted = false)}
+					{#if typeof value === 'boolean'}
+						<Icon
+							name={value ? 'check' : 'x'}
+							size={16}
+							class={value ? 'text-success' : 'text-subtle'}
+						/>
+					{:else}
+						<span class={muted ? 'text-muted' : ''}>{value}</span>
+					{/if}
+				{/snippet}
+
 				<div class="mt-10 overflow-x-auto">
-					<table class="w-full min-w-[36rem] border-collapse text-sm">
+					<table class="w-full min-w-[38rem] border-collapse text-sm">
 						<thead>
-							<tr class="border-b border-border text-left">
-								<th class="py-3 pr-4 font-medium text-subtle"></th>
-								<th class="py-3 px-4 font-display text-base font-bold">{APP_NAME}</th>
-								<th class="py-3 px-4 font-medium text-muted">Ticket Tool</th>
-								<th class="py-3 px-4 font-medium text-muted">Tickets</th>
+							<tr class="text-left">
+								<th class="pb-4 pr-4 align-bottom font-medium text-subtle"></th>
+								<th class="rounded-t-xl bg-accent/10 px-4 pt-4 pb-4 align-bottom">
+									<div class="font-display text-lg font-bold">{APP_NAME}</div>
+									<div class="mt-0.5 text-xs font-normal text-accent">Free & open source</div>
+								</th>
+								<th class="px-4 pb-4 align-bottom font-medium text-muted">Ticket Tool</th>
+								<th class="px-4 pb-4 align-bottom font-medium text-muted">Tickets</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-border">
-							{#each [
-								{ label: 'Starting price', tower: 'Free', a: 'Free, Pro from $8/mo', b: 'Free, Premium from $2.99/mo' },
-								{ label: 'Source code', tower: 'Public on GitHub', a: 'Closed', b: 'Closed' },
-								{ label: 'Reply to tickets from a browser', tower: true, a: false, b: true }
-							] as row (row.label)}
+						<tbody>
+							{#each comparison as row, i (row.label)}
 								<tr>
-									<td class="py-3.5 pr-4 text-muted">{row.label}</td>
-									{#each [row.tower, row.a, row.b] as cell, i (i)}
-										<td class="py-3.5 px-4 {i === 0 ? 'font-medium text-fg' : 'text-muted'}">
-											{#if typeof cell === 'boolean'}
-												<Icon
-													name={cell ? 'check' : 'x'}
-													size={16}
-													class={cell ? 'text-success' : 'text-subtle'}
-												/>
-											{:else}
-												{cell}
-											{/if}
-										</td>
-									{/each}
+									<td class="border-t border-border py-3.5 pr-4 text-muted">{row.label}</td>
+									<td
+										class="border-t border-accent/15 bg-accent/10 px-4 py-3.5 font-medium text-fg {i === comparison.length - 1 ? 'rounded-b-xl' : ''}"
+									>
+										{@render cell(row.tower)}
+									</td>
+									<td class="border-t border-border px-4 py-3.5">{@render cell(row.a, true)}</td>
+									<td class="border-t border-border px-4 py-3.5">{@render cell(row.b, true)}</td>
 								</tr>
 							{/each}
 						</tbody>
