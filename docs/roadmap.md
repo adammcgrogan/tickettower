@@ -58,6 +58,8 @@
 
 - Easier dashboard navigation: the ticket type editor is split into tabs (Basics, Button, Questions and welcome, Who can open, While open, Closing) with the button and welcome previews always beside it; a save error opens the tab with the problem. Its Button tab shows and changes which ticket buttons the type is on, for new and existing types, and the Ticket types list says where each type appears. The open Tickets queue is grouped by whose turn it is, with rarer ticket actions in a More menu. Settings uses quiet rows with a save bar scoped to the settings it saves, apart from Blocked members, which apply straight away
 
+- Claim and assign from the dashboard: Claim and Unclaim next to Close ticket on the Tickets page, and "Assign to someone" in the More menu with a name search of the type's support staff and server managers (`…/tickets/{id}/claim` with an optional `user_id`, `…/unclaim`, `…/assignees?q=`). The bot posts the usual claim message, moves any claim lock and logs it (`Dashboard.Claim/Assign/Unclaim`)
+
 - Ratings next to the ticket: a closed ticket's stars, comment and when it was rated show in its summary on the Tickets page and the transcript, and the Tickets list marks rated tickets with their score (`Ticket.feedback`, a `LEFT JOIN ticket_feedback` in every ticket read)
 
 - Data deletion: server managers can delete everything stored for their server from Settings (typed confirmation, only once every ticket is closed; published ticket buttons are removed from Discord too), and the data of servers the bot has left is purged after 30 days (`leftGuildRetention`, run with the hourly transcript purge). `/privacy` says so

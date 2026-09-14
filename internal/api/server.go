@@ -85,6 +85,9 @@ func (s *Server) Handler() http.Handler {
 				// Acting on tickets needs support access.
 				r.Group(func(r chi.Router) {
 					r.Use(requireLevel(store.LevelSupport))
+					r.Get("/tickets/{ticketID}/assignees", s.listAssignees)
+					r.Post("/tickets/{ticketID}/claim", s.claimTicket)
+					r.Post("/tickets/{ticketID}/unclaim", s.unclaimTicket)
 					r.Post("/tickets/{ticketID}/close", s.closeTicket)
 					r.Post("/tickets/{ticketID}/reply", s.replyTicket)
 					r.Post("/tickets/{ticketID}/move", s.moveTicket)

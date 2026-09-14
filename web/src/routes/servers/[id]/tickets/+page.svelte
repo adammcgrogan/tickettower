@@ -10,6 +10,7 @@
 		overdueAt,
 		send,
 		snippetParts,
+		type Assignee,
 		type Guild,
 		type SavedReply,
 		type Ticket,
@@ -269,6 +270,95 @@
 			toast(errorMessage(e), 'error');
 		} finally {
 			holding = false;
+		}
+	}
+
+	// --- Claiming and assigning ---
+	let claiming = $state(false);
+	let assignOpen = $state(false);
+	let assignQuery = $state('');
+	let assignees = $state<Assignee[]>([]);
+	let assignSearching = $state(false);
+	let assignError = $state('');
+	let assigning = $state<string | null>(null);
+	let assignSeq = 0;
+
+	async function claimTicket() {
+		if (!detail || claiming) return;
+		const t = detail.ticket;
+		claiming = true;
+		try {
+			replaceTicket(await api<Ticket>(`/guilds/${guild.id}/tickets/${t.id}/claim`, send('POST', {})));
+			toast(`You claimed ticket #${t.number}`);
+		} catch (e) {
+			toast(errorMessage(e), 'error');
+		} finally {
+			claiming = false;
+		}
+	}
+
+	async function unclaimTicket() {
+		if (!detail || claiming) return;
+		const t = detail.ticket;
+		claiming = true;
+		try {
+			replaceTicket(await api<Ticket>(`/guilds/${guild.id}/tickets/${t.id}/unclaim`, send('POST', {})));
+			toast(`Ticket #${t.number} unclaimed`);
+		} catch (e) {
+			toast(errorMessage(e), 'error');
+		} finally {
+			claiming = false;
+		}
+	}
+
+	function openAssign() {
+		assignQuery = '';
+		assignees = [];
+		assignError = '';
+		assignOpen = true;
+	}
+
+	// Searches as the lead types, keeping only the latest result.
+	$effect(() => {
+		const q = assignQuery.trim();
+		const t = detail?.ticket;
+		if (!assignOpen || !t) return;
+		if (!q) {
+			assignees = [];
+			return;
+		}
+		const req = ++assignSeq;
+		const timer = setTimeout(async () => {
+			assignSearching = true;
+			try {
+				const found = await api<Assignee[]>(
+					`/guilds/${guild.id}/tickets/${t.id}/assignees?q=${encodeURIComponent(q)}`
+				);
+				if (req === assignSeq) assignees = found;
+			} catch (e) {
+				if (req === assignSeq) assignError = errorMessage(e);
+			} finally {
+				if (req === assignSeq) assignSearching = false;
+			}
+		}, 250);
+		return () => clearTimeout(timer);
+	});
+
+	async function assignTo(a: Assignee) {
+		if (!detail || assigning) return;
+		const t = detail.ticket;
+		assigning = a.id;
+		assignError = '';
+		try {
+			replaceTicket(
+				await api<Ticket>(`/guilds/${guild.id}/tickets/${t.id}/claim`, send('POST', { user_id: a.id }))
+			);
+			assignOpen = false;
+			toast(`Ticket #${t.number} assigned to ${a.name}`);
+		} catch (e) {
+			assignError = errorMessage(e);
+		} finally {
+			assigning = null;
 		}
 	}
 
@@ -623,6 +713,15 @@
 								Open in Discord <Icon name="external" size={13} />
 							</a>
 							{#if canAct}
+								{#if t.claimed_by}
+									<button class="btn btn-secondary h-8 px-3" onclick={unclaimTicket} disabled={claiming}>
+										{claiming ? 'Unclaiming…' : 'Unclaim'}
+									</button>
+								{:else}
+									<button class="btn btn-secondary h-8 px-3" onclick={claimTicket} disabled={claiming}>
+										{claiming ? 'Claiming…' : 'Claim'}
+									</button>
+								{/if}
 								{#if t.on_hold}
 									<button class="btn btn-secondary h-8 px-3" onclick={resumeTicket} disabled={holding}>
 										<Icon name="clock" size={13} /> {holding ? 'Resuming…' : 'Resume'}
@@ -657,6 +756,18 @@
 									role="menu"
 									class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-border-strong bg-elevated p-1 shadow-xl shadow-black/40"
 								>
+									{#if t.status === 'open' && canAct}
+										<button
+											role="menuitem"
+											class={menuItem}
+											onclick={() => {
+												moreOpen = false;
+												openAssign();
+											}}
+										>
+											<Icon name="user" size={14} /> Assign to someone
+										</button>
+									{/if}
 									{#if t.status === 'open' && canAct && moveTargets.length > 0}
 										<button
 											role="menuitem"
@@ -766,6 +877,53 @@
 		<button class="btn btn-primary" onclick={moveTicket} disabled={moving || !moveTo}>
 			{moving ? 'Moving…' : 'Move ticket'}
 		</button>
+	{/snippet}
+</Dialog>
+
+<Dialog
+	bind:open={assignOpen}
+	title="Assign ticket #{detail?.ticket.number ?? ''}"
+	description="Hand it to someone on the ticket type's support team{detail?.ticket.claimed_by_name
+		? `, taking it from ${detail.ticket.claimed_by_name}`
+		: ''}. A note in the ticket lets the member know who's helping."
+>
+	<div class="space-y-3">
+		<Field label="Search by name" for="assign-search" error={assignError}>
+			<input
+				id="assign-search"
+				class="input"
+				bind:value={assignQuery}
+				placeholder="Start typing a name…"
+				autocomplete="off"
+				aria-invalid={!!assignError}
+			/>
+		</Field>
+		{#if assignQuery.trim()}
+			{#if assignees.length === 0}
+				<p class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">
+					{assignSearching ? 'Searching…' : 'Nobody on the support team matches that name.'}
+				</p>
+			{:else}
+				<ul class="divide-y divide-border rounded-lg border border-border" aria-busy={assignSearching}>
+					{#each assignees as a (a.id)}
+						<li>
+							<button
+								class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated disabled:opacity-60"
+								onclick={() => assignTo(a)}
+								disabled={!!assigning}
+							>
+								<img src={a.avatar_url} alt="" class="size-7 shrink-0 rounded-full bg-elevated" />
+								<span class="min-w-0 flex-1 truncate font-medium">{a.name}</span>
+								<span class="shrink-0 text-xs text-subtle">{assigning === a.id ? 'Assigning…' : 'Assign'}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{/if}
+	</div>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (assignOpen = false)}>Cancel</button>
 	{/snippet}
 </Dialog>
 

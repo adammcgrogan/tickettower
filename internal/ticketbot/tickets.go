@@ -412,7 +412,12 @@ func (b *Bot) toggleClaim(ctx context.Context, channelID snowflake.ID, m *discor
 	}
 	b.applyClaimLock(ctx, t, tt, me)
 	go b.logEvent(t.GuildID, claimedLog(t, me))
-	return "🙋 " + discord.UserMention(me) + " has claimed this ticket and will help you from here." + claimLockNote(t, tt, me), nil
+	return claimedMessage(t, tt, me), nil
+}
+
+// claimedMessage tells the member who has taken their ticket.
+func claimedMessage(t store.Ticket, tt *store.TicketType, claimer snowflake.ID) string {
+	return "🙋 " + discord.UserMention(claimer) + " has claimed this ticket and will help you from here." + claimLockNote(t, tt, claimer)
 }
 
 // closeTicket marks the ticket closed and returns the closing message. The

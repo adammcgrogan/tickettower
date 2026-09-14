@@ -67,6 +67,93 @@ func (d *Dashboard) Reopen(ctx context.Context, t store.Ticket, byID snowflake.I
 	return t, nil
 }
 
+// Claim claims an open, unclaimed ticket for a dashboard user, as the Claim
+// button in Discord does. The caller has checked they may.
+func (d *Dashboard) Claim(ctx context.Context, t store.Ticket, byID snowflake.ID, byName string) (store.Ticket, error) {
+	t, tt, err := d.b.loadTicket(ctx, t.ChannelID)
+	if err != nil {
+		return t, err
+	}
+	if t.ClaimedBy != nil {
+		if *t.ClaimedBy == byID {
+			return t, userErr("You've already claimed this ticket.")
+		}
+		return t, userErr("This ticket is already claimed by %s.", nameOr(t.ClaimedByName, "someone else"))
+	}
+	ok, err := d.b.store.ClaimTicket(ctx, t.ID, byID, byName)
+	if err != nil {
+		return t, err
+	}
+	if !ok {
+		return t, userErr("Someone else claimed this ticket just now.")
+	}
+	t.ClaimedBy, t.ClaimedByName = &byID, &byName
+	d.b.applyClaimLock(ctx, t, tt, byID)
+	go d.b.logEvent(t.GuildID, claimedLog(t, byID))
+	d.post(ctx, t, public(claimedMessage(t, tt, byID)))
+	return t, nil
+}
+
+// Assign hands an open ticket to a staff member, taking it from whoever
+// holds it. The caller has checked the assignee is support staff for it.
+func (d *Dashboard) Assign(ctx context.Context, t store.Ticket, byID, toID snowflake.ID, toName string) (store.Ticket, error) {
+	t, tt, err := d.b.loadTicket(ctx, t.ChannelID)
+	if err != nil {
+		return t, err
+	}
+	if t.ClaimedBy != nil && *t.ClaimedBy == toID {
+		return t, userErr("%s already has this ticket.", toName)
+	}
+	prev, ok, err := d.b.store.AssignTicket(ctx, t.ID, toID, toName)
+	if err != nil {
+		return t, err
+	}
+	if !ok {
+		return t, userErr("This ticket is already closed.")
+	}
+	t.ClaimedBy, t.ClaimedByName = &toID, &toName
+	if prev != nil {
+		d.b.releaseClaimLock(ctx, t, tt, *prev)
+	}
+	d.b.applyClaimLock(ctx, t, tt, toID)
+	go d.b.logEvent(t.GuildID, claimedLog(t, toID))
+	msg := "🙋 " + discord.UserMention(byID) + " assigned this ticket to " + discord.UserMention(toID) +
+		", who will help you from here." + claimLockNote(t, tt, toID)
+	d.post(ctx, t, public(msg))
+	return t, nil
+}
+
+// Unclaim releases an open ticket's claim for a dashboard user, whoever
+// holds it.
+func (d *Dashboard) Unclaim(ctx context.Context, t store.Ticket, byID snowflake.ID) (store.Ticket, error) {
+	t, tt, err := d.b.loadTicket(ctx, t.ChannelID)
+	if err != nil {
+		return t, err
+	}
+	prev, ok, err := d.b.store.ReleaseTicket(ctx, t.ID)
+	if err != nil {
+		return t, err
+	}
+	if !ok {
+		return t, userErr("This ticket isn't claimed.")
+	}
+	t.ClaimedBy, t.ClaimedByName = nil, nil
+	d.b.releaseClaimLock(ctx, t, tt, prev)
+	msg := discord.UserMention(byID) + " unclaimed this ticket."
+	if prev != byID {
+		msg = discord.UserMention(byID) + " released " + discord.UserMention(prev) + "'s claim on this ticket."
+	}
+	d.post(ctx, t, public(msg))
+	return t, nil
+}
+
+func nameOr(p *string, fallback string) string {
+	if p == nil || *p == "" {
+		return fallback
+	}
+	return *p
+}
+
 // Move moves an open ticket to another ticket type for a dashboard user, as
 // /ticket move does, and returns the updated ticket.
 func (d *Dashboard) Move(ctx context.Context, t store.Ticket, typeID int64, byID snowflake.ID) (store.Ticket, error) {

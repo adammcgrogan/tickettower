@@ -176,12 +176,36 @@ func TestTicketLifecycle(t *testing.T) {
 		t.Errorf("claimed by = %v", got.ClaimedBy)
 	}
 
+	// Assigning replaces the claimer and says who had it; releasing works
+	// for anyone and says who had it. Neither touches a closed ticket.
+	if prev, ok, err := s.AssignTicket(ctx, tickets[0].ID, other, "other"); err != nil || !ok || prev == nil || *prev != staff {
+		t.Errorf("assign over a claim: prev=%v ok=%v err=%v", prev, ok, err)
+	}
+	if got, _ := s.GetTicketByChannel(ctx, 7001); got.ClaimedBy == nil || *got.ClaimedBy != other || *got.ClaimedByName != "other" {
+		t.Errorf("after assign: claimed by = %v", got.ClaimedBy)
+	}
+	if prev, ok, err := s.ReleaseTicket(ctx, tickets[0].ID); err != nil || !ok || prev != other {
+		t.Errorf("release: prev=%v ok=%v err=%v", prev, ok, err)
+	}
+	if _, ok, _ := s.ReleaseTicket(ctx, tickets[0].ID); ok {
+		t.Error("releasing an unclaimed ticket should report false")
+	}
+	if prev, ok, err := s.AssignTicket(ctx, tickets[0].ID, staff, "staff"); err != nil || !ok || prev != nil {
+		t.Errorf("assign unclaimed: prev=%v ok=%v err=%v", prev, ok, err)
+	}
+
 	// Closing is idempotent.
 	if ok, _ := s.CloseTicket(ctx, tickets[0].ID, staff, "staff", "done"); !ok {
 		t.Error("close failed")
 	}
 	if ok, _ := s.CloseTicket(ctx, tickets[0].ID, staff, "staff", "again"); ok {
 		t.Error("second close should report false")
+	}
+	if _, ok, _ := s.AssignTicket(ctx, tickets[0].ID, other, "other"); ok {
+		t.Error("assigning a closed ticket should report false")
+	}
+	if _, ok, _ := s.ReleaseTicket(ctx, tickets[0].ID); ok {
+		t.Error("releasing a closed ticket should report false")
 	}
 	if ok, _ := s.CloseTicketByChannel(ctx, 7002, "Channel was deleted"); !ok {
 		t.Error("close by channel failed")

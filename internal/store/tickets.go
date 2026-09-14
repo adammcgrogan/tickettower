@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -195,6 +196,37 @@ func (s *Store) UnclaimTicket(ctx context.Context, id int64, userID snowflake.ID
 		UPDATE tickets SET claimed_by = NULL, claimed_by_name = NULL
 		WHERE id = $1 AND status = 'open' AND claimed_by = $2`, id, int64(userID))
 	return tag.RowsAffected() == 1, err
+}
+
+// AssignTicket hands an open ticket to userID, whoever holds it now, and
+// returns the previous claimer (nil if it was unclaimed). It reports false
+// if the ticket is closed.
+func (s *Store) AssignTicket(ctx context.Context, id int64, userID snowflake.ID, userName string) (prev *snowflake.ID, ok bool, err error) {
+	var was *int64
+	err = s.pool.QueryRow(ctx, `
+		WITH old AS (SELECT claimed_by FROM tickets WHERE id = $1 AND status = 'open')
+		UPDATE tickets SET claimed_by = $2, claimed_by_name = $3
+		FROM old WHERE tickets.id = $1 AND tickets.status = 'open'
+		RETURNING old.claimed_by`, id, int64(userID), userName).Scan(&was)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, nil
+	}
+	return idFromNullable(was), true, err
+}
+
+// ReleaseTicket clears an open ticket's claim, whoever holds it, and
+// returns who did. It reports false if the ticket is closed or unclaimed.
+func (s *Store) ReleaseTicket(ctx context.Context, id int64) (prev snowflake.ID, ok bool, err error) {
+	var was int64
+	err = s.pool.QueryRow(ctx, `
+		WITH old AS (SELECT claimed_by FROM tickets WHERE id = $1 AND status = 'open' AND claimed_by IS NOT NULL)
+		UPDATE tickets SET claimed_by = NULL, claimed_by_name = NULL
+		FROM old WHERE tickets.id = $1 AND tickets.status = 'open'
+		RETURNING old.claimed_by`, id).Scan(&was)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	return snowflake.ID(was), true, err
 }
 
 // CloseTicket closes an open ticket. It reports false if it was already

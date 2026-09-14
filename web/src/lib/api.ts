@@ -217,6 +217,9 @@ export type Ticket = {
 	feedback: { rating: number; comment: string; created_at: string } | null;
 };
 
+/** A staff member who can take a ticket, from the assignee search. */
+export type Assignee = { id: string; name: string; avatar_url: string };
+
 /** Wrap the matching words in a search snippet; see `snippetParts`. */
 export const MATCH_START = '\ue000';
 export const MATCH_END = '\ue001';
