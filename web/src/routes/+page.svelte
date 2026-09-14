@@ -38,52 +38,49 @@
 
 	const features = [
 		{
+			icon: 'panel' as const,
 			title: 'Buttons or a dropdown',
-			body: 'Design the message members click in the dashboard, with a live preview of how it looks in Discord.'
+			body: 'With a live preview of how it looks in Discord.'
 		},
 		{
+			icon: 'thread' as const,
 			title: 'Channels or private threads',
-			body: 'Each kind of ticket opens where it suits your server, visible only to the member and your team.'
+			body: 'Pick per ticket type, visible only to the member and your team.'
 		},
 		{
+			icon: 'message' as const,
 			title: 'Questions up front',
-			body: 'Ask for an order number or a description before the ticket opens, so nobody starts from scratch.'
+			body: 'So nobody starts from scratch.'
 		},
 		{
+			icon: 'inbox' as const,
 			title: 'Knows whose turn it is',
-			body: 'Tickets where the member spoke last go to the top of your queue, with how long they have waited.'
+			body: 'The longest-waiting member rises to the top of your queue.'
 		},
 		{
+			icon: 'send' as const,
 			title: 'Reply from the dashboard',
-			body: 'Answer a ticket from your browser. The reply is posted in Discord under your name and avatar.'
+			body: 'Posted in Discord under your name and avatar.'
 		},
 		{
+			icon: 'clock' as const,
 			title: 'Quiet tickets close themselves',
-			body: 'When a member goes silent, they get a friendly reminder first. Any reply keeps the ticket open.'
+			body: 'A friendly reminder first, then a close if nobody replies.'
 		},
 		{
+			icon: 'transcript' as const,
 			title: 'Transcripts',
-			body: 'Every conversation is saved and readable in the dashboard, laid out just like Discord.'
+			body: 'Saved and readable in the dashboard, laid out like Discord.'
 		},
 		{
+			icon: 'chart' as const,
 			title: 'Ratings and response times',
-			body: 'Members rate their ticket when it closes. See first response times, busiest hours and each person on your team.'
+			body: 'Response times, busiest hours and each person on your team.'
 		},
 		{
+			icon: 'alert' as const,
 			title: 'Finds problems before members do',
-			body: 'A setup check spots missing permissions, deleted channels and broken buttons, and links to the fix.'
-		},
-		{
-			title: 'A log of every ticket',
-			body: 'Post opened, claimed and closed events to a staff channel, with a transcript link on close.'
-		},
-		{
-			title: 'Welcome messages that fit',
-			body: 'Mention the member, the ticket number or their answers in the welcome message and the channel name.'
-		},
-		{
-			title: 'Move tickets between types',
-			body: 'Opened a billing question as general support? Move it, and the right team gets access.'
+			body: 'A setup check links straight to the fix.'
 		}
 	];
 
@@ -294,11 +291,14 @@
 		<section id="features" class="scroll-mt-16 border-t border-border">
 			<div class="mx-auto max-w-6xl px-5 py-20">
 				<h2 class="font-display text-4xl font-bold">Everything you need, nothing you don't</h2>
-				<dl class="mt-10 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+				<dl class="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
 					{#each features as f (f.title)}
-						<div class="border-t border-border pt-5">
-							<dt class="font-semibold">{f.title}</dt>
-							<dd class="mt-2 text-sm leading-relaxed text-muted">{f.body}</dd>
+						<div class="flex gap-3.5">
+							<Icon name={f.icon} size={18} class="mt-0.5 shrink-0 text-accent" />
+							<div>
+								<dt class="font-semibold">{f.title}</dt>
+								<dd class="mt-1 text-sm leading-relaxed text-muted">{f.body}</dd>
+							</div>
 						</div>
 					{/each}
 				</dl>
@@ -306,10 +306,10 @@
 		</section>
 
 		<section class="border-t border-border">
-			<div class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-2">
+			<div class="mx-auto grid max-w-6xl gap-8 px-5 py-16 lg:grid-cols-[1fr_1.6fr] lg:items-start">
 				<div>
-					<h2 class="font-display text-4xl font-bold">Works from Discord too</h2>
-					<p class="mt-4 max-w-md text-muted">
+					<h2 class="font-display text-2xl font-bold">Works from Discord too</h2>
+					<p class="mt-3 max-w-md text-sm text-muted">
 						Your team doesn't have to leave Discord. Every ticket has Claim and Close buttons, and slash commands
 						cover the rest.
 					</p>
@@ -368,6 +368,88 @@
 						</a>
 					</div>
 				</div>
+			</div>
+		</section>
+
+		<section class="border-t border-border">
+			<div class="mx-auto max-w-6xl px-5 py-20">
+				<h2 class="font-display text-4xl font-bold">How it compares</h2>
+				<p class="mt-3 max-w-xl text-muted">
+					{APP_NAME} against the two bots most servers switch from.
+				</p>
+				<div class="mt-10 overflow-x-auto">
+					<table class="w-full min-w-[36rem] border-collapse text-sm">
+						<thead>
+							<tr class="border-b border-border text-left">
+								<th class="py-3 pr-4 font-medium text-subtle"></th>
+								<th class="py-3 px-4 font-display text-base font-bold">{APP_NAME}</th>
+								<th class="py-3 px-4 font-medium text-muted">Ticket Tool</th>
+								<th class="py-3 px-4 font-medium text-muted">Tickets</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-border">
+							{#each [
+								{ label: 'Starting price', tower: 'Free', a: 'Free, Pro from $8/mo', b: 'Free, Premium from $2.99/mo' },
+								{ label: 'Source code', tower: 'Public on GitHub', a: 'Closed', b: 'Closed' },
+								{ label: 'Reply to tickets from a browser', tower: true, a: false, b: true }
+							] as row (row.label)}
+								<tr>
+									<td class="py-3.5 pr-4 text-muted">{row.label}</td>
+									{#each [row.tower, row.a, row.b] as cell, i (i)}
+										<td class="py-3.5 px-4 {i === 0 ? 'font-medium text-fg' : 'text-muted'}">
+											{#if typeof cell === 'boolean'}
+												<Icon
+													name={cell ? 'check' : 'x'}
+													size={16}
+													class={cell ? 'text-success' : 'text-subtle'}
+												/>
+											{:else}
+												{cell}
+											{/if}
+										</td>
+									{/each}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<p class="mt-4 text-xs text-subtle">
+					Competitor pricing and features as published on their sites; check theirs before switching, since plans
+					change.
+				</p>
+			</div>
+		</section>
+
+		<section class="border-t border-border bg-surface">
+			<div class="mx-auto grid max-w-6xl items-center gap-10 px-5 py-20 lg:grid-cols-[1fr_1fr]">
+				<div>
+					<h2 class="font-display text-4xl font-bold text-balance">More room to grow, when you need it</h2>
+					<p class="mt-4 max-w-md text-muted">
+						The free plan covers most servers. Premium raises the limits for busier ones and drops the "Powered
+						by" footer.
+					</p>
+					<div class="mt-7">
+						<a href={user ? '/servers' : loginURL} data-sveltekit-reload={user ? undefined : true} class="btn btn-primary h-11 px-5">
+							See premium <Icon name="arrow-right" size={15} />
+						</a>
+					</div>
+				</div>
+				<ul class="space-y-3 border-t border-border pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
+					{#each [
+						'100 ticket types instead of 25',
+						'50 sets of ticket buttons instead of 10',
+						'200 saved replies instead of 50',
+						'Transcripts kept forever, not just 90 days',
+						`No "Powered by ${APP_NAME}" footer on ticket buttons`
+					] as benefit (benefit)}
+						<li class="flex items-start gap-3 text-sm">
+							<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+								<Icon name="check" size={12} />
+							</span>
+							{benefit}
+						</li>
+					{/each}
+				</ul>
 			</div>
 		</section>
 
