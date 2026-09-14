@@ -46,7 +46,7 @@ func NewServer(cfg config.Config, st *store.Store, am *auth.Manager, discordRest
 
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP, middleware.Recoverer, securityHeaders)
+	r.Use(clientIP(s.cfg.TrustedProxies), middleware.Recoverer, securityHeaders)
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
@@ -335,6 +335,17 @@ func (s *Server) getGuild(w http.ResponseWriter, r *http.Request) {
 	level := levelOf(r)
 	writeJSON(w, http.StatusOK, guildResponse{ID: g.ID, Name: g.Name, IconURL: g.IconURL(), BotPresent: true,
 		CanManage: level == store.LevelOwner, Level: level})
+}
+
+// clientIP records where a request really came from, for the per-IP rate
+// limit. Behind trusted proxies it is the X-Forwarded-For entry those proxies
+// added; otherwise the connection's address. Client-supplied headers such as
+// X-Real-IP are never trusted (chi's RealIP was, and is deprecated for it).
+func clientIP(trustedProxies int) func(http.Handler) http.Handler {
+	if trustedProxies > 0 {
+		return middleware.ClientIPFromXFFTrustedProxies(trustedProxies)
+	}
+	return middleware.ClientIPFromRemoteAddr
 }
 
 // securityHeaders stops the dashboard being framed by another site (its
