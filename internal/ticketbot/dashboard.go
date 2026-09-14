@@ -107,6 +107,7 @@ func (d *Dashboard) Reply(ctx context.Context, t store.Ticket, byID snowflake.ID
 	}
 	msg := toTicketMessage(t.ID, *m)
 	msg.SentBy = &byID
+	msg.AuthorStaff = true
 
 	// The bot captures the message too; whichever insert comes second is
 	// ignored, apart from noting who sent it. Saving it here means the

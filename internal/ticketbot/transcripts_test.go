@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
@@ -61,5 +62,25 @@ func TestTicketCacheByGuild(t *testing.T) {
 	c.removeGuild(10)
 	if got := c.channelIDs(0); len(got) != 1 || got[0] != 200 {
 		t.Errorf("after removing guild 10: %v", got)
+	}
+}
+
+func TestAuthorIsStaff(t *testing.T) {
+	support := []snowflake.ID{10, 11}
+	cases := []struct {
+		name    string
+		roles   []snowflake.ID
+		manages bool
+		want    bool
+	}{
+		{"support role", []snowflake.ID{5, 11}, false, true},
+		{"server manager without the role", []snowflake.ID{5}, true, true},
+		{"someone added to the ticket", []snowflake.ID{5}, false, false},
+		{"no roles", nil, false, false},
+	}
+	for _, c := range cases {
+		if got := authorIsStaff(c.roles, support, c.manages); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
 	}
 }

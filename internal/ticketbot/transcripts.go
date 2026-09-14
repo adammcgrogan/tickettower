@@ -3,6 +3,7 @@ package ticketbot
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -115,22 +116,82 @@ func (b *Bot) onMessageCreate(e *events.GuildMessageCreate) {
 	defer cancel()
 
 	m := e.Message
-	if err := b.store.InsertTicketMessage(ctx, toTicketMessage(ref.ID, m)); err != nil {
+	staff := b.isStaffMessage(ctx, e.GuildID, ref, m)
+	saved := toTicketMessage(ref.ID, m)
+	saved.AuthorStaff = staff
+	if err := b.store.InsertTicketMessage(ctx, saved); err != nil {
 		b.log.Error("failed to save ticket message", slog.Any("err", err))
 	}
-	// The first reply from someone other than the opener counts as the
-	// first response.
-	if !m.Author.Bot && m.Author.ID != ref.OpenerID && b.tickets.markResponded(e.ChannelID) {
+	// The team's first message counts as the first response.
+	if staff && b.tickets.markResponded(e.ChannelID) {
 		if err := b.store.SetFirstResponse(ctx, ref.ID, m.CreatedAt); err != nil {
 			b.log.Error("failed to record first response", slog.Any("err", err))
 		}
 	}
-	// Any human message restarts the auto-close clock.
+	// Any human message restarts the auto-close clock. Anyone who isn't
+	// staff (the opener, or someone added to the ticket) is the member's
+	// side, so their message means the team owes a reply.
 	if !m.Author.Bot {
-		if err := b.store.RecordActivity(ctx, ref.ID, m.CreatedAt, m.Author.ID == ref.OpenerID); err != nil {
+		if err := b.store.RecordActivity(ctx, ref.ID, m.CreatedAt, !staff); err != nil {
 			b.log.Error("failed to record ticket activity", slog.Any("err", err))
 		}
 	}
+}
+
+// isStaffMessage reports whether a captured message is the team's: written
+// by someone with one of the ticket type's support roles, or who manages the
+// server. The opener and bots never are. It looks the ticket up only for
+// messages that could be, so the member's own messages cost nothing extra.
+func (b *Bot) isStaffMessage(ctx context.Context, guildID snowflake.ID, ref store.TicketRef, m discord.Message) bool {
+	if m.Author.Bot || m.Author.ID == ref.OpenerID || m.Member == nil {
+		return false
+	}
+	t, err := b.store.GetTicket(ctx, ref.ID)
+	if err != nil {
+		b.log.Warn("failed to load ticket for a message", slog.Int64("ticket_id", ref.ID), slog.Any("err", err))
+		return false
+	}
+	var supportRoles []snowflake.ID
+	if t.TicketTypeID != nil {
+		if tt, err := b.store.GetTicketType(ctx, t.GuildID, *t.TicketTypeID); err == nil {
+			supportRoles = tt.SupportRoleIDs
+		}
+	}
+	return authorIsStaff(m.Member.RoleIDs, supportRoles, b.managesGuild(guildID, m.Author.ID, m.Member.RoleIDs))
+}
+
+// authorIsStaff is the rule behind isStaffMessage: a support role, or
+// managing the server.
+func authorIsStaff(roles, supportRoles []snowflake.ID, manages bool) bool {
+	if manages {
+		return true
+	}
+	for _, id := range roles {
+		if slices.Contains(supportRoles, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// managesGuild reports, from the gateway cache, whether a member owns the
+// server or has a role with Administrator or Manage Server. Without a
+// gateway (the dashboard) it reports false; dashboard users are checked by
+// the API.
+func (b *Bot) managesGuild(guildID, userID snowflake.ID, roles []snowflake.ID) bool {
+	if b.client == nil {
+		return false
+	}
+	if g, ok := b.client.Caches.Guild(guildID); ok && g.OwnerID == userID {
+		return true
+	}
+	for _, id := range roles {
+		if r, ok := b.client.Caches.Role(guildID, id); ok &&
+			(r.Permissions.Has(discord.PermissionAdministrator) || r.Permissions.Has(discord.PermissionManageGuild)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *Bot) onMessageUpdate(e *events.GuildMessageUpdate) {

@@ -258,6 +258,8 @@ export type TranscriptMessage = {
 	author_bot: boolean;
 	/** The staff member a bot-posted reply was sent for (dashboard, /reply), else null. */
 	sent_by: string | null;
+	/** Whether the message is the team's (a support role, a server manager, or sent for staff). */
+	author_staff: boolean;
 	content: string;
 	embeds: Embed[];
 	attachments: Attachment[];

@@ -71,6 +71,7 @@ func (b *Bot) handleReplyCommand(e *handler.CommandEvent) error {
 	if m, err := e.GetInteractionResponse(rest.WithCtx(ctx)); err == nil {
 		saved := toTicketMessage(t.ID, *m)
 		saved.SentBy = &by
+		saved.AuthorStaff = true
 		if err := b.store.InsertTicketMessage(ctx, saved); err != nil {
 			b.log.Error("failed to save who sent a saved reply", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
 		}
