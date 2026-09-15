@@ -3,7 +3,9 @@
 	import { page } from '$app/state';
 	import { api, errorMessage, type Channel, type Panel, type SetupProblem, type TicketType } from '$lib/api';
 	import { emojiText, hoursLabel } from '$lib/format';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import LoadError from '$lib/components/LoadError.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 
 	const guildId = page.params.id!;
@@ -59,6 +61,9 @@
 		if (!t.ask_rating) out.push('No rating request');
 		return out;
 	}
+
+	// Rows show a couple of facts; the rest are behind "+N" so the list stays scannable.
+	const SHOWN_FACTS = 2;
 </script>
 
 <PageHeader
@@ -74,31 +79,26 @@
 	{/snippet}
 </PageHeader>
 
-<div class="mt-8">
+<div class="mt-8 max-w-4xl">
 	{#if error}
-		<div class="rounded-xl border border-danger/30 bg-danger/5 p-5 text-sm">
-			<p class="text-danger">{error}</p>
-			<button onclick={load} class="mt-3 text-muted underline-offset-4 hover:text-fg hover:underline">
-				Try again
-			</button>
-		</div>
+		<LoadError message={error} onretry={load} />
 	{:else if types === null}
 		<div class="space-y-px overflow-hidden rounded-xl border border-border" aria-busy="true">
 			{#each Array(3) as _, i (i)}<div class="h-[76px] animate-pulse bg-surface"></div>{/each}
 		</div>
 	{:else if types.length === 0}
-		<div class="rounded-xl border border-dashed border-border px-6 py-12 text-center">
-			<p class="font-medium">No ticket types yet</p>
-			<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
-				A ticket type decides where its tickets open, who handles them, and what members are asked first.
-			</p>
-			<a href="/servers/{guildId}/ticket-types/new" class="btn btn-primary mt-4">
-				<Icon name="plus" size={15} /> New ticket type
-			</a>
-		</div>
+		<EmptyState icon="tag" title="No ticket types yet">
+			A ticket type decides where its tickets open, who handles them, and what members are asked first.
+			{#snippet action()}
+				<a href="/servers/{guildId}/ticket-types/new" class="btn btn-primary">
+					<Icon name="plus" size={15} /> New ticket type
+				</a>
+			{/snippet}
+		</EmptyState>
 	{:else}
 		<ul class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
 			{#each types as t (t.id)}
+				{@const all = facts(t)}
 				<li class="flex items-center">
 					<a
 						href="/servers/{guildId}/ticket-types/{t.id}"
@@ -125,9 +125,16 @@
 							>
 								{shownOn(t)}
 							</li>
-							{#each facts(t) as fact (fact)}
+							{#each all.slice(0, SHOWN_FACTS) as fact (fact)}
 								<li class="rounded-md border border-border px-2 py-0.5 text-xs text-muted">{fact}</li>
 							{/each}
+							{#if all.length > SHOWN_FACTS}
+								{@const rest = all.slice(SHOWN_FACTS)}
+								<li class="rounded-md border border-border px-2 py-0.5 text-xs text-muted" title={rest.join('\n')}>
+									<span aria-hidden="true">+{rest.length}</span>
+									<span class="sr-only">{rest.join(', ')}</span>
+								</li>
+							{/if}
 						</ul>
 						<Icon name="arrow-right" class="text-subtle transition-colors group-hover:text-fg" />
 					</a>

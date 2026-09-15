@@ -25,14 +25,16 @@
 	import Dialog from '$lib/components/Dialog.svelte';
 	import Field from '$lib/components/Field.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import LoadError from '$lib/components/LoadError.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import RolePicker from '$lib/components/RolePicker.svelte';
+	import SaveBar from '$lib/components/SaveBar.svelte';
+	import SettingsSection from '$lib/components/SettingsSection.svelte';
 
 	type RoleLevel = DashboardRole['level'];
 	const levels: { value: RoleLevel; label: string; body: string }[] = [
 		{ value: 'viewer', label: 'Viewer', body: 'Read tickets, transcripts and analytics.' },
 		{ value: 'support', label: 'Support', body: 'Viewer, plus reply to, close, reopen, move and hold tickets, add or remove people, and block members.' },
-		{ value: 'admin', label: 'Admin', body: 'Support, plus change ticket types, buttons, saved replies and settings.' }
+		{ value: 'admin', label: 'Admin', body: 'Support, plus change ticket types, ticket panels, saved replies and settings.' }
 	];
 
 	const getGuild = getContext<() => Guild>('guild');
@@ -259,12 +261,7 @@
 <PageHeader title="Settings" description="Server-wide options for how tickets are handled." />
 
 {#if loadError}
-	<div class="mt-6 rounded-xl border border-danger/30 bg-danger/5 p-5 text-sm">
-		<p class="text-danger">{loadError}</p>
-		<button onclick={load} class="mt-3 text-muted underline-offset-4 hover:text-fg hover:underline">
-			Try again
-		</button>
-	</div>
+	<div class="mt-8 max-w-3xl"><LoadError message={loadError} onretry={load} /></div>
 {:else if !settings}
 	<div class="mt-8 max-w-3xl divide-y divide-border border-y border-border" aria-busy="true">
 		{#each Array(3) as _, i (i)}
@@ -276,46 +273,15 @@
 		{/each}
 	</div>
 {:else}
-	{#if billingEnabled}
-		<section class="mt-8 max-w-3xl grid gap-4 border-b border-border pb-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
-			<div>
-				<h2 class="font-medium">Plan</h2>
-				<p class="hint mt-1">
-					{tier === 'premium'
-						? "This server is on the premium plan."
-						: `Free plans get up to ${limits?.max_ticket_types ?? 25} ticket types and ${limits?.max_panels ?? 10} ticket panels.`}
-				</p>
-			</div>
-			<div>
-				{#if tier === 'premium'}
-					{#if hasBillingCustomer}
-						<button class="btn btn-secondary h-9" onclick={manageBilling} disabled={openingPortal}>
-							{openingPortal ? 'Opening…' : 'Manage billing'}
-						</button>
-					{:else}
-						<p class="text-sm text-muted">Premium was granted by the {APP_NAME} team.</p>
-					{/if}
-				{:else if guild.can_manage}
-					<button class="btn btn-primary h-9" onclick={upgrade} disabled={checkingOut}>
-						{checkingOut ? 'Starting checkout…' : 'Upgrade to premium'}
-					</button>
-				{:else}
-					<p class="text-sm text-subtle">Only someone with Manage Server can upgrade this server.</p>
-				{/if}
-			</div>
-		</section>
-	{/if}
-
-	<form onsubmit={save} class="mt-8 max-w-3xl">
+	<!-- Saved together first, then the parts that apply straight away, then the plan and the danger zone. -->
+	<div class="mt-8 max-w-3xl">
+	<form onsubmit={save}>
 		<div class="divide-y divide-border border-y border-border">
-			<section class="grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
-				<div>
-					<h2 class="font-medium">Ticket log</h2>
-					<p class="hint mt-1">
-						A note is posted here whenever a ticket is opened, claimed or closed, so your team can follow
-						along in one place.
-					</p>
-				</div>
+			<SettingsSection title="Ticket log">
+				{#snippet description()}
+					A note is posted here whenever a ticket is opened, claimed or closed, so your team can follow
+					along in one place.
+				{/snippet}
 				<Field
 					label="Log channel"
 					for="log_channel"
@@ -333,19 +299,16 @@
 						invalid={!!errors.log_channel_id}
 					/>
 				</Field>
-			</section>
+			</SettingsSection>
 
-			<section class="grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
-				<div>
-					<h2 class="font-medium">Dashboard access</h2>
-					<p class="hint mt-1">
-						People with Manage Server can always use everything here. Give other roles access at the level
-						they need.
-						<a href="/help/support-team" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
-							Learn more
-						</a>
-					</p>
-				</div>
+			<SettingsSection title="Dashboard access">
+				{#snippet description()}
+					People with Manage Server can always use everything here. Give other roles access at the level
+					they need.
+					<a href="/help/support-team" target="_blank" class="whitespace-nowrap text-fg underline-offset-4 hover:underline">
+						Learn more
+					</a>
+				{/snippet}
 				<div class="space-y-4">
 					{#if dashboardRoles.length === 0}
 						<p class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">
@@ -402,13 +365,12 @@
 					{/if}
 					{#if errors.dashboard_roles}<p class="text-xs text-danger">{errors.dashboard_roles}</p>{/if}
 				</div>
-			</section>
+			</SettingsSection>
 
-			<section class="grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
-				<div>
-					<h2 class="font-medium">Transcripts</h2>
-					<p class="hint mt-1">Messages in tickets are saved so you can read them back after a ticket closes.</p>
-				</div>
+			<SettingsSection title="Transcripts">
+				{#snippet description()}
+					Messages in tickets are saved so you can read them back after a ticket closes.
+				{/snippet}
 				<Field
 					label="Keep transcripts for"
 					for="retention"
@@ -424,27 +386,22 @@
 						{/each}
 					</select>
 				</Field>
-			</section>
+			</SettingsSection>
 		</div>
 
-		<div
-			class="sticky bottom-4 mt-6 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/90 p-3 shadow-2xl shadow-black/40 backdrop-blur"
-		>
-			<span class="pl-1 text-xs text-muted">{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
+		<SaveBar status={dirty ? 'Unsaved changes' : 'All changes saved'}>
 			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || !atLeast(guild.level, 'admin')}>
 				{saving ? 'Saving…' : 'Save settings'}
 			</button>
-		</div>
+		</SaveBar>
 	</form>
 
-	<section class="mt-10 max-w-3xl border-t border-border grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
-		<div>
-			<h2 class="font-medium">Blocked members</h2>
-			<p class="hint mt-1">
-				People who can't open tickets here, for spam or abuse. Changes apply straight away. Staff can also
-				use <code>/ticket block</code> in Discord.
-			</p>
-		</div>
+	<div class="mt-10 divide-y divide-border border-y border-border">
+	<SettingsSection title="Blocked members">
+		{#snippet description()}
+			People who can't open tickets here, for spam or abuse. Changes apply straight away. Staff can also
+			use <code>/ticket block</code> in Discord.
+		{/snippet}
 		<div class="space-y-4">
 			{#if blocks.length === 0}
 				<p class="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted">Nobody is blocked.</p>
@@ -475,26 +432,52 @@
 				<Icon name="plus" size={14} /> Block a member
 			</button>
 		</div>
-	</section>
+	</SettingsSection>
+
+	{#if billingEnabled}
+		<SettingsSection title="Plan">
+			{#snippet description()}
+				{tier === 'premium'
+					? 'This server is on the premium plan.'
+					: `Free plans get up to ${limits?.max_ticket_types ?? 25} ticket types and ${limits?.max_panels ?? 10} ticket panels.`}
+			{/snippet}
+			{#if tier === 'premium'}
+				{#if hasBillingCustomer}
+					<button class="btn btn-secondary" onclick={manageBilling} disabled={openingPortal}>
+						{openingPortal ? 'Opening…' : 'Manage billing'}
+					</button>
+				{:else}
+					<p class="text-sm text-muted">Premium was granted by the {APP_NAME} team.</p>
+				{/if}
+			{:else if guild.can_manage}
+				<button class="btn btn-primary" onclick={upgrade} disabled={checkingOut}>
+					{checkingOut ? 'Starting checkout…' : 'Upgrade to premium'}
+				</button>
+			{:else}
+				<p class="text-sm text-subtle">Only someone with Manage Server can upgrade this server.</p>
+			{/if}
+		</SettingsSection>
+	{/if}
+	</div>
 
 	{#if guild.can_manage}
-		<section class="max-w-3xl border-t border-border grid gap-4 py-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
-			<div>
-				<h2 class="font-medium">Delete server data</h2>
-				<p class="hint mt-1">
+		<div class="mt-10 rounded-xl border border-danger/30 px-5">
+			<SettingsSection title="Delete server data" danger>
+				{#snippet description()}
 					Removes every ticket and transcript, rating, ticket type, ticket panel, saved reply,
 					blocked member and setting stored for this server. The bot stays in the server.
-				</p>
-			</div>
-			<div class="space-y-3">
-				<p class="text-sm text-muted">
-					This can't be undone. Close any open tickets first. If you remove the bot instead, its data is
-					deleted automatically after 30 days.
-				</p>
-				<button class="btn btn-danger h-8 px-3" onclick={openDelete}>Delete all server data</button>
-			</div>
-		</section>
+				{/snippet}
+				<div class="space-y-3">
+					<p class="text-sm text-muted">
+						This can't be undone. Close any open tickets first. If you remove the bot instead, its data is
+						deleted automatically after 30 days.
+					</p>
+					<button class="btn btn-danger h-8 px-3" onclick={openDelete}>Delete all server data</button>
+				</div>
+			</SettingsSection>
+		</div>
 	{/if}
+	</div>
 {/if}
 
 <Dialog

@@ -37,10 +37,12 @@
 	} from '$lib/placeholders';
 	import { toast } from '$lib/toast.svelte';
 	import ChannelSelect from './ChannelSelect.svelte';
+	import ChoiceCards from './ChoiceCards.svelte';
 	import Field from './Field.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import PlaceholderChips from './PlaceholderChips.svelte';
 	import RolePicker from './RolePicker.svelte';
+	import SaveBar from './SaveBar.svelte';
 	import Segmented from './Segmented.svelte';
 	import WelcomePreview from './WelcomePreview.svelte';
 
@@ -155,6 +157,16 @@
 		{ value: 'off', label: 'Nothing changes', body: 'Everyone on the team can still read and reply.' },
 		{ value: 'read_only', label: 'Others read only', body: 'The rest of the team can follow along but not reply.' },
 		{ value: 'hidden', label: 'Others lose access', body: 'Only the claimer and the member can see the ticket.' }
+	];
+	// Threads can't restrict a role, so only "Nothing changes" is open to them.
+	const claimLockChoices = $derived(
+		claimLocks.map((c) => ({ ...c, disabled: form.mode === 'thread' && c.value !== 'off' }))
+	);
+
+	// A closed channel is deleted (no category) or kept in one ('' until a category is picked).
+	const closedChannelChoices: { value: 'delete' | 'keep'; label: string; body: string }[] = [
+		{ value: 'delete', label: 'Delete the channel', body: "A few seconds after closing. Closed tickets can't be reopened." },
+		{ value: 'keep', label: 'Keep it in a category', body: "Read only, for a while, so the ticket can be reopened. Then it's deleted." }
 	];
 	const minuteChoices = [{ value: '', label: 'None' }, ...MINUTE_OPTIONS.map((m) => ({ value: String(m), label: minutesLabel(m) }))];
 	const reminderChoices = [{ value: '', label: "Don't remind" }, ...MINUTE_OPTIONS.map((m) => ({ value: String(m), label: `After ${minutesLabel(m)}` }))];
@@ -430,6 +442,41 @@
 	</div>
 {/snippet}
 
+<!-- The header of a question or suggested answer: its number, then move and remove. -->
+{#snippet itemHeader(noun: string, list: unknown[], i: number, move: (i: number, by: -1 | 1) => void)}
+	<div class="flex items-center gap-2">
+		<span class="text-xs font-medium text-muted">{noun} {i + 1}</span>
+		<div class="ml-auto flex items-center gap-0.5">
+			<button
+				type="button"
+				class="btn btn-ghost h-7 px-1.5"
+				disabled={i === 0}
+				onclick={() => move(i, -1)}
+				aria-label="Move {noun.toLowerCase()} {i + 1} up"
+			>
+				<Icon name="chevron-up" size={14} />
+			</button>
+			<button
+				type="button"
+				class="btn btn-ghost h-7 px-1.5"
+				disabled={i === list.length - 1}
+				onclick={() => move(i, 1)}
+				aria-label="Move {noun.toLowerCase()} {i + 1} down"
+			>
+				<Icon name="chevron-down" size={14} />
+			</button>
+			<button
+				type="button"
+				class="btn btn-ghost h-7 px-1.5 hover:text-danger"
+				onclick={() => list.splice(i, 1)}
+				aria-label="Remove {noun.toLowerCase()} {i + 1}"
+			>
+				<Icon name="trash" size={14} />
+			</button>
+		</div>
+	</div>
+{/snippet}
+
 <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
 	<form onsubmit={save} class="min-w-0">
 		<div role="tablist" aria-label="Ticket type settings" class="flex gap-1 overflow-x-auto border-b border-border">
@@ -503,32 +550,7 @@
 						'Where tickets open',
 						'Only the member who opened the ticket and your support team can see it.'
 					)}
-					<div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Ticket format">
-						{#each modes as m (m.value)}
-							{@const selected = form.mode === m.value}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={selected}
-								onclick={() => setMode(m.value)}
-								class="flex gap-3 rounded-xl border p-4 text-left transition-colors {selected
-									? 'border-accent bg-accent/5'
-									: 'border-border hover:border-border-strong'}"
-							>
-								<span
-									class="grid size-8 shrink-0 place-items-center rounded-lg bg-elevated {selected
-										? 'text-accent'
-										: 'text-muted'}"
-								>
-									<Icon name={m.icon} />
-								</span>
-								<span>
-									<span class="block text-sm font-medium">{m.label}</span>
-									<span class="mt-0.5 block text-xs text-muted">{m.body}</span>
-								</span>
-							</button>
-						{/each}
-					</div>
+					<ChoiceCards label="Ticket format" options={modes} bind:value={() => form.mode, setMode} />
 
 					{#if form.mode === 'channel'}
 						<Field
@@ -760,37 +782,7 @@
 						<ol class="space-y-3">
 							{#each form.answers as a, i (i)}
 								<li class="space-y-4 rounded-lg border border-border bg-bg/40 p-4">
-									<div class="flex items-center gap-2">
-										<span class="text-xs font-medium text-muted">Answer {i + 1}</span>
-										<div class="ml-auto flex items-center gap-0.5">
-											<button
-												type="button"
-												class="btn btn-ghost h-7 px-1.5"
-												disabled={i === 0}
-												onclick={() => moveAnswer(i, -1)}
-												aria-label="Move answer {i + 1} up"
-											>
-												<Icon name="chevron-up" size={14} />
-											</button>
-											<button
-												type="button"
-												class="btn btn-ghost h-7 px-1.5"
-												disabled={i === form.answers.length - 1}
-												onclick={() => moveAnswer(i, 1)}
-												aria-label="Move answer {i + 1} down"
-											>
-												<Icon name="chevron-down" size={14} />
-											</button>
-											<button
-												type="button"
-												class="btn btn-ghost h-7 px-1.5 hover:text-danger"
-												onclick={() => form.answers.splice(i, 1)}
-												aria-label="Remove answer {i + 1}"
-											>
-												<Icon name="trash" size={14} />
-											</button>
-										</div>
-									</div>
+									{@render itemHeader('Answer', form.answers, i, moveAnswer)}
 									<Field label="Title" for="a-{i}-title">
 										<input
 											id="a-{i}-title"
@@ -853,37 +845,7 @@
 						<ol class="space-y-3">
 							{#each form.questions as q, i (i)}
 								<li class="space-y-4 rounded-lg border border-border bg-bg/40 p-4">
-									<div class="flex items-center gap-2">
-										<span class="text-xs font-medium text-muted">Question {i + 1}</span>
-										<div class="ml-auto flex items-center gap-0.5">
-											<button
-												type="button"
-												class="btn btn-ghost h-7 px-1.5"
-												disabled={i === 0}
-												onclick={() => moveQuestion(i, -1)}
-												aria-label="Move question {i + 1} up"
-											>
-												<Icon name="chevron-up" size={14} />
-											</button>
-											<button
-												type="button"
-												class="btn btn-ghost h-7 px-1.5"
-												disabled={i === form.questions.length - 1}
-												onclick={() => moveQuestion(i, 1)}
-												aria-label="Move question {i + 1} down"
-											>
-												<Icon name="chevron-down" size={14} />
-											</button>
-											<button
-												type="button"
-												class="btn btn-ghost h-7 px-1.5 hover:text-danger"
-												onclick={() => form.questions.splice(i, 1)}
-												aria-label="Remove question {i + 1}"
-											>
-												<Icon name="trash" size={14} />
-											</button>
-										</div>
-									</div>
+									{@render itemHeader('Question', form.questions, i, moveQuestion)}
 									<div class="grid gap-4 sm:grid-cols-2">
 										<Field label="Question" for="q-{i}-label">
 											<input
@@ -1022,24 +984,12 @@
 							{/if}
 						</p>
 					</div>
-					<div class="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="When a ticket is claimed">
-						{#each claimLocks as c (c.value)}
-							{@const selected = form.claim_lock === c.value}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={selected}
-								disabled={form.mode === 'thread' && c.value !== 'off'}
-								onclick={() => (form.claim_lock = c.value)}
-								class="rounded-xl border p-4 text-left transition-colors disabled:opacity-50 {selected
-									? 'border-accent bg-accent/5'
-									: 'border-border hover:border-border-strong'}"
-							>
-								<span class="block text-sm font-medium">{c.label}</span>
-								<span class="mt-0.5 block text-xs text-muted">{c.body}</span>
-							</button>
-						{/each}
-					</div>
+					<ChoiceCards
+						label="When a ticket is claimed"
+						columns={3}
+						options={claimLockChoices}
+						bind:value={form.claim_lock}
+					/>
 					{#if errors.claim_lock}<p class="text-xs text-danger">{errors.claim_lock}</p>{/if}
 					{#if form.claim_lock !== 'off'}
 						<Field
@@ -1180,38 +1130,14 @@
 								'What happens to the channel once the ticket is closed and the transcript is saved.'
 							)}
 						</div>
-						<div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="After closing">
-							<button
-								type="button"
-								role="radio"
-								aria-checked={form.closed_parent_id === null}
-								onclick={() => (form.closed_parent_id = null)}
-								class="rounded-xl border p-4 text-left transition-colors {form.closed_parent_id === null
-									? 'border-accent bg-accent/5'
-									: 'border-border hover:border-border-strong'}"
-							>
-								<span class="block text-sm font-medium">Delete the channel</span>
-								<span class="mt-0.5 block text-xs text-muted">
-									A few seconds after closing. Closed tickets can't be reopened.
-								</span>
-							</button>
-							<button
-								type="button"
-								role="radio"
-								aria-checked={form.closed_parent_id !== null}
-								onclick={() => {
-									if (form.closed_parent_id === null) form.closed_parent_id = '';
-								}}
-								class="rounded-xl border p-4 text-left transition-colors {form.closed_parent_id !== null
-									? 'border-accent bg-accent/5'
-									: 'border-border hover:border-border-strong'}"
-							>
-								<span class="block text-sm font-medium">Keep it in a category</span>
-								<span class="mt-0.5 block text-xs text-muted">
-									Read only, for a while, so the ticket can be reopened. Then it's deleted.
-								</span>
-							</button>
-						</div>
+						<ChoiceCards
+							label="After closing"
+							options={closedChannelChoices}
+							bind:value={
+								() => (form.closed_parent_id === null ? 'delete' : 'keep'),
+								(v) => (form.closed_parent_id = v === 'delete' ? null : (form.closed_parent_id ?? ''))
+							}
+						/>
 						{#if form.closed_parent_id !== null}
 							<Field
 								label="Closed tickets category"
@@ -1228,23 +1154,11 @@
 									invalid={!!errors.closed_parent_id}
 								/>
 							</Field>
-							<div class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Who can see a closed ticket">
-								{#each closedAccess as c (c.value)}
-									{@const selected = form.closed_member_access === c.value}
-									<button
-										type="button"
-										role="radio"
-										aria-checked={selected}
-										onclick={() => (form.closed_member_access = c.value)}
-										class="rounded-xl border p-4 text-left transition-colors {selected
-											? 'border-accent bg-accent/5'
-											: 'border-border hover:border-border-strong'}"
-									>
-										<span class="block text-sm font-medium">{c.label}</span>
-										<span class="mt-0.5 block text-xs text-muted">{c.body}</span>
-									</button>
-								{/each}
-							</div>
+							<ChoiceCards
+								label="Who can see a closed ticket"
+								options={closedAccess}
+								bind:value={form.closed_member_access}
+							/>
 							<Field
 								label="Delete after"
 								for="closed_keep_days"
@@ -1282,19 +1196,14 @@
 			{/if}
 		</div>
 
-		<div
-			class="sticky bottom-4 mt-5 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/90 p-3 shadow-2xl shadow-black/40 backdrop-blur"
+		<SaveBar
+			status={initial ? (dirty ? 'Unsaved changes' : 'All changes saved') : 'Every tab is saved together'}
 		>
-			<span class="pl-1 text-xs text-muted">
-				{#if initial}{dirty ? 'Unsaved changes' : 'All changes saved'}{:else}Every tab is saved together{/if}
-			</span>
-			<div class="flex gap-2">
-				<a href="/servers/{guildId}/ticket-types" class="btn btn-ghost">{initial ? 'Back' : 'Cancel'}</a>
-				<button type="submit" class="btn btn-primary" disabled={saving || (!!initial && !dirty)}>
-					{saving ? 'Saving…' : initial ? 'Save changes' : 'Create ticket type'}
-				</button>
-			</div>
-		</div>
+			<a href="/servers/{guildId}/ticket-types" class="btn btn-ghost">{initial ? 'Back' : 'Cancel'}</a>
+			<button type="submit" class="btn btn-primary" disabled={saving || (!!initial && !dirty)}>
+				{saving ? 'Saving…' : initial ? 'Save changes' : 'Create ticket type'}
+			</button>
+		</SaveBar>
 	</form>
 
 	<aside class="space-y-6 lg:sticky lg:top-6 lg:self-start">

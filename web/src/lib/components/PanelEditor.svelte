@@ -22,6 +22,7 @@
 	import Field from './Field.svelte';
 	import Icon from './Icon.svelte';
 	import PanelPreview from './PanelPreview.svelte';
+	import SaveBar from './SaveBar.svelte';
 	import Segmented from './Segmented.svelte';
 
 	let {
@@ -368,17 +369,12 @@
 			{#if errors.ticket_type_ids}<p class="text-xs text-danger">{errors.ticket_type_ids}</p>{/if}
 		</section>
 
-		<div
-			class="sticky bottom-4 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/90 p-3 shadow-2xl shadow-black/40 backdrop-blur"
-		>
-			<span class="pl-1 text-xs text-muted">{dirty ? 'Unsaved changes' : panel ? 'All changes saved' : ''}</span>
-			<div class="flex gap-2">
-				<a href="/servers/{guildId}/panels" class="btn btn-ghost">Back</a>
-				<button type="submit" class="btn btn-primary" disabled={saving || (!!panel && !dirty)}>
-					{saving ? 'Saving…' : panel ? 'Save changes' : 'Create ticket panel'}
-				</button>
-			</div>
-		</div>
+		<SaveBar status={dirty ? 'Unsaved changes' : panel ? 'All changes saved' : ''}>
+			<a href="/servers/{guildId}/panels" class="btn btn-ghost">{panel ? 'Back' : 'Cancel'}</a>
+			<button type="submit" class="btn btn-primary" disabled={saving || (!!panel && !dirty)}>
+				{saving ? 'Saving…' : panel ? 'Save changes' : 'Create ticket panel'}
+			</button>
+		</SaveBar>
 	</form>
 
 	<aside class="lg:sticky lg:top-6 lg:self-start">

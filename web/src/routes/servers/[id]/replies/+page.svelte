@@ -15,8 +15,10 @@
 	import { replyPlaceholders } from '$lib/placeholders';
 	import { toast } from '$lib/toast.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Field from '$lib/components/Field.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import LoadError from '$lib/components/LoadError.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import PlaceholderChips from '$lib/components/PlaceholderChips.svelte';
 
@@ -132,32 +134,23 @@
 	{/snippet}
 </PageHeader>
 
-<div class="mt-6 max-w-3xl">
+<div class="mt-8 max-w-4xl">
 	{#if error}
-		<div class="rounded-xl border border-danger/30 bg-danger/5 p-5 text-sm">
-			<p class="text-danger">{error}</p>
-			<button onclick={load} class="mt-3 text-muted underline-offset-4 hover:text-fg hover:underline">
-				Try again
-			</button>
-		</div>
+		<LoadError message={error} onretry={load} />
 	{:else if replies === null}
 		<div class="space-y-px overflow-hidden rounded-xl border border-border" aria-busy="true">
 			{#each Array(3) as _, i (i)}<div class="h-[76px] animate-pulse bg-surface"></div>{/each}
 		</div>
 	{:else if replies.length === 0}
-		<div class="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-			<div class="mx-auto grid size-10 place-items-center rounded-xl bg-elevated text-muted">
-				<Icon name="message" />
-			</div>
-			<p class="mt-4 font-medium">No saved replies yet</p>
-			<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
-				Write the answers your team gives most, like a refund policy or how to appeal, and send them in a
-				couple of clicks.
-			</p>
-			<button class="btn btn-primary mt-5" onclick={() => openEditor()}>
-				<Icon name="plus" size={15} /> Add a saved reply
-			</button>
-		</div>
+		<EmptyState icon="message" title="No saved replies yet">
+			Write the answers your team gives most, like a refund policy or how to appeal, and send them in a
+			couple of clicks.
+			{#snippet action()}
+				<button class="btn btn-primary" onclick={() => openEditor()}>
+					<Icon name="plus" size={15} /> New saved reply
+				</button>
+			{/snippet}
+		</EmptyState>
 	{:else}
 		<ul class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
 			{#each replies as r (r.id)}
