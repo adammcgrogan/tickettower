@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount, setContext } from 'svelte';
 	import { page } from '$app/state';
-	import { api, atLeast, type Guild, type Ticket, type User } from '$lib/api';
+	import { api, atLeast, errorMessage, send, type Guild, type Stats, type Ticket, type User } from '$lib/api';
 	import { SUPPORT_URL } from '$lib/brand';
+	import { toast } from '$lib/toast.svelte';
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import Logo from '$lib/components/Logo.svelte';
@@ -39,6 +40,34 @@
 		const timer = setInterval(refresh, 60_000);
 		return () => clearInterval(timer);
 	});
+
+	// The plan, for the upgrade prompt. Only Manage Server can upgrade, so
+	// nobody else needs it.
+	let plan = $state<Stats | null>(null);
+	let checkingOut = $state(false);
+	$effect(() => {
+		const g = guild;
+		plan = null;
+		if (!g?.can_manage) return;
+		api<Stats>(`/guilds/${g.id}/stats`)
+			.then((s) => {
+				if (guild?.id === g.id) plan = s;
+			})
+			.catch(() => {});
+	});
+	const showUpgrade = $derived(!!plan?.billing_enabled && plan.tier === 'free');
+
+	async function upgrade() {
+		if (!guild) return;
+		checkingOut = true;
+		try {
+			const { url } = await api<{ url: string }>(`/guilds/${guild.id}/billing/checkout`, send('POST'));
+			window.location.href = url;
+		} catch (err) {
+			toast(errorMessage(err), 'error');
+			checkingOut = false;
+		}
+	}
 
 	$effect(() => {
 		void page.url.pathname;
@@ -204,6 +233,21 @@
 				</ul>
 			{/if}
 		</nav>
+
+		{#if showUpgrade && plan}
+			<div class="mx-3 mb-3 rounded-lg border border-border p-3">
+				<p class="flex items-center gap-2 text-sm font-medium">
+					<Icon name="sparkles" size={15} class="text-muted" /> Free plan
+				</p>
+				<p class="hint mt-1">
+					Up to {plan.limits.max_ticket_types} ticket types and {plan.limits.max_panels} ticket panels. Premium
+					raises the limits and keeps transcripts forever.
+				</p>
+				<button class="btn btn-secondary mt-3 h-8 w-full" onclick={upgrade} disabled={checkingOut}>
+					{checkingOut ? 'Starting checkout…' : 'Upgrade to premium'}
+				</button>
+			</div>
+		{/if}
 
 		<!-- New tabs, so reading help doesn't lose unsaved changes. -->
 		<ul class="space-y-0.5 px-3 pb-3">
