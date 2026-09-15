@@ -16,9 +16,13 @@
 	} from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
 	import { formatDuration } from '$lib/format';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import LoadError from '$lib/components/LoadError.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import QuickSetup from '$lib/components/QuickSetup.svelte';
 	import SetupProblems from '$lib/components/SetupProblems.svelte';
+	import StatGrid from '$lib/components/StatGrid.svelte';
 	import TicketStub from '$lib/components/TicketStub.svelte';
 
 	const getGuild = getContext<() => Guild>('guild');
@@ -142,18 +146,13 @@
 
 <svelte:head><title>{guild.name} · {APP_NAME}</title></svelte:head>
 
-<h1 class="font-display text-4xl leading-none font-bold">{guild.name}</h1>
-<p class="mt-2.5 text-sm text-muted">
-	{fresh ? `Let's get ${APP_NAME} taking tickets.` : 'Who needs a reply, and how support is going.'}
-</p>
+<PageHeader
+	title={guild.name}
+	description={fresh ? `Let's get ${APP_NAME} taking tickets.` : 'Who needs a reply, and how support is going.'}
+/>
 
 {#if error}
-	<div class="mt-8 rounded-xl border border-danger/30 bg-danger/5 p-5 text-sm">
-		<p class="text-danger">{error}</p>
-		<button onclick={load} class="mt-3 text-muted underline-offset-4 hover:text-fg hover:underline">
-			Try again
-		</button>
-	</div>
+	<div class="mt-8"><LoadError message={error} onretry={load} /></div>
 {:else if loaded && fresh && atLeast(guild.level, 'admin')}
 	<div class="mt-8">
 		<QuickSetup guildId={guild.id} {channels} {roles} ondone={load} />
@@ -201,25 +200,7 @@
 		</section>
 	{/if}
 
-	<dl class="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border lg:grid-cols-4">
-		{#each figures as f (f.label)}
-			<div class="bg-surface p-5">
-				<dt class="text-sm text-muted">{f.label}</dt>
-				<dd
-					class="mt-3 h-9 font-display text-4xl leading-none font-bold tabular-nums {f.loud
-						? 'text-accent'
-						: ''}"
-				>
-					{#if f.value == null}
-						<div class="h-8 w-14 animate-pulse rounded bg-elevated"></div>
-					{:else}
-						{f.value}
-					{/if}
-				</dd>
-				{#if f.hint}<dd class="mt-2 text-xs text-subtle">{f.hint}</dd>{/if}
-			</div>
-		{/each}
-	</dl>
+	<div class="mt-8"><StatGrid items={figures} /></div>
 
 	<section class="mt-12">
 		<div class="flex items-end justify-between gap-4">
@@ -237,15 +218,14 @@
 				{#each Array(3) as _, i (i)}<div class="h-16 animate-pulse bg-surface"></div>{/each}
 			</div>
 		{:else if waiting.length === 0}
-			<div class="mt-4 rounded-xl border border-dashed border-border px-6 py-12 text-center">
-				<p class="font-medium">Nobody's waiting on you</p>
-				<p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+			<div class="mt-4">
+				<EmptyState title="Nobody's waiting on you">
 					{#if open.length}
 						{open.length} open ticket{open.length === 1 ? ' is' : 's are'} waiting on the member instead.
 					{:else}
 						There are no open tickets right now.
 					{/if}
-				</p>
+				</EmptyState>
 			</div>
 		{:else}
 			<ul class="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">

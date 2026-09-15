@@ -28,8 +28,10 @@
 	import { discordURL, ticketState, timeAgo } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Field from '$lib/components/Field.svelte';
-	import Icon from '$lib/components/Icon.svelte';
+	import Icon, { type IconName } from '$lib/components/Icon.svelte';
+	import LoadError from '$lib/components/LoadError.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Rating from '$lib/components/Rating.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
@@ -768,6 +770,19 @@
 	let moreMenu = $state<HTMLElement>();
 	const menuItem =
 		'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-border/60 hover:text-fg';
+	// What the More menu offers for an open ticket, for people who can act on it.
+	const moreActions = $derived.by(() => {
+		const t = detail?.ticket;
+		if (!t || t.status !== 'open' || !canAct) return [];
+		const items: { icon: IconName; label: string; run: () => void }[] = [
+			{ icon: 'user', label: 'Assign to someone', run: openAssign },
+			{ icon: 'user-plus', label: 'Add someone', run: openAdd },
+			{ icon: 'user-minus', label: 'Remove someone', run: openRemove },
+			{ icon: 'pencil', label: 'Rename', run: openRename }
+		];
+		if (moveTargets.length > 0) items.push({ icon: 'arrow-right', label: 'Move to another ticket type', run: openMove });
+		return items;
+	});
 
 	// A draft belongs to the ticket it was written for.
 	$effect(() => {
@@ -864,6 +879,25 @@
 
 <svelte:head><title>Tickets · {guild.name} · {APP_NAME}</title></svelte:head>
 
+<!-- Search results in the Assign and Add dialogs: pick a person to act on. -->
+{#snippet people(list: Member[], busyId: string | null, searching: boolean, verb: string, busyVerb: string, pick: (m: Member) => void)}
+	<ul class="divide-y divide-border rounded-lg border border-border" aria-busy={searching}>
+		{#each list as m (m.id)}
+			<li>
+				<button
+					class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated disabled:opacity-60"
+					onclick={() => pick(m)}
+					disabled={!!busyId}
+				>
+					<img src={m.avatar_url} alt="" class="size-7 shrink-0 rounded-full bg-elevated" />
+					<span class="min-w-0 flex-1 truncate font-medium">{m.name}</span>
+					<span class="shrink-0 text-xs text-subtle">{busyId === m.id ? busyVerb : verb}</span>
+				</button>
+			</li>
+		{/each}
+	</ul>
+{/snippet}
+
 <PageHeader title="Tickets" description="Everything members have opened. Pick a ticket to read the conversation." />
 
 <div class="mt-6 flex-wrap items-center gap-2 {selectedId ? 'hidden lg:flex' : 'flex'}">
@@ -903,26 +937,15 @@
 <div class="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]">
 	<div class={selectedId ? 'hidden lg:block' : ''}>
 		{#if error}
-			<div class="rounded-xl border border-danger/30 bg-danger/5 p-5 text-sm">
-				<p class="text-danger">{error}</p>
-				<button onclick={load} class="mt-3 text-muted underline-offset-4 hover:text-fg hover:underline">
-					Try again
-				</button>
-			</div>
+			<LoadError message={error} onretry={load} />
 		{:else if tickets === null}
 			<div class="space-y-px overflow-hidden rounded-xl border border-border" aria-busy="true">
 				{#each Array(6) as _, i (i)}<div class="h-[84px] animate-pulse bg-surface"></div>{/each}
 			</div>
 		{:else if tickets.length === 0 && filtering}
-			<div class="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-				<p class="font-medium">No tickets match</p>
-				<p class="mt-1 text-sm text-muted">Try a different search or ticket type.</p>
-			</div>
+			<EmptyState icon="search" title="No tickets match">Try a different search or ticket type.</EmptyState>
 		{:else if tickets.length === 0}
-			<div class="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-				<p class="font-medium">{emptyText.title}</p>
-				<p class="mx-auto mt-1 max-w-xs text-sm text-muted">{emptyText.body}</p>
-			</div>
+			<EmptyState icon="inbox" title={emptyText.title}>{emptyText.body}</EmptyState>
 		{:else}
 			{#if selecting}
 				<div class="mb-2 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-2">
@@ -1043,7 +1066,7 @@
 				<Icon name="arrow-left" size={14} /> All tickets
 			</a>
 			{#if detailError}
-				<div class="rounded-xl border border-danger/30 bg-danger/5 p-5 text-sm text-danger">{detailError}</div>
+				<LoadError message={detailError} />
 			{:else if !detail}
 				<div class="h-40 animate-pulse rounded-xl bg-surface"></div>
 				<div class="mt-4 h-80 animate-pulse rounded-xl bg-surface"></div>
@@ -1104,60 +1127,18 @@
 									role="menu"
 									class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-border-strong bg-elevated p-1 shadow-xl shadow-black/40"
 								>
-									{#if t.status === 'open' && canAct}
+									{#each moreActions as a (a.label)}
 										<button
 											role="menuitem"
 											class={menuItem}
 											onclick={() => {
 												moreOpen = false;
-												openAssign();
+												a.run();
 											}}
 										>
-											<Icon name="user" size={14} /> Assign to someone
+											<Icon name={a.icon} size={14} /> {a.label}
 										</button>
-										<button
-											role="menuitem"
-											class={menuItem}
-											onclick={() => {
-												moreOpen = false;
-												openAdd();
-											}}
-										>
-											<Icon name="user-plus" size={14} /> Add someone
-										</button>
-										<button
-											role="menuitem"
-											class={menuItem}
-											onclick={() => {
-												moreOpen = false;
-												openRemove();
-											}}
-										>
-											<Icon name="user-minus" size={14} /> Remove someone
-										</button>
-										<button
-											role="menuitem"
-											class={menuItem}
-											onclick={() => {
-												moreOpen = false;
-												openRename();
-											}}
-										>
-											<Icon name="pencil" size={14} /> Rename
-										</button>
-									{/if}
-									{#if t.status === 'open' && canAct && moveTargets.length > 0}
-										<button
-											role="menuitem"
-											class={menuItem}
-											onclick={() => {
-												moreOpen = false;
-												openMove();
-											}}
-										>
-											<Icon name="arrow-right" size={14} /> Move to another ticket type
-										</button>
-									{/if}
+									{/each}
 									<a role="menuitem" href="/transcripts/{t.id}" target="_blank" rel="noopener" class={menuItem}>
 										<Icon name="transcript" size={14} /> Open the transcript page
 									</a>
@@ -1315,21 +1296,7 @@
 					{assignSearching ? 'Searching…' : 'Nobody on the support team matches that name.'}
 				</p>
 			{:else}
-				<ul class="divide-y divide-border rounded-lg border border-border" aria-busy={assignSearching}>
-					{#each assignees as a (a.id)}
-						<li>
-							<button
-								class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated disabled:opacity-60"
-								onclick={() => assignTo(a)}
-								disabled={!!assigning}
-							>
-								<img src={a.avatar_url} alt="" class="size-7 shrink-0 rounded-full bg-elevated" />
-								<span class="min-w-0 flex-1 truncate font-medium">{a.name}</span>
-								<span class="shrink-0 text-xs text-subtle">{assigning === a.id ? 'Assigning…' : 'Assign'}</span>
-							</button>
-						</li>
-					{/each}
-				</ul>
+				{@render people(assignees, assigning, assignSearching, 'Assign', 'Assigning…', assignTo)}
 			{/if}
 		{/if}
 	</div>
@@ -1360,21 +1327,7 @@
 					{addSearching ? 'Searching…' : 'Nobody in the server matches that.'}
 				</p>
 			{:else}
-				<ul class="divide-y divide-border rounded-lg border border-border" aria-busy={addSearching}>
-					{#each addResults as m (m.id)}
-						<li>
-							<button
-								class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-elevated disabled:opacity-60"
-								onclick={() => addMember(m)}
-								disabled={!!adding}
-							>
-								<img src={m.avatar_url} alt="" class="size-7 shrink-0 rounded-full bg-elevated" />
-								<span class="min-w-0 flex-1 truncate font-medium">{m.name}</span>
-								<span class="shrink-0 text-xs text-subtle">{adding === m.id ? 'Adding…' : 'Add'}</span>
-							</button>
-						</li>
-					{/each}
-				</ul>
+				{@render people(addResults, adding, addSearching, 'Add', 'Adding…', addMember)}
 			{/if}
 		{/if}
 	</div>

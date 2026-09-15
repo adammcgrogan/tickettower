@@ -4,9 +4,12 @@
 	import { emojiText, formatDuration } from '$lib/format';
 	import BarList from '$lib/components/BarList.svelte';
 	import ColumnChart from '$lib/components/ColumnChart.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Heatmap from '$lib/components/Heatmap.svelte';
+	import LoadError from '$lib/components/LoadError.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
+	import StatGrid from '$lib/components/StatGrid.svelte';
 
 	type Range = '7' | '30' | '90' | '365' | 'all';
 	type View = 'opened' | 'closed' | 'backlog';
@@ -38,6 +41,8 @@
 	let data = $state<Analytics | null>(null);
 	let loading = $state(true);
 	let error = $state('');
+	// Bumped by "Try again" to refetch with the same filters.
+	let attempt = $state(0);
 
 	// The filter is optional, so a failure here just hides it.
 	api<TicketType[]>(`/guilds/${guildId}/ticket-types`)
@@ -48,6 +53,7 @@
 	// skeleton. Only the latest request may update the page.
 	let latest = 0;
 	$effect(() => {
+		void attempt;
 		const query = `days=${range}${typeId ? `&type=${typeId}` : ''}&tz=${encodeURIComponent(timezone)}`;
 		const req = ++latest;
 		loading = true;
@@ -203,6 +209,20 @@
 		];
 	});
 
+	// Thirteen figures read better as three short rows than one wall.
+	const tileGroups = $derived.by(() => {
+		const pick = (...labels: string[]) =>
+			labels.map((l) => tiles.find((t) => t.label === l)).filter((t) => t !== undefined);
+		return [
+			{ title: 'Volume', items: pick('Tickets opened', 'Open now', 'Backlog age', 'Answered without a ticket') },
+			{ title: 'Speed', items: pick('First response', 'Replied within target', 'Time to claim', 'Resolution time') },
+			{
+				title: 'Outcomes',
+				items: pick('Satisfaction', 'Solved in one reply', 'Closed without a reply', 'Reopened tickets', 'Messages per ticket')
+			}
+		].map((g) => ({ ...g, items: g.items.map((t) => ({ ...t, hintLoud: t.waiting })) }));
+	});
+
 	const closures = $derived.by(() => {
 		if (!data) return [];
 		const c = data.closures;
@@ -245,7 +265,7 @@
 	const nothing = $derived(data != null && data.summary.opened === 0 && data.summary.closed === 0 && data.open_now === 0);
 </script>
 
-<PageHeader title="Analytics" description="How your support team is doing. Times and days are in UTC.">
+<PageHeader title="Analytics" description="How your support team is doing. Times and days are in your local time.">
 	{#snippet actions()}
 		<div class="flex flex-wrap items-center gap-2">
 			{#if types.length > 1}
@@ -262,37 +282,34 @@
 </PageHeader>
 
 {#if error && !data}
-	<p class="card mt-6 p-5 text-sm text-danger">{error}</p>
+	<div class="mt-8"><LoadError message={error} onretry={() => attempt++} /></div>
 {:else if !data}
 	<div class="mt-8 h-[248px] animate-pulse rounded-xl bg-surface"></div>
 	<div class="mt-4 h-80 animate-pulse rounded-xl bg-surface"></div>
 	<div class="mt-4 h-64 animate-pulse rounded-xl bg-surface"></div>
 {:else if nothing}
-	<div class="mt-8 rounded-xl border border-dashed border-border px-6 py-14 text-center">
-		<h2 class="font-semibold">No tickets in {period}</h2>
-		{#if range !== 'all'}
-			<p class="hint mx-auto mt-1 max-w-sm">Try a longer date range to see older tickets.</p>
-			<button type="button" class="btn btn-secondary mt-5" onclick={() => (range = 'all')}>Show all time</button>
-		{:else}
-			<p class="hint mx-auto mt-1 max-w-sm">
-				Once members start opening tickets, you'll see how quickly your team replies and how members rate their help.
-			</p>
-			<a href="/servers/{guildId}/panels" class="btn btn-primary mt-5">Set up your ticket panel</a>
-		{/if}
+	<div class="mt-8">
+		<EmptyState icon="chart" title="No tickets in {period}">
+			{range !== 'all'
+				? 'Try a longer date range to see older tickets.'
+				: "Once members start opening tickets, you'll see how quickly your team replies and how members rate their help."}
+			{#snippet action()}
+				{#if range !== 'all'}
+					<button type="button" class="btn btn-secondary" onclick={() => (range = 'all')}>Show all time</button>
+				{:else}
+					<a href="/servers/{guildId}/panels" class="btn btn-primary">Set up your ticket panel</a>
+				{/if}
+			{/snippet}
+		</EmptyState>
 	</div>
 {:else}
 	<div class="transition-opacity {loading ? 'opacity-60' : ''}">
-		<dl
-			class="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border lg:grid-cols-4"
-		>
-			{#each tiles as tile (tile.label)}
-				<div class="bg-surface p-5">
-					<dt class="text-sm text-muted">{tile.label}</dt>
-					<dd class="mt-3 font-display text-4xl leading-none font-bold tabular-nums">{tile.value}</dd>
-					<dd class="mt-2 text-xs {tile.waiting ? 'text-accent' : 'text-subtle'}">{tile.hint}</dd>
-				</div>
-			{/each}
-		</dl>
+		{#each tileGroups as g (g.title)}
+			<section class="mt-8">
+				<h2 class="mb-3 text-sm font-medium text-muted">{g.title}</h2>
+				<StatGrid items={g.items} />
+			</section>
+		{/each}
 		<p class="hint mt-2">
 			Showing {period}{data.previous ? `, compared with ${before}` : ''}. Open now counts every open ticket.
 		</p>
@@ -330,7 +347,7 @@
 						label="Median first response time by hour opened, {period}"
 						format={formatDuration}
 						steps={durationSteps}
-						keyLabel="Hour opened (UTC)"
+						keyLabel="Hour opened ({data.timezone})"
 						valueLabel="Median first response"
 						emptyText="No replies"
 						height={180}
