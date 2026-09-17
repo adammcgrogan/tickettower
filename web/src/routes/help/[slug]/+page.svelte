@@ -3,6 +3,7 @@
 	import { APP_NAME, SUPPORT_URL } from '$lib/brand';
 	import { guides } from '$lib/help';
 	import Icon from '$lib/components/Icon.svelte';
+	import Seo from '$lib/components/Seo.svelte';
 
 	const index = $derived(guides.findIndex((g) => g.slug === page.params.slug));
 	const guide = $derived(index >= 0 ? guides[index] : undefined);
@@ -29,7 +30,11 @@
 	});
 </script>
 
-<svelte:head><title>{guide?.title ?? 'Help'} · {APP_NAME}</title></svelte:head>
+<Seo
+	title="{guide?.title ?? 'Help'} · {APP_NAME} help"
+	description={guide?.summary ?? `Guides to setting up ${APP_NAME}.`}
+	path="/help/{guide?.slug ?? page.params.slug}"
+/>
 
 <a href="/help" class="mb-6 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg md:hidden">
 	<Icon name="arrow-left" size={14} /> All guides
@@ -59,7 +64,7 @@
 					</p>
 					<ol>
 						<li>
-							<a href="/api/invite" data-sveltekit-reload>Add {APP_NAME} to your server</a>. Keep the
+							<a href="/api/invite?ref=help" data-sveltekit-reload>Add {APP_NAME} to your server</a>. Keep the
 							permissions it asks for; it needs them to create tickets.
 						</li>
 						<li>Log in to the dashboard with Discord and pick your server.</li>
@@ -432,7 +437,7 @@
 						In Discord, open <strong>Server Settings → Roles</strong>, pick {APP_NAME}'s role and turn the
 						permission on. If it's on there but still missing, the category or channel is overriding it:
 						open its <strong>Edit Channel → Permissions</strong> and allow it for {APP_NAME}'s role. You
-						can also re-add the bot from the <a href="/api/invite" data-sveltekit-reload>invite link</a>
+						can also re-add the bot from the <a href="/api/invite?ref=help" data-sveltekit-reload>invite link</a>
 						to restore everything it asks for.
 					</p>
 				{:else if guide.slug === 'forms'}

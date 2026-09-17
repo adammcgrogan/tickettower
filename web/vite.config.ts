@@ -13,9 +13,20 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			// Build a static SPA; the Go API serves it and falls back to
-			// index.html for client-side routes.
-			adapter: adapter({ fallback: 'index.html' }),
+			// Public pages (landing, help, privacy, terms) are prerendered so
+			// search engines and link previews see them; everything else is a
+			// client-rendered SPA. The Go API serves the prerendered files and
+			// falls back to 200.html for client-side routes.
+			adapter: adapter({ fallback: '200.html' }),
+			prerender: {
+				// Crawling the public pages finds links to the dashboard and the
+				// API, which aren't prerendered; only a broken public link fails
+				// the build.
+				handleHttpError: ({ path, message }) => {
+					if (path.startsWith('/api/')) return;
+					throw new Error(message);
+				}
+			},
 
 			// Written into index.html as a <meta> tag, with a hash for the
 			// bootstrap script. Fonts are bundled; images come from Discord's

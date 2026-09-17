@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
@@ -167,9 +168,42 @@ func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// inviteSources are the ?ref= values on invite links that get their own row
+// in the admin panel's click counts. Anything else counts as "other", so a
+// stranger can't fill the table with made-up sources.
+var inviteSources = map[string]bool{
+	"site": true, "help": true, "dashboard": true, "transcript": true, "github": true,
+	"topgg": true, "discordbotlist": true, "dbotsgg": true, "directory": true, "support": true,
+	"tiktok": true, "youtube": true, "instagram": true, "x": true, "reddit": true, "blog": true,
+}
+
+// inviteSource normalises an invite link's ?ref= for counting.
+func inviteSource(ref string) string {
+	ref = strings.ToLower(strings.TrimSpace(ref))
+	switch {
+	case ref == "":
+		return "direct"
+	case inviteSources[ref]:
+		return ref
+	default:
+		return "other"
+	}
+}
+
 // invite redirects to Discord's bot authorization page, optionally
-// preselecting a guild.
+// preselecting a guild. Each click is counted by its ?ref= source.
 func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
+	if s.store != nil {
+		source := inviteSource(r.URL.Query().Get("ref"))
+		// Counting never holds up the redirect.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := s.store.CountInviteClick(ctx, source); err != nil {
+				s.log.Warn("count invite click", slog.Any("err", err))
+			}
+		}()
+	}
 	values := discord.QueryValues{
 		"client_id": s.cfg.DiscordClientID,
 		"scope":     "bot applications.commands",
@@ -414,25 +448,47 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// spaHandler serves the built frontend, falling back to index.html so
-// client-side routes work on refresh. Hashed assets are cached for good;
-// everything else (index.html above all, which names those assets) must be
-// revalidated on every load, or a deploy leaves browsers with a stale shell
-// pointing at chunks that no longer exist.
+// spaFallback is the client-rendered shell the static build writes for every
+// route that isn't prerendered (see adapter-static's fallback in
+// web/vite.config.ts).
+const spaFallback = "200.html"
+
+// spaHandler serves the built frontend. Public pages (the landing page, help,
+// privacy, terms) are prerendered to index.html and <route>.html, so search
+// engines and link previews see real content; every other route gets the
+// client-rendered shell. Hashed assets are cached for good; everything else
+// (the HTML above all, which names those assets) must be revalidated on every
+// load, or a deploy leaves browsers with a stale shell pointing at chunks that
+// no longer exist.
 func spaHandler(dir string) http.Handler {
-	fileServer := http.FileServer(http.Dir(dir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := filepath.Join(dir, filepath.Clean("/"+r.URL.Path))
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			if strings.HasPrefix(r.URL.Path, "/_app/immutable/") {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			} else {
-				w.Header().Set("Cache-Control", "no-cache")
+		clean := filepath.Clean("/" + r.URL.Path)
+		w.Header().Set("Cache-Control", "no-cache")
+		if strings.HasPrefix(clean, "/_app/immutable/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
+		for _, candidate := range []string{clean, clean + ".html", filepath.Join(clean, "index.html")} {
+			path := filepath.Join(dir, candidate)
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				// ServeFile would redirect a path ending in /index.html to its
+				// directory; serveContent doesn't.
+				f, err := os.Open(path)
+				if err != nil {
+					break
+				}
+				defer f.Close()
+				http.ServeContent(w, r, info.Name(), info.ModTime(), f)
+				return
 			}
-			fileServer.ServeHTTP(w, r)
+		}
+		if strings.HasPrefix(clean, "/_app/") {
+			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Cache-Control", "no-cache")
-		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+		path := filepath.Join(dir, spaFallback)
+		if _, err := os.Stat(path); err != nil {
+			path = filepath.Join(dir, "index.html") // builds from before prerendering
+		}
+		http.ServeFile(w, r, path)
 	})
 }

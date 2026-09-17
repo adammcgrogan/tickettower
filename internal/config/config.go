@@ -64,6 +64,12 @@ type Config struct {
 	// StripePriceID is the one premium monthly price. It's fixed here,
 	// server-side, and never accepted from a client request.
 	StripePriceID string
+
+	// Bot list API tokens. Each one set makes the bot post its server count
+	// to that site; TopggToken also turns on the dashboard's review prompt.
+	TopggToken          string
+	DiscordBotListToken string
+	DiscordBotsGGToken  string
 }
 
 // BillingEnabled reports whether Stripe billing is configured, so the
@@ -71,6 +77,15 @@ type Config struct {
 func (c Config) BillingEnabled() bool { return c.StripePriceID != "" }
 
 func (c Config) IsDev() bool { return c.Env != "production" }
+
+// ReviewURL is where the dashboard asks happy servers to leave a review: the
+// bot's top.gg page, once it's listed there (a top.gg token is configured).
+func (c Config) ReviewURL() string {
+	if c.TopggToken == "" || c.DiscordClientID == 0 {
+		return ""
+	}
+	return "https://top.gg/bot/" + c.DiscordClientID.String() + "#reviews"
+}
 
 // Load reads configuration from the environment and fails if any of the
 // required variables are unset.
@@ -98,6 +113,9 @@ func Load(required ...string) (Config, error) {
 		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		StripePriceID:       os.Getenv("STRIPE_PRICE_ID"),
+		TopggToken:          os.Getenv("TOPGG_TOKEN"),
+		DiscordBotListToken: os.Getenv("DISCORDBOTLIST_TOKEN"),
+		DiscordBotsGGToken:  os.Getenv("DISCORDBOTSGG_TOKEN"),
 	}
 
 	var err error

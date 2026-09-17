@@ -56,6 +56,19 @@ plan's price). All three are optional — leaving them unset just hides the
 dashboard's Plan section. `DEV_GUILD_ID` stays unset so commands register
 globally.
 
+Bot list sites, all optional and set on both services: `TOPGG_TOKEN`,
+`DISCORDBOTLIST_TOKEN` and `DISCORDBOTSGG_TOKEN` (each from that site's API
+settings once the bot is listed). With a token set, the bot posts its server
+count to that site every 30 minutes; `TOPGG_TOKEN` also turns on the
+dashboard's "leave a review" prompt for servers that have closed 50 tickets.
+
+The public pages (landing, help, privacy, terms) are prerendered at build time
+with link preview tags, `sitemap.xml` and `robots.txt`; they use
+`VITE_SITE_URL` (default `https://tickettower.net`) for absolute links.
+Everything else is served from the `200.html` shell. Invite links take a
+`?ref=` source (the list is `inviteSources` in `internal/api/server.go`), and
+`/admin` shows clicks per source.
+
 The production Discord application has `https://tickettower.net/api/auth/callback`
 as its OAuth2 redirect.
 

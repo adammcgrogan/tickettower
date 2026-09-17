@@ -16,6 +16,7 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/entitlements"
+	"github.com/adammcgrogan/tickettower/internal/panels"
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
 
@@ -148,6 +149,15 @@ func (s *Server) limits(ctx context.Context, guildID snowflake.ID) entitlements.
 	return entitlements.ForTier(tier)
 }
 
+// panelFooter is the "Powered by" line for a guild's panels, or "" when its
+// plan removes branding.
+func (s *Server) panelFooter(ctx context.Context, guildID snowflake.ID) string {
+	if !s.limits(ctx, guildID).Branding {
+		return ""
+	}
+	return panels.Footer(s.cfg.AppName, s.cfg.PublicURL)
+}
+
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	g := guildFrom(r)
 	stats, err := s.store.TicketStats(r.Context(), g.ID)
@@ -172,6 +182,7 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 		"limits":               entitlements.ForTier(tier),
 		"has_billing_customer": hasBillingCustomer,
 		"billing_enabled":      s.cfg.BillingEnabled(),
+		"review_url":           s.cfg.ReviewURL(),
 	})
 }
 

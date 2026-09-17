@@ -103,7 +103,7 @@ func TestButtonStylesLabelsAndImages(t *testing.T) {
 		{ID: 2, Name: "Report", ButtonStyle: store.ButtonDanger},
 		{ID: 3, Name: "Other"}, // no style saved: primary
 	}
-	msg := Create("App", true, p, types)
+	msg := Create("Powered by App", p, types)
 	row := msg.Components[0].(discord.ActionRowComponent)
 	got := []struct {
 		label string
@@ -136,18 +136,31 @@ func TestButtonStylesLabelsAndImages(t *testing.T) {
 	if e.Footer == nil || e.Footer.Text != "Powered by App" {
 		t.Errorf("footer = %+v, want branding", e.Footer)
 	}
-	if unbranded := Create("App", false, p, types).Embeds[0]; unbranded.Footer != nil {
+	if unbranded := Create("", p, types).Embeds[0]; unbranded.Footer != nil {
 		t.Errorf("footer = %+v, want none for premium", unbranded.Footer)
 	}
 
 	p.Style, p.Placeholder = store.PanelDropdown, "What do you need?"
-	menu := Create("App", true, p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
+	menu := Create("Powered by App", p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
 	if menu.Placeholder != "What do you need?" || menu.Options[0].Label != "Get help" {
 		t.Errorf("dropdown = %q, first option %q", menu.Placeholder, menu.Options[0].Label)
 	}
 	p.Placeholder = ""
-	menu = Create("App", true, p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
+	menu = Create("Powered by App", p, types).Components[0].(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
 	if menu.Placeholder != DefaultPlaceholder {
 		t.Errorf("default placeholder = %q", menu.Placeholder)
+	}
+}
+
+func TestFooter(t *testing.T) {
+	for url, want := range map[string]string{
+		"https://tickettower.net":     "Powered by Ticket Tower · tickettower.net",
+		"https://www.tickettower.net": "Powered by Ticket Tower · tickettower.net",
+		"http://localhost:5173":       "Powered by Ticket Tower",
+		"":                            "Powered by Ticket Tower",
+	} {
+		if got := Footer("Ticket Tower", url); got != want {
+			t.Errorf("Footer(%q) = %q, want %q", url, got, want)
+		}
 	}
 }

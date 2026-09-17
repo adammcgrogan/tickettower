@@ -247,7 +247,7 @@ func TestTicketLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Open != 0 || stats.OpenedWeek != 2 {
+	if stats.Open != 0 || stats.OpenedWeek != 2 || stats.ClosedTotal != 2 {
 		t.Errorf("stats = %+v", stats)
 	}
 	closed, _ := s.ListTickets(ctx, testGuild, TicketQuery{Status: StatusClosed, Limit: 10})

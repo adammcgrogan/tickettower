@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { APP_NAME } from '$lib/brand';
 	import Logo from '$lib/components/Logo.svelte';
+	import Seo from '$lib/components/Seo.svelte';
 
 	const GITHUB_URL = 'https://github.com/adammcgrogan/tickettower';
 </script>
 
-<svelte:head><title>Privacy · {APP_NAME}</title></svelte:head>
+<Seo
+	title="Privacy · {APP_NAME}"
+	description="What {APP_NAME} stores, why, who can see it and how to delete it."
+	path="/privacy"
+/>
 
 <div class="min-h-dvh">
 	<header class="mx-auto flex h-16 max-w-3xl items-center px-5">
@@ -76,6 +81,10 @@
 					operator, and include the server or user ID.
 				</p>
 			</section>
+
+			<p>
+				Using {APP_NAME} is also covered by the <a href="/terms" class="text-accent hover:underline">terms of service</a>.
+			</p>
 		</div>
 	</main>
 </div>

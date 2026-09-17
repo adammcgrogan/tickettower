@@ -3,6 +3,7 @@
 package panels
 
 import (
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -62,19 +63,30 @@ func IsValidEmoji(s string) bool {
 	return n <= 10 && !strings.ContainsAny(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 <>:")
 }
 
-// Create renders the panel as a new message. branding adds a "Powered by"
-// footer, which free-tier guilds get and premium ones don't.
-func Create(appName string, branding bool, p store.Panel, types []store.TicketType) discord.MessageCreate {
+// Create renders the panel as a new message. footer is the "Powered by" line
+// free-tier guilds get (see Footer), or "" for none.
+func Create(footer string, p store.Panel, types []store.TicketType) discord.MessageCreate {
 	return discord.NewMessageCreate().
-		WithEmbeds(embed(appName, branding, p)).
+		WithEmbeds(embed(footer, p)).
 		WithComponents(components(p, types)...)
 }
 
 // Update renders the panel as an edit to its existing message.
-func Update(appName string, branding bool, p store.Panel, types []store.TicketType) discord.MessageUpdate {
+func Update(footer string, p store.Panel, types []store.TicketType) discord.MessageUpdate {
 	return discord.NewMessageUpdate().
-		WithEmbeds(embed(appName, branding, p)).
+		WithEmbeds(embed(footer, p)).
 		WithComponents(components(p, types)...)
+}
+
+// Footer is the branding line on free-tier panels. Embed footers can't link,
+// so it names the site for members who want the bot for their own server,
+// when the dashboard has a public https address.
+func Footer(appName, publicURL string) string {
+	u, err := url.Parse(publicURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return "Powered by " + appName
+	}
+	return "Powered by " + appName + " · " + strings.TrimPrefix(u.Host, "www.")
 }
 
 // Ordered returns the panel's ticket types in display order, skipping any
@@ -96,10 +108,10 @@ func Ordered(p store.Panel, types []store.TicketType) []store.TicketType {
 // DefaultPlaceholder is the dropdown's prompt when a panel doesn't set one.
 const DefaultPlaceholder = "Choose a topic…"
 
-func embed(appName string, branding bool, p store.Panel) discord.Embed {
+func embed(footer string, p store.Panel) discord.Embed {
 	e := discord.NewEmbed().WithTitle(p.Title).WithColor(p.Color)
-	if branding {
-		e = e.WithFooterText("Powered by " + appName)
+	if footer != "" {
+		e = e.WithFooterText(footer)
 	}
 	if p.Description != "" {
 		e = e.WithDescription(p.Description)

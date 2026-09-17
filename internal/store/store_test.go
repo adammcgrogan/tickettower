@@ -27,7 +27,7 @@ func testStore(t *testing.T) *Store {
 	if err := s.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.pool.Exec(ctx, `TRUNCATE guilds CASCADE`); err != nil {
+	if _, err := s.pool.Exec(ctx, `TRUNCATE guilds, invite_clicks CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 	return s

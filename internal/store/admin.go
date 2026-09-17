@@ -25,6 +25,9 @@ type AdminOverview struct {
 	// the last 30 days, i.e. are actually using the bot rather than just
 	// having it sit there unconfigured.
 	UsingGuilds30 int `json:"using_guilds_last_30"`
+
+	// InviteSources is invite link clicks per ?ref= source, last 30 days.
+	InviteSources []InviteSource `json:"invite_sources"`
 }
 
 // AdminOverview summarises install, plan and usage numbers across every
@@ -54,6 +57,11 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		       count(*) FILTER (WHERE closed_at >= now() - interval '30 days'),
 		       count(DISTINCT guild_id) FILTER (WHERE opened_at >= now() - interval '30 days')
 		FROM tickets`).Scan(&o.TicketsOpenedLast30, &o.TicketsClosedLast30, &o.UsingGuilds30)
+	if err != nil {
+		return o, err
+	}
+
+	o.InviteSources, err = s.InviteSources(ctx, 30)
 	return o, err
 }
 

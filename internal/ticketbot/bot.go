@@ -143,6 +143,7 @@ func (b *Bot) Run(ctx context.Context) error {
 	b.log.Info("bot connected", slog.Int("open_tickets", len(refs)))
 	go b.purgeTranscripts(ctx)
 	go b.autoCloseTickets(ctx)
+	go b.postServerCounts(ctx, b.client.ID())
 
 	<-ctx.Done()
 	closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

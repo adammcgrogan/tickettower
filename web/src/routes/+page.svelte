@@ -1,21 +1,26 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
 	import { getMe, loginURL, type TicketType, type User } from '$lib/api';
 	import { APP_NAME, SUPPORT_URL } from '$lib/brand';
 	import Icon from '$lib/components/Icon.svelte';
 	import Logo from '$lib/components/Logo.svelte';
 	import PanelPreview from '$lib/components/PanelPreview.svelte';
+	import Seo from '$lib/components/Seo.svelte';
 	import TicketStub from '$lib/components/TicketStub.svelte';
 	import QueueDemo from '$lib/components/landing/QueueDemo.svelte';
 	import Walkthrough from '$lib/components/landing/Walkthrough.svelte';
+	import { inviteHref } from '$lib/public';
 
 	const GITHUB_URL = 'https://github.com/adammcgrogan/tickettower';
 
 	let user = $state<User | null>(null);
-	const loginFailed = $derived(page.url.searchParams.get('error') === 'login_failed');
+	// This page is prerendered, so the URL is only read in the browser.
+	let loginFailed = $state(false);
+	let invite = $state(inviteHref('site'));
 
 	onMount(async () => {
+		loginFailed = new URLSearchParams(location.search).get('error') === 'login_failed';
+		invite = inviteHref('site', location.search);
 		user = await getMe().catch(() => null);
 	});
 
@@ -85,8 +90,8 @@
 	];
 
 	const comparison: { label: string; tower: string | boolean; a: string | boolean; b: string | boolean }[] = [
-		{ label: 'Starting price', tower: 'Free', a: 'Free, Pro from $8/mo', b: 'Free, Premium from $2.99/mo' },
-		{ label: 'Reply to tickets from a browser', tower: true, a: false, b: true },
+		{ label: 'Starting price', tower: 'Free', a: 'Free, Premium $7.99/mo', b: 'Free, Premium $2.99/mo' },
+		{ label: 'Reply to tickets from a browser', tower: true, a: false, b: 'Premium only' },
 		{ label: 'Analytics and response times', tower: true, a: false, b: false },
 		{ label: 'Quiet tickets close themselves', tower: true, a: true, b: false }
 	];
@@ -139,17 +144,15 @@
 	const external = (href: string) => href.startsWith('http');
 </script>
 
-<svelte:head>
-	<title>{APP_NAME} · Ticket bot for Discord</title>
-	<meta
-		name="description"
-		content="{APP_NAME} is a free, open source ticket bot for Discord. Members open private tickets with one click, your team sees who is waiting, and every conversation is saved."
-	/>
-</svelte:head>
+<Seo
+	title="{APP_NAME}: the free ticket bot for Discord"
+	description="{APP_NAME} is a free, open source ticket bot for Discord. Members open private tickets with one click, your team sees who is waiting and replies from the dashboard, and every conversation is saved."
+	path="/"
+/>
 
 {#snippet ctas(size = 'h-11 px-5')}
 	<div class="flex flex-col gap-3 sm:flex-row">
-		<a href="/api/invite" data-sveltekit-reload class="btn btn-primary {size}">
+		<a href={invite} data-sveltekit-reload class="btn btn-primary {size}">
 			Add to Discord <Icon name="arrow-right" size={15} />
 		</a>
 		<a
@@ -492,6 +495,7 @@
 				<a href="/help" class="transition-colors hover:text-fg">Help</a>
 				<a href={SUPPORT_URL} target="_blank" rel="noopener" class="transition-colors hover:text-fg">Get support</a>
 				<a href="/privacy" class="transition-colors hover:text-fg">Privacy</a>
+				<a href="/terms" class="transition-colors hover:text-fg">Terms</a>
 				<a href={GITHUB_URL} target="_blank" rel="noopener" class="transition-colors hover:text-fg">
 					Open source on GitHub
 				</a>

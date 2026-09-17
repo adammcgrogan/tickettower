@@ -87,5 +87,12 @@
 		<p class="mt-3 text-center text-xs text-subtle">
 			Attachment links are hosted by Discord and may stop working after a while.
 		</p>
+		{#if !data.guild.can_manage}
+			<!-- Members read transcripts too, and some of them run servers. -->
+			<p class="mt-10 border-t border-border pt-5 text-center text-sm text-muted">
+				Run a Discord server? {APP_NAME} is a free ticket bot.
+				<a href="/?ref=transcript" class="text-fg underline-offset-4 hover:underline">Add it to yours</a>
+			</p>
+		{/if}
 	{/if}
 </main>

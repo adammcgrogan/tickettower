@@ -2,7 +2,7 @@
 	import { onMount, setContext } from 'svelte';
 	import { page } from '$app/state';
 	import { api, atLeast, errorMessage, send, type Guild, type Stats, type Ticket, type User } from '$lib/api';
-	import { SUPPORT_URL } from '$lib/brand';
+	import { APP_NAME, SUPPORT_URL } from '$lib/brand';
 	import { toast } from '$lib/toast.svelte';
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -56,6 +56,31 @@
 			.catch(() => {});
 	});
 	const showUpgrade = $derived(!!plan?.billing_enabled && plan.tier === 'free');
+
+	// Servers that have closed this many tickets have seen enough to review
+	// the bot. Asked once per server; "Not now" is remembered in this browser.
+	const REVIEW_AFTER = 50;
+	let reviewDismissed = $state(true);
+	$effect(() => {
+		const id = guild?.id;
+		if (!id) return;
+		try {
+			reviewDismissed = localStorage.getItem(`review-dismissed:${id}`) === '1';
+		} catch {
+			reviewDismissed = false;
+		}
+	});
+	const showReview = $derived(
+		!!plan?.review_url && plan.tickets.closed_total >= REVIEW_AFTER && !reviewDismissed
+	);
+	function dismissReview() {
+		reviewDismissed = true;
+		try {
+			localStorage.setItem(`review-dismissed:${guild?.id}`, '1');
+		} catch {
+			// Private browsing: it'll ask again next visit.
+		}
+	}
 
 	async function upgrade() {
 		if (!guild) return;
@@ -234,7 +259,23 @@
 			{/if}
 		</nav>
 
-		{#if showUpgrade && plan}
+		{#if showReview && plan}
+			<div class="mx-3 mb-3 rounded-lg border border-border p-3">
+				<p class="flex items-center gap-2 text-sm font-medium">
+					<Icon name="sparkles" size={15} class="text-muted" /> Enjoying {APP_NAME}?
+				</p>
+				<p class="hint mt-1">
+					{guild?.name} has closed {plan.tickets.closed_total.toLocaleString()} tickets with it. A short review helps
+					other servers find it.
+				</p>
+				<div class="mt-3 flex gap-2">
+					<a href={plan.review_url} target="_blank" rel="noopener" class="btn btn-secondary h-8 flex-1" onclick={dismissReview}>
+						Leave a review
+					</a>
+					<button class="btn btn-ghost h-8 px-2.5" onclick={dismissReview}>Not now</button>
+				</div>
+			</div>
+		{:else if showUpgrade && plan}
 			<div class="mx-3 mb-3 rounded-lg border border-border p-3">
 				<p class="flex items-center gap-2 text-sm font-medium">
 					<Icon name="sparkles" size={15} class="text-muted" /> Free plan

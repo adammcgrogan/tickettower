@@ -20,6 +20,8 @@ export type AdminOverview = {
 	tickets_closed_last_30: number;
 	/** Active guilds that opened at least one ticket in the last 30 days. */
 	using_guilds_last_30: number;
+	/** Invite link clicks per ?ref= source, last 30 days, most first. */
+	invite_sources: { source: string; clicks: number }[];
 };
 
 export type AdminGuild = {
@@ -404,7 +406,7 @@ export type SetupProblem = {
 };
 
 export type Stats = {
-	tickets: { open: number; opened_week: number };
+	tickets: { open: number; opened_week: number; closed_total: number };
 	tier: 'free' | 'premium';
 	limits: {
 		max_panels: number;
@@ -418,6 +420,8 @@ export type Stats = {
 	has_billing_customer: boolean;
 	/** Whether the dashboard is running with Stripe billing configured at all. */
 	billing_enabled: boolean;
+	/** Where to ask for a review (the bot's top.gg page), or '' when it isn't listed. */
+	review_url: string;
 };
 
 export type AnalyticsSummary = {

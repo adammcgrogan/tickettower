@@ -2,11 +2,16 @@
 	import { APP_NAME, SUPPORT_URL } from '$lib/brand';
 	import { guides, sections } from '$lib/help';
 	import Icon from '$lib/components/Icon.svelte';
+	import Seo from '$lib/components/Seo.svelte';
 
 	const start = guides[0];
 </script>
 
-<svelte:head><title>Help · {APP_NAME}</title></svelte:head>
+<Seo
+	title="Help · {APP_NAME}"
+	description="Short guides to setting up {APP_NAME}, the free Discord ticket bot, and running tickets with your team."
+	path="/help"
+/>
 
 <section class="pt-14 pb-10 lg:pt-20">
 	<h1 class="font-display text-5xl leading-none font-bold sm:text-6xl">Help</h1>

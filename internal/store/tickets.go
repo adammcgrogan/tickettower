@@ -462,13 +462,17 @@ func (s *Store) ListTicketsByOpener(ctx context.Context, openerID snowflake.ID) 
 type TicketStats struct {
 	Open       int `json:"open"`
 	OpenedWeek int `json:"opened_week"`
+	// ClosedTotal is every ticket ever closed, for deciding when a server has
+	// used the bot enough to be asked for a review.
+	ClosedTotal int `json:"closed_total"`
 }
 
 func (s *Store) TicketStats(ctx context.Context, guildID snowflake.ID) (TicketStats, error) {
 	var st TicketStats
 	err := s.pool.QueryRow(ctx, `
 		SELECT count(*) FILTER (WHERE status = 'open'),
-		       count(*) FILTER (WHERE opened_at > now() - interval '7 days')
-		FROM tickets WHERE guild_id = $1`, int64(guildID)).Scan(&st.Open, &st.OpenedWeek)
+		       count(*) FILTER (WHERE opened_at > now() - interval '7 days'),
+		       count(*) FILTER (WHERE status = 'closed')
+		FROM tickets WHERE guild_id = $1`, int64(guildID)).Scan(&st.Open, &st.OpenedWeek, &st.ClosedTotal)
 	return st, err
 }

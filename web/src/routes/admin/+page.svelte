@@ -14,6 +14,28 @@
 	let guilds = $state<AdminGuild[] | null>(null);
 	let error = $state('');
 
+	// Readable names for the invite ?ref= sources (inviteSources in the API).
+	const sourceLabels: Record<string, string> = {
+		direct: 'No source',
+		other: 'Other',
+		site: 'Website',
+		help: 'Help guides',
+		dashboard: 'Dashboard',
+		transcript: 'Transcripts',
+		github: 'GitHub',
+		topgg: 'top.gg',
+		discordbotlist: 'discordbotlist.com',
+		dbotsgg: 'discord.bots.gg',
+		directory: 'Discord App Directory',
+		support: 'Support server',
+		tiktok: 'TikTok',
+		youtube: 'YouTube',
+		instagram: 'Instagram',
+		x: 'X',
+		reddit: 'Reddit',
+		blog: 'Blog posts'
+	};
+
 	const tierOptions: { value: 'free' | 'premium'; label: string }[] = [
 		{ value: 'free', label: 'Free' },
 		{ value: 'premium', label: 'Premium' }
@@ -107,6 +129,32 @@
 				</dd>
 			</div>
 		</dl>
+
+		<section class="card mt-4 overflow-hidden">
+			<div class="p-5 pb-3">
+				<h2 class="font-semibold">Where installs come from</h2>
+				<p class="hint mt-0.5">
+					Invite link clicks by source, last 30 days. Tag links with <code class="text-fg">?ref=</code>, like
+					<code class="text-fg">/api/invite?ref=topgg</code>.
+				</p>
+			</div>
+			{#if overview.invite_sources.length === 0}
+				<p class="px-5 pb-5 text-sm text-subtle">No invite clicks in the last 30 days.</p>
+			{:else}
+				{@const most = overview.invite_sources[0].clicks}
+				<ul class="divide-y divide-border border-t border-border">
+					{#each overview.invite_sources as src (src.source)}
+						<li class="flex items-center gap-4 px-5 py-2.5 text-sm">
+							<span class="w-32 shrink-0 truncate">{sourceLabels[src.source] ?? src.source}</span>
+							<span class="h-2 flex-1 overflow-hidden rounded-full bg-elevated" aria-hidden="true">
+								<span class="block h-full rounded-full bg-chart" style="width:{Math.max(2, (src.clicks / most) * 100)}%"></span>
+							</span>
+							<span class="w-16 shrink-0 text-right tabular-nums">{src.clicks.toLocaleString()}</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 
 		<section class="card mt-4 overflow-hidden">
 			<div class="p-5 pb-3">

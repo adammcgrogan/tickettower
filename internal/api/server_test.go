@@ -35,7 +35,10 @@ func newTestEnv(t *testing.T, opts ...func(*config.Config)) testEnv {
 
 	root := t.TempDir()
 	static := filepath.Join(root, "build")
-	writeFile(t, filepath.Join(static, "index.html"), "<!doctype html>spa")
+	writeFile(t, filepath.Join(static, "200.html"), "<!doctype html>spa")
+	writeFile(t, filepath.Join(static, "index.html"), "<!doctype html>landing")
+	writeFile(t, filepath.Join(static, "help.html"), "<!doctype html>help index")
+	writeFile(t, filepath.Join(static, "help", "getting-started.html"), "<!doctype html>getting started")
 	writeFile(t, filepath.Join(static, "_app", "immutable", "app.js"), "console.log(1)")
 	writeFile(t, filepath.Join(root, "secret.txt"), "secret")
 
@@ -88,8 +91,11 @@ func TestSPA(t *testing.T) {
 	tests := []struct {
 		name, path, wantBody string
 	}{
-		{"client route falls back to index", "/servers/123", "spa"},
-		{"root serves index", "/", "spa"},
+		{"client route falls back to the shell", "/servers/123", "spa"},
+		{"root serves the prerendered landing page", "/", "landing"},
+		{"prerendered page", "/help", "help index"},
+		{"prerendered page with a trailing slash", "/help/", "help index"},
+		{"nested prerendered page", "/help/getting-started", "getting started"},
 		{"static asset", "/_app/immutable/app.js", "console.log(1)"},
 	}
 	for _, tt := range tests {
@@ -109,13 +115,18 @@ func TestSPA(t *testing.T) {
 		}
 	}
 
+	// A missing build asset is a 404, not the HTML shell parsed as JavaScript.
+	if rec := env.do("GET", "/_app/immutable/gone.js", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("missing asset = %d, want 404", rec.Code)
+	}
+
 	rec := env.do("GET", "/_app/immutable/app.js", nil)
 	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
 		t.Errorf("immutable asset Cache-Control = %q", cc)
 	}
 	// The shell must be revalidated every time, or a deploy strands browsers
 	// on an index.html that names assets that are gone.
-	for _, path := range []string{"/", "/servers/123"} {
+	for _, path := range []string{"/", "/help", "/servers/123"} {
 		if cc := env.do("GET", path, nil).Header().Get("Cache-Control"); cc != "no-cache" {
 			t.Errorf("%s Cache-Control = %q, want no-cache", path, cc)
 		}
@@ -222,6 +233,21 @@ func TestInviteRedirect(t *testing.T) {
 	for _, want := range []string{"client_id=123456789", "guild_id=987654321", perms, "applications.commands"} {
 		if !strings.Contains(loc, want) {
 			t.Errorf("invite URL %q missing %q", loc, want)
+		}
+	}
+}
+
+func TestInviteSource(t *testing.T) {
+	for ref, want := range map[string]string{
+		"":           "direct",
+		"topgg":      "topgg",
+		" TikTok ":   "tiktok",
+		"made-up":    "other",
+		"<script>":   "other",
+		"transcript": "transcript",
+	} {
+		if got := inviteSource(ref); got != want {
+			t.Errorf("inviteSource(%q) = %q, want %q", ref, got, want)
 		}
 	}
 }

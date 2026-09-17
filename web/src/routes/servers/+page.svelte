@@ -111,7 +111,7 @@
 						</a>
 					{:else}
 						<a
-							href="/api/invite?guild_id={g.id}"
+							href="/api/invite?guild_id={g.id}&ref=dashboard"
 							target="_blank"
 							rel="noopener"
 							class="group flex items-center gap-4 rounded-xl border border-border bg-surface/50 p-4 transition-colors hover:border-border-strong hover:bg-elevated"

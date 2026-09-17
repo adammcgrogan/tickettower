@@ -257,11 +257,11 @@ func (s *Server) publishPanel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	branding := s.limits(r.Context(), g.ID).Branding
+	footer := s.panelFooter(r.Context(), g.ID)
 
 	published := p.ChannelID != nil && p.MessageID != nil
 	if published && *p.ChannelID == in.ChannelID {
-		_, err := s.discord.UpdateMessage(in.ChannelID, *p.MessageID, panels.Update(s.cfg.AppName, branding, p, types), rest.WithCtx(r.Context()))
+		_, err := s.discord.UpdateMessage(in.ChannelID, *p.MessageID, panels.Update(footer, p, types), rest.WithCtx(r.Context()))
 		if err == nil {
 			writeJSON(w, http.StatusOK, p)
 			return
@@ -273,7 +273,7 @@ func (s *Server) publishPanel(w http.ResponseWriter, r *http.Request) {
 		// The old message was deleted; fall through and post a new one.
 	}
 
-	msg, err := s.discord.CreateMessage(in.ChannelID, panels.Create(s.cfg.AppName, branding, p, types), rest.WithCtx(r.Context()))
+	msg, err := s.discord.CreateMessage(in.ChannelID, panels.Create(footer, p, types), rest.WithCtx(r.Context()))
 	if err != nil {
 		s.writeFailure(w, err)
 		return
