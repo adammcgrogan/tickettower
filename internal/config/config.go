@@ -65,6 +65,10 @@ type Config struct {
 	// server-side, and never accepted from a client request.
 	StripePriceID string
 
+	// AdminAPIToken, if set, lets GET /api/ops/report (the growth report)
+	// authenticate with "Authorization: Bearer <token>" instead of a login.
+	AdminAPIToken string
+
 	// SupportURL is where the bot's /help sends people for help: the support
 	// server invite.
 	SupportURL string
@@ -118,6 +122,7 @@ func Load(required ...string) (Config, error) {
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		StripePriceID:       os.Getenv("STRIPE_PRICE_ID"),
 		SupportURL:          get("SUPPORT_URL", "https://discord.gg/WKdJ774uMZ"),
+		AdminAPIToken:       os.Getenv("ADMIN_API_TOKEN"),
 		TopggToken:          os.Getenv("TOPGG_TOKEN"),
 		DiscordBotListToken: os.Getenv("DISCORDBOTLIST_TOKEN"),
 		DiscordBotsGGToken:  os.Getenv("DISCORDBOTSGG_TOKEN"),

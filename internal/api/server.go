@@ -63,6 +63,9 @@ func (s *Server) Handler() http.Handler {
 		r.Use(requireJSON)
 		r.Get("/config", s.getConfig)
 		r.Get("/invite", s.invite)
+		// For the growth report script: a bearer token, not a session.
+		r.With(newRateLimiter(authLimit, authWindow).middleware(byIP), s.requireAdminToken).
+			Get("/ops/report", s.getAdminReport)
 		r.Group(func(r chi.Router) {
 			r.Use(newRateLimiter(authLimit, authWindow).middleware(byIP))
 			r.Get("/auth/login", s.login)

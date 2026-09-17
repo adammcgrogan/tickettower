@@ -50,7 +50,7 @@ func TestAdminOverviewAndGuilds(t *testing.T) {
 	for _, g := range guilds {
 		byID[g.ID] = g
 	}
-	if g := byID[3001]; g.Tier != "free" || g.TicketsTotal != 1 || g.TicketsLast30 != 1 || g.LastTicketAt == nil {
+	if g := byID[3001]; g.Tier != "free" || g.TicketsTotal != 1 || g.TicketsLast30 != 1 || g.LastTicketAt == nil || g.TicketTypes != 1 || g.PanelPublished {
 		t.Errorf("guild 3001 = %+v", g)
 	}
 	if g := byID[3002]; g.Tier != "premium" || g.TicketsTotal != 0 {
@@ -58,6 +58,30 @@ func TestAdminOverviewAndGuilds(t *testing.T) {
 	}
 	if g := byID[3003]; g.LeftAt == nil {
 		t.Errorf("guild 3003 = %+v, want left_at set", g)
+	}
+
+	// Publishing a panel shows up as setup progress.
+	panel := Panel{GuildID: 3001, Title: "Help", Style: PanelButtons, TicketTypeIDs: []int64{tt.ID}}
+	if err := s.CreatePanel(ctx, &panel); err != nil {
+		t.Fatal(err)
+	}
+	channel, message := snowflake.ID(1), snowflake.ID(2)
+	if err := s.SetPanelMessage(ctx, 3001, panel.ID, &channel, &message); err != nil {
+		t.Fatal(err)
+	}
+	guilds, _ = s.AdminGuilds(ctx)
+	for _, g := range guilds {
+		if g.ID == 3001 && !g.PanelPublished {
+			t.Errorf("guild 3001 = %+v, want panel_published", g)
+		}
+	}
+
+	joins, err := s.JoinsByDay(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(joins) != 7 || joins[6].Joined != 3 || joins[6].Left != 1 || joins[0].Joined != 0 {
+		t.Errorf("joins by day = %+v, want 7 days ending with 3 joined, 1 left", joins)
 	}
 
 	// Downgrading clears the entitlements row rather than leaving a stale one.

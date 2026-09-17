@@ -52,3 +52,16 @@ func TestAdminRequiresSuperadmin(t *testing.T) {
 		t.Error("owner session: is_superadmin = false, want true")
 	}
 }
+
+func TestAdminReportRequiresToken(t *testing.T) {
+	// No token configured: the route is hidden even from a correct-looking header.
+	if rec := newTestEnv(t).doWithAuth("/api/ops/report", "Bearer anything"); rec.Code != http.StatusNotFound {
+		t.Errorf("no token configured = %d, want 404", rec.Code)
+	}
+	env := newTestEnv(t, func(c *config.Config) { c.AdminAPIToken = "s3cret" })
+	for _, auth := range []string{"", "s3cret", "Bearer wrong", "Bearer s3cre"} {
+		if rec := env.doWithAuth("/api/ops/report", auth); rec.Code != http.StatusNotFound {
+			t.Errorf("Authorization %q = %d, want 404", auth, rec.Code)
+		}
+	}
+}

@@ -1,7 +1,10 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
@@ -87,4 +90,47 @@ func (s *Server) setAdminGuildTier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// requireAdminToken protects the report endpoint scripts call without a
+// browser session. With no ADMIN_API_TOKEN configured, or the wrong one, the
+// route doesn't exist as far as the caller can tell.
+func (s *Server) requireAdminToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		want := s.cfg.AdminAPIToken
+		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if want == "" || !ok || subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// getAdminReport returns everything the growth report reads: the admin
+// overview (with invite sources), every guild with its setup progress, and
+// joins and leaves per day for the last 30 days.
+func (s *Server) getAdminReport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	overview, err := s.store.AdminOverview(ctx)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	guilds, err := s.store.AdminGuilds(ctx)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	joins, err := s.store.JoinsByDay(ctx, 30)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"generated_at": time.Now().UTC(),
+		"overview":     overview,
+		"guilds":       guilds,
+		"joins_by_day": joins,
+	})
 }

@@ -76,6 +76,9 @@ type AdminGuild struct {
 	TicketsTotal  int          `json:"tickets_total"`
 	TicketsLast30 int          `json:"tickets_last_30"`
 	LastTicketAt  *time.Time   `json:"last_ticket_at"`
+	// Setup progress, for seeing where new servers get stuck.
+	TicketTypes    int  `json:"ticket_types"`
+	PanelPublished bool `json:"panel_published"`
 }
 
 // AdminGuilds lists every guild the bot has ever been in, most recently
@@ -83,7 +86,9 @@ type AdminGuild struct {
 func (s *Store) AdminGuilds(ctx context.Context) ([]AdminGuild, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT g.id, g.name, g.icon, COALESCE(e.tier, 'free'), g.joined_at, g.left_at,
-		       COALESCE(t.total, 0), COALESCE(t.last_30, 0), t.last_ticket_at
+		       COALESCE(t.total, 0), COALESCE(t.last_30, 0), t.last_ticket_at,
+		       (SELECT count(*) FROM ticket_types tt WHERE tt.guild_id = g.id),
+		       EXISTS (SELECT 1 FROM panels p WHERE p.guild_id = g.id AND p.message_id IS NOT NULL)
 		FROM guilds g
 		LEFT JOIN entitlements e ON e.guild_id = g.id AND (e.expires_at IS NULL OR e.expires_at > now())
 		LEFT JOIN (
@@ -103,7 +108,7 @@ func (s *Store) AdminGuilds(ctx context.Context) ([]AdminGuild, error) {
 		var g AdminGuild
 		var id int64
 		if err := rows.Scan(&id, &g.Name, &g.Icon, &g.Tier, &g.JoinedAt, &g.LeftAt,
-			&g.TicketsTotal, &g.TicketsLast30, &g.LastTicketAt); err != nil {
+			&g.TicketsTotal, &g.TicketsLast30, &g.LastTicketAt, &g.TicketTypes, &g.PanelPublished); err != nil {
 			return nil, err
 		}
 		g.ID = snowflake.ID(id)
@@ -128,4 +133,37 @@ func (s *Store) SetGuildTier(ctx context.Context, guildID snowflake.ID, tier str
 		ON CONFLICT (guild_id) DO UPDATE SET tier = EXCLUDED.tier, source = 'manual', expires_at = NULL`,
 		int64(guildID), tier)
 	return err
+}
+
+// DayJoins is how many servers added and removed the bot on one day (UTC).
+type DayJoins struct {
+	Day    string `json:"day"` // YYYY-MM-DD
+	Joined int    `json:"joined"`
+	Left   int    `json:"left"`
+}
+
+// JoinsByDay counts servers joining and leaving per day over the last days
+// days, oldest first, including days with neither.
+func (s *Store) JoinsByDay(ctx context.Context, days int) ([]DayJoins, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH d AS (
+			SELECT generate_series((now() AT TIME ZONE 'utc')::date - ($1::int - 1), (now() AT TIME ZONE 'utc')::date, '1 day')::date AS day
+		)
+		SELECT to_char(d.day, 'YYYY-MM-DD'),
+		       (SELECT count(*) FROM guilds WHERE (joined_at AT TIME ZONE 'utc')::date = d.day)::int,
+		       (SELECT count(*) FROM guilds WHERE (left_at AT TIME ZONE 'utc')::date = d.day)::int
+		FROM d ORDER BY d.day`, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []DayJoins{}
+	for rows.Next() {
+		var j DayJoins
+		if err := rows.Scan(&j.Day, &j.Joined, &j.Left); err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
 }

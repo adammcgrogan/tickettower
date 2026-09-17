@@ -56,6 +56,8 @@ plan's price). All three are optional — leaving them unset just hides the
 dashboard's Plan section. `DEV_GUILD_ID` stays unset so commands register
 globally.
 
+`ADMIN_API_TOKEN` (API, optional) enables `GET /api/ops/report` with `Authorization: Bearer <token>`: the growth report's data (admin overview, every server's setup progress, joins per day). Unset, the route is a 404.
+
 `SUPPORT_URL` (bot) is where `/help` links for support; it defaults to the
 Ticket Tower support server invite.
 

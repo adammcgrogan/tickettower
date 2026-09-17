@@ -34,6 +34,9 @@ export type AdminGuild = {
 	tickets_total: number;
 	tickets_last_30: number;
 	last_ticket_at: string | null;
+	ticket_types: number;
+	/** Whether any ticket panel has been published, i.e. setup is finished. */
+	panel_published: boolean;
 };
 
 export type Guild = {

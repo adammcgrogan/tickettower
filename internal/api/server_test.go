@@ -78,6 +78,16 @@ func (e testEnv) do(method, path string, cookie *http.Cookie) *httptest.Response
 	return rec
 }
 
+func (e testEnv) doWithAuth(path, authorization string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("GET", path, nil)
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
+	rec := httptest.NewRecorder()
+	e.handler.ServeHTTP(rec, req)
+	return rec
+}
+
 func TestHealthz(t *testing.T) {
 	rec := newTestEnv(t).do("GET", "/healthz", nil)
 	if rec.Code != 200 || rec.Body.String() != "ok" {
