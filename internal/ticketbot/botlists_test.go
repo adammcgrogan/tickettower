@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestPostServerCount(t *testing.T) {
 		mu.Lock()
 		hits = append(hits, hit{r.URL.Path, r.Header.Get("Authorization"), body})
 		mu.Unlock()
-		if r.Header.Get("Authorization") == "bad" {
+		if strings.HasSuffix(r.Header.Get("Authorization"), "bad") {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 		}
 	}))
@@ -62,5 +63,47 @@ func TestPostServerCount(t *testing.T) {
 	lists[0].token = "bad"
 	if err := postServerCount(context.Background(), lists[0], 42, 7); err == nil {
 		t.Error("a rejected token should be an error")
+	}
+}
+
+func TestPostCommandList(t *testing.T) {
+	var auths []string
+	var got []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auths = append(auths, r.Header.Get("Authorization"))
+		// Only the "Bot " form is accepted, to exercise the retry.
+		if r.Header.Get("Authorization") != "Bot dbl" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path != "/api/v1/bots/42/commands" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&got)
+	}))
+	defer srv.Close()
+	old := botListBase
+	botListBase = map[string]string{"top.gg": srv.URL, "discordbotlist.com": srv.URL, "discord.bots.gg": srv.URL}
+	t.Cleanup(func() { botListBase = old })
+
+	b := &Bot{cfg: config.Config{DiscordBotListToken: "dbl"}}
+	l := b.botLists()[0]
+	if err := postJSON(context.Background(), l.commandsURL(42), l.token, commands); err != nil {
+		t.Fatal(err)
+	}
+	if len(auths) != 2 || auths[0] != "dbl" {
+		t.Errorf("auth attempts = %v, want bare then Bot-prefixed", auths)
+	}
+	names := map[string]bool{}
+	for _, c := range got {
+		names[c["name"].(string)] = true
+		if c["type"] != float64(1) || c["description"] == "" {
+			t.Errorf("command = %v, want a type 1 slash command with a description", c)
+		}
+	}
+	for _, want := range []string{"help", "ticket", "close", "reply", "ping"} {
+		if !names[want] {
+			t.Errorf("command list is missing /%s: %v", want, names)
+		}
 	}
 }
