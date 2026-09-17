@@ -1,3 +1,7 @@
 .env
 /bin/
 .DS_Store
+/.claude/
+/brag-output/
+/.env.example
+/CLAUDE.md

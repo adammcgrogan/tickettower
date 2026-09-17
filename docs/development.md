@@ -13,8 +13,9 @@ Requirements: Go 1.26+, Node 22+, Postgres 16+, Redis 7+.
      intent (used for transcripts). The bot will fail to connect without it.
    - **OAuth2** tab: copy the client ID/secret and add the redirect
      `http://localhost:5173/api/auth/callback`.
-2. `cp .env.example .env` and fill it in. Set `DEV_GUILD_ID` to your test server
-   so slash commands update instantly.
+2. Create `.env` with the variables `internal/config/config.go` reads (Discord
+   credentials, `DATABASE_URL`, `REDIS_URL`, `PORT`, `PUBLIC_URL`). Set
+   `DEV_GUILD_ID` to your test server so slash commands update instantly.
 3. In separate terminals:
    ```sh
    make bot   # Discord bot
