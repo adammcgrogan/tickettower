@@ -54,6 +54,7 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 	r := handler.New()
 	r.Use(middleware.Go)
 	r.Command("/ping", b.handlePing)
+	r.Command("/help", b.handleHelp)
 	r.Route("/ticket", func(r handler.Router) {
 		r.Command("/open", b.handleOpenCommand)
 		r.Autocomplete("/open", b.handleOpenAutocomplete)

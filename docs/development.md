@@ -56,6 +56,9 @@ plan's price). All three are optional — leaving them unset just hides the
 dashboard's Plan section. `DEV_GUILD_ID` stays unset so commands register
 globally.
 
+`SUPPORT_URL` (bot) is where `/help` links for support; it defaults to the
+Ticket Tower support server invite.
+
 Bot list sites, all optional and set on both services: `TOPGG_TOKEN`,
 `DISCORDBOTLIST_TOKEN` and `DISCORDBOTSGG_TOKEN` (each from that site's API
 settings once the bot is listed). With a token set, the bot posts its server

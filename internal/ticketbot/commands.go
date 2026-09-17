@@ -38,6 +38,10 @@ var reasonOption = discord.ApplicationCommandOptionString{
 
 var commands = []discord.ApplicationCommandCreate{
 	discord.SlashCommandCreate{
+		Name:        "help",
+		Description: "How to set up tickets, and every command",
+	},
+	discord.SlashCommandCreate{
 		Name:        "ping",
 		Description: "Check that the bot is online",
 	},

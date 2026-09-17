@@ -65,6 +65,10 @@ type Config struct {
 	// server-side, and never accepted from a client request.
 	StripePriceID string
 
+	// SupportURL is where the bot's /help sends people for help: the support
+	// server invite.
+	SupportURL string
+
 	// Bot list API tokens. Each one set makes the bot post its server count
 	// to that site; TopggToken also turns on the dashboard's review prompt.
 	TopggToken          string
@@ -113,6 +117,7 @@ func Load(required ...string) (Config, error) {
 		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		StripePriceID:       os.Getenv("STRIPE_PRICE_ID"),
+		SupportURL:          get("SUPPORT_URL", "https://discord.gg/WKdJ774uMZ"),
 		TopggToken:          os.Getenv("TOPGG_TOKEN"),
 		DiscordBotListToken: os.Getenv("DISCORDBOTLIST_TOKEN"),
 		DiscordBotsGGToken:  os.Getenv("DISCORDBOTSGG_TOKEN"),
