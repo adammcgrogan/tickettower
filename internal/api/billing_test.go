@@ -13,6 +13,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/jackc/pgx/v5"
 	"github.com/stripe/stripe-go/v82/webhook"
 
 	"github.com/adammcgrogan/tickettower/internal/config"
@@ -64,8 +65,20 @@ func billingTestGuild(t *testing.T, e billingTestEnv, n int64) snowflake.ID {
 	if err := e.store.UpsertGuild(context.Background(), store.Guild{ID: id, Name: "Test", OwnerID: 1}); err != nil {
 		t.Fatal(err)
 	}
+	// Delete the guild row itself: DeleteGuildData keeps billing on purpose
+	// (a subscription survives "delete my data"), and a leftover customer
+	// would make the next run's "no subscription yet" checks fail.
 	t.Cleanup(func() {
-		e.store.DeleteGuildData(context.Background(), id) //nolint:errcheck
+		ctx := context.Background()
+		conn, err := pgx.Connect(ctx, os.Getenv("TEST_DATABASE_URL"))
+		if err != nil {
+			t.Errorf("cleanup: %v", err)
+			return
+		}
+		defer conn.Close(ctx)
+		if _, err := conn.Exec(ctx, `DELETE FROM guilds WHERE id = $1`, int64(id)); err != nil {
+			t.Errorf("cleanup: %v", err)
+		}
 	})
 	return id
 }
