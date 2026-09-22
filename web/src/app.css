@@ -43,6 +43,50 @@ html {
 	color-scheme: dark;
 }
 
+/* Light theme: the same tokens, re-picked for a light surface (chart and the
+   heatmap ramp re-validated with the dataviz skill; amber stays the one
+   accent). Applied by system preference, or forced by data-theme on <html>
+   when someone picks Light or Dark from the sidebar (see lib/theme.svelte.ts,
+   which also updates <meta name="theme-color">). */
+@media (prefers-color-scheme: light) {
+	:root:not([data-theme='dark']) {
+		--color-bg: #f5f7fa;
+		--color-surface: #ffffff;
+		--color-elevated: #eef1f6;
+		--color-border: #dde3ec;
+		--color-border-strong: #c7d0dc;
+		--color-fg: #141a24;
+		--color-muted: #5b6472;
+		--color-subtle: #7a849a;
+		--color-chart: #b37a1e;
+		--color-heat-1: #d2a94f;
+		--color-heat-2: #b8862a;
+		--color-heat-3: #9c6a0e;
+		--color-heat-4: #7d5406;
+		--color-success: #1f8a54;
+		--color-danger: #d43c3c;
+		color-scheme: light;
+	}
+}
+:root[data-theme='light'] {
+	--color-bg: #f5f7fa;
+	--color-surface: #ffffff;
+	--color-elevated: #eef1f6;
+	--color-border: #dde3ec;
+	--color-border-strong: #c7d0dc;
+	--color-fg: #141a24;
+	--color-muted: #5b6472;
+	--color-subtle: #7a849a;
+	--color-chart: #b37a1e;
+	--color-heat-1: #d2a94f;
+	--color-heat-2: #b8862a;
+	--color-heat-3: #9c6a0e;
+	--color-heat-4: #7d5406;
+	--color-success: #1f8a54;
+	--color-danger: #d43c3c;
+	color-scheme: light;
+}
+
 body {
 	font-family: var(--font-sans);
 	-webkit-font-smoothing: antialiased;
@@ -77,6 +121,16 @@ body {
 		background-position: right 0.6rem center;
 		background-repeat: no-repeat;
 		background-size: 14px;
+	}
+	/* The chevron is a literal SVG, so it needs its own light-mode stroke
+	   colour (the light theme's muted, #5b6472) rather than the CSS token. */
+	@media (prefers-color-scheme: light) {
+		:root:not([data-theme='dark']) select.input {
+			background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+		}
+	}
+	:root[data-theme='light'] select.input {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 	}
 	.input[aria-invalid='true'] {
 		@apply border-danger focus:ring-danger/25;

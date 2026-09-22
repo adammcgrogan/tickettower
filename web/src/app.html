@@ -5,6 +5,19 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<meta name="theme-color" content="#0e1522" />
+		<script>
+			// Applies the effective theme (a remembered Light/Dark override, or
+			// the OS preference) before first paint, so there's no flash of the
+			// wrong theme and the browser chrome matches. See lib/theme.svelte.ts.
+			(function () {
+				try {
+					var t = localStorage.getItem('theme');
+					if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+					var light = t === 'light' || (t !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
+					document.querySelector('meta[name="theme-color"]').setAttribute('content', light ? '#f5f7fa' : '#0e1522');
+				} catch (e) {}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

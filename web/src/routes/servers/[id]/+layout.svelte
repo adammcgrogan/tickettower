@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { api, atLeast, errorMessage, send, type Guild, type Stats, type Ticket, type User } from '$lib/api';
 	import { APP_NAME, SUPPORT_URL } from '$lib/brand';
+	import { setTheme, themeState, type ThemePreference } from '$lib/theme.svelte';
 	import { toast } from '$lib/toast.svelte';
 	import GuildIcon from '$lib/components/GuildIcon.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
@@ -131,6 +132,12 @@
 				.catch(() => (servers = []));
 		}
 	}
+
+	const themeOptions: { value: ThemePreference; label: string; icon: IconName }[] = [
+		{ value: 'system', label: 'Match system theme', icon: 'monitor' },
+		{ value: 'light', label: 'Light theme', icon: 'sun' },
+		{ value: 'dark', label: 'Dark theme', icon: 'moon' }
+	];
 
 	async function logout() {
 		await api('/auth/logout', { method: 'POST' });
@@ -314,6 +321,27 @@
 				</a>
 			</li>
 		</ul>
+
+		<div class="border-t border-border p-3">
+			<div role="radiogroup" aria-label="Theme" class="flex rounded-lg border border-border bg-bg p-0.5">
+				{#each themeOptions as o (o.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={themeState.preference === o.value}
+						aria-label={o.label}
+						title={o.label}
+						onclick={() => setTheme(o.value)}
+						class="flex flex-1 items-center justify-center rounded-md py-1.5 transition-colors {themeState.preference ===
+						o.value
+							? 'bg-elevated text-fg'
+							: 'text-muted hover:text-fg'}"
+					>
+						<Icon name={o.icon} size={15} />
+					</button>
+				{/each}
+			</div>
+		</div>
 
 		{#if user}
 			<div class="flex items-center gap-2.5 border-t border-border p-3">
