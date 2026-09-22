@@ -115,6 +115,18 @@ var commands = []discord.ApplicationCommandCreate{
 				},
 			},
 			discord.ApplicationCommandOptionSubCommand{
+				Name:        "merge",
+				Description: "Merge this ticket into another open ticket from the same member",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionString{
+						Name:         "ticket",
+						Description:  "The ticket to merge into",
+						Required:     true,
+						Autocomplete: true,
+					},
+				},
+			},
+			discord.ApplicationCommandOptionSubCommand{
 				Name:        "rename",
 				Description: "Rename this ticket",
 				Options: []discord.ApplicationCommandOption{

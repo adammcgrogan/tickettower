@@ -179,6 +179,31 @@ func (d *Dashboard) Move(ctx context.Context, t store.Ticket, typeID int64, byID
 	return moved, err
 }
 
+// Merge closes an open ticket as merged into another of the same opener's
+// open tickets for a dashboard user, as /ticket merge does, and returns the
+// closed ticket.
+func (d *Dashboard) Merge(ctx context.Context, t store.Ticket, toID int64, byID snowflake.ID, byName string) (store.Ticket, error) {
+	to, err := d.b.store.GetGuildTicket(ctx, t.GuildID, toID)
+	if errors.Is(err, store.ErrNotFound) {
+		return t, userErr("Couldn't find that ticket.")
+	} else if err != nil {
+		return t, err
+	}
+	t, err = d.b.mergeTicket(ctx, t, to, byID, byName)
+	if err != nil {
+		return t, err
+	}
+
+	if _, err := d.b.rest.CreateMessage(t.ChannelID, mergedMessage(to, byID), rest.WithCtx(ctx)); err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
+		d.b.log.Warn("failed to post merge message", slog.Int64("ticket_id", t.ID), slog.Any("err", err))
+	}
+	if _, err := d.b.rest.CreateMessage(to.ChannelID, mergedArrivalMessage(t, byID), rest.WithCtx(ctx)); err != nil && !discordx.IsCode(err, discordx.CodeUnknownChannel) {
+		d.b.log.Warn("failed to post merge arrival message", slog.Int64("ticket_id", to.ID), slog.Any("err", err))
+	}
+	go d.b.finishMerge(t, to)
+	return t, nil
+}
+
 // Reply posts a dashboard user's message in an open ticket, with its
 // placeholders filled in, and returns it as saved in the transcript. byName
 // and avatarURL are how the member knows the staff member, ideally their

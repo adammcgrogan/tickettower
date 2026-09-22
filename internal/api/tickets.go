@@ -218,6 +218,33 @@ func (s *Server) moveTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
+type mergeTicketInput struct {
+	TicketID int64 `json:"ticket_id"`
+}
+
+// mergeTicket merges a ticket into another open ticket from the same
+// opener, as /ticket merge does.
+func (s *Server) mergeTicket(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.guildTicket(w, r)
+	if !ok {
+		return
+	}
+	var in mergeTicketInput
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	user := auth.FromContext(r.Context()).User
+	t, err := s.dashboard.Merge(r.Context(), t, in.TicketID, user.ID, user.DisplayName)
+	if msg, ok := ticketbot.UserMessage(err); ok {
+		s.writeFailure(w, invalid("ticket_id", msg))
+		return
+	} else if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
 // reopenTicket reopens a closed thread ticket from the dashboard.
 func (s *Server) reopenTicket(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.guildTicket(w, r)

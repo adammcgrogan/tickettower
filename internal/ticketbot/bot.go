@@ -65,6 +65,8 @@ func New(cfg config.Config, st *store.Store, log *slog.Logger) (*Bot, error) {
 		r.Command("/remove", b.handleRemoveCommand)
 		r.Command("/move", b.handleMoveCommand)
 		r.Autocomplete("/move", b.handleMoveAutocomplete)
+		r.Command("/merge", b.handleMergeCommand)
+		r.Autocomplete("/merge", b.handleMergeAutocomplete)
 		r.Command("/rename", b.handleRenameCommand)
 		r.Command("/note", b.handleNoteCommand)
 		r.Command("/hold", b.handleHoldCommand)

@@ -118,6 +118,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/tickets/{ticketID}/reply", s.replyTicket)
 					r.Post("/tickets/{ticketID}/notes", s.addTicketNote)
 					r.Post("/tickets/{ticketID}/move", s.moveTicket)
+					r.Post("/tickets/{ticketID}/merge", s.mergeTicket)
 					r.Post("/tickets/{ticketID}/reopen", s.reopenTicket)
 					r.Post("/tickets/{ticketID}/hold", s.holdTicket)
 					r.Post("/tickets/{ticketID}/resume", s.resumeTicket)

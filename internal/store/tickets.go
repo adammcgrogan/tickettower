@@ -459,6 +459,35 @@ func (s *Store) ListTicketsByOpener(ctx context.Context, openerID snowflake.ID) 
 	return out, rows.Err()
 }
 
+// MaxMergeTargets caps how many of a member's other open tickets are offered
+// as merge destinations.
+const MaxMergeTargets = 25
+
+// OpenTicketsByOpener returns a member's other open tickets in a guild,
+// newest first, for picking a merge destination. excludeID leaves out the
+// ticket being merged.
+func (s *Store) OpenTicketsByOpener(ctx context.Context, guildID, openerID snowflake.ID, excludeID int64) ([]Ticket, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+ticketColumns+` `+ticketFrom+`
+		WHERE guild_id = $1 AND opener_id = $2 AND status = 'open' AND tickets.id <> $3
+		ORDER BY opened_at DESC, tickets.id DESC LIMIT $4`,
+		int64(guildID), int64(openerID), excludeID, MaxMergeTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []Ticket{}
+	for rows.Next() {
+		t, err := scanTicket(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 type TicketStats struct {
 	Open       int `json:"open"`
 	OpenedWeek int `json:"opened_week"`

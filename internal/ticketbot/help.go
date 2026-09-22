@@ -19,6 +19,7 @@ var helpCommands = []struct {
 	{[]string{"/reply"}, "Send one of your saved replies"},
 	{[]string{"/ticket add", "/ticket remove"}, "Give or remove someone's access to this ticket"},
 	{[]string{"/ticket move", "/ticket rename"}, "Move this ticket to another type, or rename it"},
+	{[]string{"/ticket merge"}, "Merge this ticket into another open ticket from the same member"},
 	{[]string{"/ticket note"}, "Leave a private note only staff can see"},
 	{[]string{"/ticket hold", "/ticket resume"}, "Put this ticket on hold, or take it off hold"},
 	{[]string{"/ticket block", "/ticket unblock"}, "Stop or allow someone opening tickets"},

@@ -727,6 +727,52 @@
 		}
 	}
 
+	// --- Merging into another open ticket from the same member ---
+
+	let mergeOpen = $state(false);
+	let mergeTo = $state('');
+	let mergeError = $state('');
+	let merging = $state(false);
+
+	// Only other open tickets from the same member can be merged into.
+	const mergeTargets = $derived.by(() => {
+		const t = detail?.ticket;
+		return t && tickets ? tickets.filter((x) => x.status === 'open' && x.opener_id === t.opener_id && x.id !== t.id) : [];
+	});
+
+	function openMerge() {
+		mergeTo = mergeTargets.length === 1 ? String(mergeTargets[0].id) : '';
+		mergeError = '';
+		mergeOpen = true;
+	}
+
+	async function mergeTicket() {
+		if (!detail || !mergeTo) return;
+		const t = detail.ticket;
+		const target = mergeTargets.find((x) => String(x.id) === mergeTo);
+		merging = true;
+		mergeError = '';
+		try {
+			const updated = await api<Ticket>(
+				`/guilds/${guild.id}/tickets/${t.id}/merge`,
+				send('POST', { ticket_id: Number(mergeTo) })
+			);
+			detail = { ...detail, ticket: updated };
+			closedCache.set(t.id, detail);
+			showClosed(updated);
+			mergeOpen = false;
+			toast(`Ticket #${t.number} merged into ${target ? `#${target.number}` : 'the other ticket'}`);
+		} catch (err) {
+			if (err instanceof ApiError && err.field) mergeError = err.message;
+			else {
+				mergeOpen = false;
+				toast(errorMessage(err), 'error');
+			}
+		} finally {
+			merging = false;
+		}
+	}
+
 	// --- Replying from the dashboard ---
 
 	let reply = $state('');
@@ -781,6 +827,7 @@
 			{ icon: 'pencil', label: 'Rename', run: openRename }
 		];
 		if (moveTargets.length > 0) items.push({ icon: 'arrow-right', label: 'Move to another ticket type', run: openMove });
+		if (mergeTargets.length > 0) items.push({ icon: 'merge', label: 'Merge into another ticket', run: openMerge });
 		return items;
 	});
 
@@ -1268,6 +1315,25 @@
 		<button class="btn btn-ghost" onclick={() => (moveOpen = false)}>Cancel</button>
 		<button class="btn btn-primary" onclick={moveTicket} disabled={moving || !moveTo}>
 			{moving ? 'Moving…' : 'Move ticket'}
+		</button>
+	{/snippet}
+</Dialog>
+
+<Dialog
+	bind:open={mergeOpen}
+	title="Merge ticket #{detail?.ticket.number ?? ''}"
+	description="This ticket closes and {detail?.ticket.opener_name ?? 'the member'} is told to continue in the ticket you pick. A note links the two, so nothing is lost."
+>
+	<Field label="Merge into" for="merge-to" error={mergeError}>
+		<select id="merge-to" class="input" bind:value={mergeTo} aria-invalid={!!mergeError}>
+			<option value="" disabled>Choose a ticket</option>
+			{#each mergeTargets as t (t.id)}<option value={String(t.id)}>#{t.number} — {t.type_name}</option>{/each}
+		</select>
+	</Field>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (mergeOpen = false)}>Cancel</button>
+		<button class="btn btn-primary" onclick={mergeTicket} disabled={merging || !mergeTo}>
+			{merging ? 'Merging…' : 'Merge ticket'}
 		</button>
 	{/snippet}
 </Dialog>

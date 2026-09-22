@@ -372,6 +372,43 @@ func TestListTicketsByOpenerAcrossGuilds(t *testing.T) {
 	}
 }
 
+func TestOpenTicketsByOpener(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	seedGuild(t, s, testGuild)
+	seedGuild(t, s, 3002)
+	tt := newType(t, s, testGuild, "General")
+	tt2 := newType(t, s, 3002, "General")
+
+	channel := snowflake.ID(9100)
+	add := func(guildID snowflake.ID, tt TicketType, number int, openerID snowflake.ID) Ticket {
+		t.Helper()
+		channel++
+		tk := Ticket{GuildID: guildID, Number: number, TicketTypeID: &tt.ID, TypeName: tt.Name, Mode: ModeChannel,
+			ChannelID: channel, OpenerID: openerID, OpenerName: "member"}
+		if err := s.CreateTicket(ctx, &tk); err != nil {
+			t.Fatal(err)
+		}
+		return tk
+	}
+	this := add(testGuild, tt, 1, 42)
+	other := add(testGuild, tt, 2, 42)
+	closedOne := add(testGuild, tt, 3, 42)
+	if _, err := s.CloseTicket(ctx, closedOne.ID, 1, "staff", "done"); err != nil {
+		t.Fatal(err)
+	}
+	add(testGuild, tt, 4, 43)     // someone else's ticket
+	add(3002, tt2, 1, 42)         // right opener, wrong guild
+
+	got, err := s.OpenTicketsByOpener(ctx, testGuild, 42, this.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != other.ID {
+		t.Fatalf("OpenTicketsByOpener = %+v, want just %v", got, other.ID)
+	}
+}
+
 func TestDeleteTicketTypeRefusesWithOpenTickets(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
