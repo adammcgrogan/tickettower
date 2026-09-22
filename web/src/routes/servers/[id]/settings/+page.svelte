@@ -74,6 +74,7 @@
 		addRole = '';
 	}
 	let logChannel = $state<string | null>(null);
+	let weeklySummary = $state(false);
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 
@@ -81,7 +82,8 @@
 		settings !== null &&
 			(retentionValue !== (settings.transcript_retention_days?.toString() ?? '') ||
 				!sameRoles(dashboardRoles, settings.dashboard_roles) ||
-				logChannel !== settings.log_channel_id)
+				logChannel !== settings.log_channel_id ||
+				weeklySummary !== settings.weekly_summary)
 	);
 
 	function reset(s: GuildSettings) {
@@ -89,7 +91,13 @@
 		retentionValue = s.transcript_retention_days?.toString() ?? '';
 		dashboardRoles = s.dashboard_roles.map((r) => ({ ...r }));
 		logChannel = s.log_channel_id;
+		weeklySummary = s.weekly_summary;
 	}
+
+	// The weekly summary needs a log channel to post to.
+	$effect(() => {
+		if (!logChannel) weeklySummary = false;
+	});
 
 	async function load() {
 		loadError = '';
@@ -244,7 +252,8 @@
 		try {
 			const body: Partial<GuildSettings> = {
 				transcript_retention_days: retentionValue ? Number(retentionValue) : null,
-				log_channel_id: logChannel
+				log_channel_id: logChannel,
+				weekly_summary: weeklySummary
 			};
 			if (guild.can_manage) body.dashboard_roles = dashboardRoles;
 			reset(await api<GuildSettings>(`/guilds/${guild.id}/settings`, send('PATCH', body)));
@@ -299,6 +308,24 @@
 						invalid={!!errors.log_channel_id}
 					/>
 				</Field>
+				{#if logChannel}
+					<label class="flex cursor-pointer items-start gap-2 text-sm" class:opacity-60={tier !== 'premium'}>
+						<input
+							type="checkbox"
+							class="mt-0.5 size-4 accent-accent"
+							bind:checked={weeklySummary}
+							disabled={tier !== 'premium'}
+						/>
+						<span>
+							Post a weekly summary
+							<span class="block text-xs text-muted">
+								Tickets opened and closed, median first response, satisfaction and the busiest day, once a week.
+								{tier === 'premium' ? 'Off by default.' : 'Premium only.'}
+							</span>
+						</span>
+					</label>
+					{#if errors.weekly_summary}<p class="text-xs text-danger">{errors.weekly_summary}</p>{/if}
+				{/if}
 			</SettingsSection>
 
 			<SettingsSection title="Dashboard access">
@@ -579,7 +606,8 @@
 			`Up to ${limits?.max_panels ?? 50} ticket panels`,
 			`Up to ${limits?.max_saved_replies ?? 200} saved replies`,
 			'Transcripts kept forever, not just 90 days',
-			`No "Powered by ${APP_NAME}" footer on ticket panels`
+			`No "Powered by ${APP_NAME}" footer on ticket panels`,
+			'A weekly summary posted to your ticket log'
 		] as benefit (benefit)}
 			<li class="flex items-start gap-3 text-sm">
 				<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">

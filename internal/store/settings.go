@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 )
@@ -74,6 +75,9 @@ type GuildSettings struct {
 	DashboardRoles []DashboardRole `json:"dashboard_roles"`
 	// LogChannelID is where ticket events are posted, if set.
 	LogChannelID *snowflake.ID `json:"log_channel_id"`
+	// WeeklySummary turns on a weekly recap of how support went, posted to
+	// the log channel. Premium only.
+	WeeklySummary bool `json:"weekly_summary"`
 }
 
 func rolesOrEmpty(r []DashboardRole) []DashboardRole {
@@ -89,8 +93,8 @@ func (s *Store) GetGuildSettings(ctx context.Context, guildID snowflake.ID) (Gui
 		logChannel *int64
 	)
 	err := s.pool.QueryRow(ctx, `
-		SELECT transcript_retention_days, dashboard_roles, log_channel_id FROM guild_settings WHERE guild_id = $1`,
-		int64(guildID)).Scan(&st.TranscriptRetentionDays, &st.DashboardRoles, &logChannel)
+		SELECT transcript_retention_days, dashboard_roles, log_channel_id, weekly_summary FROM guild_settings WHERE guild_id = $1`,
+		int64(guildID)).Scan(&st.TranscriptRetentionDays, &st.DashboardRoles, &logChannel, &st.WeeklySummary)
 	if notFound(err) == ErrNotFound {
 		return GuildSettings{DashboardRoles: []DashboardRole{}}, nil
 	}
@@ -101,14 +105,60 @@ func (s *Store) GetGuildSettings(ctx context.Context, guildID snowflake.ID) (Gui
 
 func (s *Store) UpdateGuildSettings(ctx context.Context, guildID snowflake.ID, st GuildSettings) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO guild_settings (guild_id, transcript_retention_days, dashboard_roles, log_channel_id)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO guild_settings (guild_id, transcript_retention_days, dashboard_roles, log_channel_id, weekly_summary)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (guild_id) DO UPDATE
 		SET transcript_retention_days = EXCLUDED.transcript_retention_days,
 		    dashboard_roles = EXCLUDED.dashboard_roles,
 		    log_channel_id = EXCLUDED.log_channel_id,
+		    weekly_summary = EXCLUDED.weekly_summary,
 		    updated_at = now()`,
-		int64(guildID), st.TranscriptRetentionDays, rolesOrEmpty(st.DashboardRoles), nullableID(st.LogChannelID))
+		int64(guildID), st.TranscriptRetentionDays, rolesOrEmpty(st.DashboardRoles), nullableID(st.LogChannelID), st.WeeklySummary)
+	return err
+}
+
+// WeeklySummaryTarget is a guild whose weekly summary is due.
+type WeeklySummaryTarget struct {
+	GuildID      snowflake.ID
+	LogChannelID snowflake.ID
+}
+
+// WeeklySummaryInterval is how often an opted-in guild gets a summary.
+const WeeklySummaryInterval = 7 * 24 * time.Hour
+
+// GuildsDueWeeklySummary returns premium guilds opted into the weekly
+// summary, with a log channel set, that haven't had one sent in the last
+// WeeklySummaryInterval.
+func (s *Store) GuildsDueWeeklySummary(ctx context.Context, now time.Time) ([]WeeklySummaryTarget, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT gs.guild_id, gs.log_channel_id
+		FROM guild_settings gs
+		JOIN guilds g ON g.id = gs.guild_id
+		JOIN entitlements e ON e.guild_id = gs.guild_id
+		WHERE gs.weekly_summary AND gs.log_channel_id IS NOT NULL AND g.left_at IS NULL
+		  AND e.tier = 'premium' AND (e.expires_at IS NULL OR e.expires_at > $1)
+		  AND (gs.weekly_summary_sent_at IS NULL OR gs.weekly_summary_sent_at <= $2)`,
+		now, now.Add(-WeeklySummaryInterval))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []WeeklySummaryTarget{}
+	for rows.Next() {
+		var guildID, channelID int64
+		if err := rows.Scan(&guildID, &channelID); err != nil {
+			return nil, err
+		}
+		out = append(out, WeeklySummaryTarget{GuildID: snowflake.ID(guildID), LogChannelID: snowflake.ID(channelID)})
+	}
+	return out, rows.Err()
+}
+
+// MarkWeeklySummarySent records that a guild's weekly summary was sent, so
+// it isn't sent again for another WeeklySummaryInterval.
+func (s *Store) MarkWeeklySummarySent(ctx context.Context, guildID snowflake.ID, at time.Time) error {
+	_, err := s.pool.Exec(ctx, `UPDATE guild_settings SET weekly_summary_sent_at = $2 WHERE guild_id = $1`, int64(guildID), at)
 	return err
 }
 

@@ -65,6 +65,8 @@ export type GuildSettings = {
 	transcript_retention_days: number | null;
 	dashboard_roles: DashboardRole[];
 	log_channel_id: string | null;
+	/** Post a weekly recap of how support went to the log channel. Premium only. */
+	weekly_summary: boolean;
 };
 
 export type Channel = {
@@ -418,6 +420,7 @@ export type Stats = {
 		/** 0 means no cap. */
 		max_transcript_retention_days: number;
 		branding: boolean;
+		weekly_summary: boolean;
 	};
 	/** Whether this server has ever started a Stripe subscription. */
 	has_billing_customer: boolean;

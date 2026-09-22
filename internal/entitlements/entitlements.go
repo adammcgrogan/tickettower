@@ -19,12 +19,15 @@ type Limits struct {
 	// Branding is true when a "Powered by" footer belongs on the guild's
 	// panel messages.
 	Branding bool `json:"branding"`
+	// WeeklySummary is true when the guild can turn on the weekly summary
+	// posted to its log channel.
+	WeeklySummary bool `json:"weekly_summary"`
 }
 
 func ForTier(tier string) Limits {
 	switch tier {
 	case TierPremium:
-		return Limits{MaxPanels: 50, MaxTicketTypes: 100, MaxSavedReplies: 200}
+		return Limits{MaxPanels: 50, MaxTicketTypes: 100, MaxSavedReplies: 200, WeeklySummary: true}
 	default:
 		return Limits{MaxPanels: 10, MaxTicketTypes: 25, MaxSavedReplies: 50, MaxTranscriptRetentionDays: 90, Branding: true}
 	}

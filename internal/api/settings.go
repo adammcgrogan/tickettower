@@ -87,6 +87,15 @@ func (s *Server) validateSettings(ctx context.Context, guildID snowflake.ID, man
 		}
 	}
 
+	if in.WeeklySummary {
+		if !s.limits(ctx, guildID).WeeklySummary {
+			return invalid("weekly_summary", "The weekly summary is a premium feature. Upgrade to premium to turn it on.")
+		}
+		if in.LogChannelID == nil {
+			return invalid("weekly_summary", "Set a log channel first.")
+		}
+	}
+
 	in.DashboardRoles = normaliseDashboardRoles(in.DashboardRoles)
 	// Otherwise anyone with a dashboard role could hand out access.
 	if !manager && !slices.Equal(in.DashboardRoles, normaliseDashboardRoles(cur.DashboardRoles)) {

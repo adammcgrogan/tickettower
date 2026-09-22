@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 )
@@ -53,6 +54,63 @@ func TestGuildSettings(t *testing.T) {
 	}
 	if got, _ := s.GetGuildSettings(ctx, testGuild); got.LogChannelID != nil || got.TranscriptRetentionDays != nil {
 		t.Errorf("after clearing = %+v", got)
+	}
+}
+
+func TestGuildsDueWeeklySummary(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	premiumOptedIn, premiumOptedOut, freeOptedIn, noLogChannel, recentlySent :=
+		snowflake.ID(4001), snowflake.ID(4002), snowflake.ID(4003), snowflake.ID(4004), snowflake.ID(4005)
+	for _, id := range []snowflake.ID{premiumOptedIn, premiumOptedOut, freeOptedIn, noLogChannel, recentlySent} {
+		seedGuild(t, s, id)
+	}
+	for _, id := range []snowflake.ID{premiumOptedIn, premiumOptedOut, noLogChannel, recentlySent} {
+		if err := s.SetGuildTier(ctx, id, "premium"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	logChannel := snowflake.ID(9999)
+	if err := s.UpdateGuildSettings(ctx, premiumOptedIn, GuildSettings{LogChannelID: &logChannel, WeeklySummary: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateGuildSettings(ctx, premiumOptedOut, GuildSettings{LogChannelID: &logChannel, WeeklySummary: false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateGuildSettings(ctx, freeOptedIn, GuildSettings{LogChannelID: &logChannel, WeeklySummary: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateGuildSettings(ctx, noLogChannel, GuildSettings{WeeklySummary: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateGuildSettings(ctx, recentlySent, GuildSettings{LogChannelID: &logChannel, WeeklySummary: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkWeeklySummarySent(ctx, recentlySent, now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	due, err := s.GuildsDueWeeklySummary(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 1 || due[0].GuildID != premiumOptedIn || due[0].LogChannelID != logChannel {
+		t.Fatalf("due = %+v, want just %v", due, premiumOptedIn)
+	}
+
+	// Once a summary was sent long enough ago, it's due again.
+	if err := s.MarkWeeklySummarySent(ctx, premiumOptedIn, now.Add(-8*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	due, err = s.GuildsDueWeeklySummary(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 1 || due[0].GuildID != premiumOptedIn {
+		t.Fatalf("due after old send = %+v", due)
 	}
 }
 

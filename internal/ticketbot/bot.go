@@ -147,6 +147,7 @@ func (b *Bot) Run(ctx context.Context) error {
 	go b.purgeTranscripts(ctx)
 	go b.autoCloseTickets(ctx)
 	go b.postServerCounts(ctx, b.client.ID())
+	go b.postWeeklySummaries(ctx)
 
 	<-ctx.Done()
 	closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
