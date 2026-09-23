@@ -310,7 +310,7 @@
 			{#if types.length === 0}
 				<p class="rounded-lg border border-dashed border-border p-4 text-sm text-muted">
 					You haven't created any ticket types yet.
-					<a href="/servers/{guildId}/ticket-types/new" class="text-accent hover:underline">
+					<a href="/servers/{guildId}/ticket-types/new" class="text-accent-ink hover:underline">
 						Create one first
 					</a>.
 				</p>

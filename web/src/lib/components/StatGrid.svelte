@@ -19,14 +19,14 @@
 	{#each items as s (s.label)}
 		<div class="bg-surface p-5">
 			<dt class="text-sm text-muted">{s.label}</dt>
-			<dd class="mt-3 h-9 font-display text-4xl leading-none font-bold tabular-nums {s.loud ? 'text-accent' : ''}">
+			<dd class="mt-3 h-9 font-display text-4xl leading-none font-bold tabular-nums {s.loud ? 'text-accent-ink' : ''}">
 				{#if s.value == null}
 					<div class="h-8 w-14 animate-pulse rounded bg-elevated"></div>
 				{:else}
 					{s.value}
 				{/if}
 			</dd>
-			{#if s.hint}<dd class="mt-2 text-xs {s.hintLoud ? 'text-accent' : 'text-subtle'}">{s.hint}</dd>{/if}
+			{#if s.hint}<dd class="mt-2 text-xs {s.hintLoud ? 'text-accent-ink' : 'text-subtle'}">{s.hint}</dd>{/if}
 		</div>
 	{/each}
 </dl>

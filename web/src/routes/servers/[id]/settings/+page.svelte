@@ -610,7 +610,7 @@
 			'A weekly summary posted to your ticket log'
 		] as benefit (benefit)}
 			<li class="flex items-start gap-3 text-sm">
-				<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+				<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent-ink">
 					<Icon name="check" size={12} />
 				</span>
 				{benefit}

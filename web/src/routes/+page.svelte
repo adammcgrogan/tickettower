@@ -4,9 +4,9 @@
 	import { APP_NAME, SUPPORT_URL } from '$lib/brand';
 	import Icon from '$lib/components/Icon.svelte';
 	import Logo from '$lib/components/Logo.svelte';
-	import PanelPreview from '$lib/components/PanelPreview.svelte';
 	import Seo from '$lib/components/Seo.svelte';
 	import TicketStub from '$lib/components/TicketStub.svelte';
+	import HeroDemo from '$lib/components/landing/HeroDemo.svelte';
 	import QueueDemo from '$lib/components/landing/QueueDemo.svelte';
 	import Walkthrough from '$lib/components/landing/Walkthrough.svelte';
 	import { inviteHref } from '$lib/public';
@@ -24,8 +24,6 @@
 		user = await getMe().catch(() => null);
 	});
 
-	const promises = ['Free to use', 'Open source', 'No code or config files'];
-
 	const steps = [
 		{
 			title: 'Add the bot',
@@ -33,7 +31,7 @@
 		},
 		{
 			title: 'Answer a few questions',
-			body: 'Quick setup asks what tickets are for and who handles them, then creates your first ticket type.'
+			body: 'What tickets are for and who handles them. Your ticket types are created for you.'
 		},
 		{
 			title: 'Post your ticket panel',
@@ -41,52 +39,43 @@
 		}
 	];
 
-	const features = [
+	// What's included, grouped by who it's for.
+	const audiences: { title: string; items: { title: string; body: string }[] }[] = [
 		{
-			icon: 'panel' as const,
-			title: 'Buttons or a dropdown',
-			body: 'With a live preview of how it looks in Discord.'
+			title: 'For members',
+			items: [
+				{ title: 'One click to ask for help', body: 'Buttons or a dropdown menu, in any channel you choose.' },
+				{ title: 'Questions up front', body: 'Up to five, so nobody starts from scratch.' },
+				{ title: 'Private by default', body: 'A channel or thread only they and your team can see.' },
+				{ title: 'A say in how it went', body: 'A rating and a comment when the ticket closes.' }
+			]
 		},
 		{
-			icon: 'thread' as const,
-			title: 'Channels or private threads',
-			body: 'Pick per ticket type, visible only to the member and your team.'
+			title: 'For your team',
+			items: [
+				{ title: 'Knows whose turn it is', body: 'The longest-waiting member rises to the top of the queue.' },
+				{ title: 'Reply from the browser', body: 'Posted in Discord under your name and avatar.' },
+				{ title: 'Notes and saved replies', body: 'Private notes for the team, and answers you use often.' },
+				{ title: 'Quiet tickets close themselves', body: 'A friendly reminder first, then a close if nobody replies.' }
+			]
 		},
 		{
-			icon: 'message' as const,
-			title: 'Questions up front',
-			body: 'So nobody starts from scratch.'
-		},
-		{
-			icon: 'inbox' as const,
-			title: 'Knows whose turn it is',
-			body: 'The longest-waiting member rises to the top of your queue.'
-		},
-		{
-			icon: 'send' as const,
-			title: 'Reply from the dashboard',
-			body: 'Posted in Discord under your name and avatar.'
-		},
-		{
-			icon: 'clock' as const,
-			title: 'Quiet tickets close themselves',
-			body: 'A friendly reminder first, then a close if nobody replies.'
-		},
-		{
-			icon: 'transcript' as const,
-			title: 'Transcripts',
-			body: 'Saved and readable in the dashboard, laid out like Discord.'
-		},
-		{
-			icon: 'chart' as const,
-			title: 'Ratings and response times',
-			body: 'Response times, busiest hours and each person on your team.'
-		},
-		{
-			icon: 'alert' as const,
-			title: 'Finds problems before members do',
-			body: 'A setup check links straight to the fix.'
+			title: 'For admins',
+			items: [
+				{ title: 'Response times and ratings', body: 'Busiest hours, each ticket type and each person on the team.' },
+				{ title: 'Transcripts', body: 'Every conversation saved, readable like Discord.' },
+				{ title: 'A setup check', body: 'Finds missing permissions before members do, with a link to the fix.' },
+				{ title: 'Dashboard access by role', body: 'Let moderators read, reply or manage, as you choose.' }
+			]
 		}
+	];
+
+	const premium = [
+		'100 ticket types instead of 25',
+		'50 ticket panels instead of 10',
+		'200 saved replies instead of 50',
+		'Transcripts kept forever, not just 90 days',
+		`No "Powered by ${APP_NAME}" footer on ticket panels`
 	];
 
 	const comparison: { label: string; tower: string | boolean; a: string | boolean; b: string | boolean }[] = [
@@ -135,12 +124,6 @@
 		}
 	];
 
-	const demoTypes = [
-		{ id: 1, name: 'General support', emoji: '💬' },
-		{ id: 2, name: 'Billing', emoji: '💳' },
-		{ id: 3, name: 'Report a member', emoji: '🚩' }
-	] as TicketType[];
-
 	const external = (href: string) => href.startsWith('http');
 </script>
 
@@ -153,7 +136,7 @@
 {#snippet ctas(size = 'h-11 px-5')}
 	<div class="flex flex-col gap-3 sm:flex-row">
 		<a href={invite} data-sveltekit-reload class="btn btn-primary {size}">
-			Add to Discord <Icon name="arrow-right" size={15} />
+			Add to Discord
 		</a>
 		<a
 			href={user ? '/servers' : loginURL}
@@ -172,8 +155,9 @@
 			<nav class="flex items-center gap-1 text-sm">
 				<a href="#how-it-works" class="btn btn-ghost hidden md:inline-flex">How it works</a>
 				<a href="#features" class="btn btn-ghost hidden md:inline-flex">Features</a>
+				<a href="#pricing" class="btn btn-ghost hidden md:inline-flex">Pricing</a>
 				<a href="#faq" class="btn btn-ghost hidden md:inline-flex">FAQ</a>
-				<a href="/help" class="btn btn-ghost">Help</a>
+				<a href="/help" class="btn btn-ghost hidden sm:inline-flex">Help</a>
 				{#if user}
 					<a href="/me/tickets" class="btn btn-ghost">My tickets</a>
 					<a href="/servers" class="btn btn-secondary">Dashboard</a>
@@ -193,49 +177,81 @@
 			</div>
 		{/if}
 
-		<section class="mx-auto grid max-w-6xl items-center gap-14 px-5 pt-14 pb-24 lg:grid-cols-[1.15fr_1fr] lg:pt-24">
-			<div>
-				<h1 class="font-display text-6xl leading-[0.92] font-extrabold text-balance sm:text-7xl lg:text-8xl">
+		<section class="mx-auto max-w-6xl px-5 pt-14 pb-20 lg:pt-20">
+			<div class="grid items-end gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-16">
+				<h1 class="font-display text-6xl leading-[0.92] font-extrabold text-balance sm:text-7xl lg:text-[5.5rem]">
 					Support tickets for Discord, without the clutter.
 				</h1>
-				<p class="mt-7 max-w-lg text-lg text-pretty text-muted">
-					{APP_NAME} opens a private channel or thread for every request, shows your team who is waiting
-					for a reply, and keeps a transcript when it's done.
-				</p>
-				<div class="mt-9">{@render ctas()}</div>
-				<ul class="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
-					{#each promises as p (p)}
-						<li class="flex items-center gap-2"><Icon name="check" size={15} class="text-success" />{p}</li>
-					{/each}
-				</ul>
-			</div>
-
-			<div class="rounded-2xl border border-border bg-surface p-2" aria-label="Example ticket panel">
-				<PanelPreview
-					title="Need a hand?"
-					description="Pick a topic below and we'll open a private ticket for you. Our team will be with you shortly."
-					color={0xf2b544}
-					style="buttons"
-					types={demoTypes}
-				/>
-				<div class="flex items-center gap-3 px-3 pt-3.5 pb-2" aria-label="The ticket that opens">
-					<TicketStub number={42} tone="waiting" />
-					<div class="min-w-0 flex-1">
-						<div class="truncate text-sm font-medium">Billing, opened by alex</div>
-						<div class="truncate text-xs text-accent">Waiting on your team</div>
-					</div>
-					<span class="hidden text-xs text-subtle sm:block">Just now</span>
+				<div class="lg:pb-2">
+					<p class="max-w-md text-lg text-pretty text-muted">
+						Members open a private ticket with one click. Your team sees who is waiting, replies from Discord or the
+						browser, and every conversation is kept.
+					</p>
+					<div class="mt-7">{@render ctas()}</div>
+					<p class="mt-5 text-sm text-subtle">Free and open source. No code or config files.</p>
 				</div>
 			</div>
+
+			<div class="mt-14"><HeroDemo /></div>
 		</section>
 
 		<section id="how-it-works" class="scroll-mt-16 border-t border-border">
 			<div class="mx-auto max-w-6xl px-5 py-20">
-				<h2 class="font-display text-4xl font-bold">Live in a few minutes</h2>
+				<h2 class="font-display text-4xl font-bold">A ticket, start to finish</h2>
 				<p class="mt-3 max-w-xl text-muted">
-					No config files, no commands to memorise. Everything is set up in the dashboard.
+					This is what your members and your team see in Discord. Pick a step to follow one along.
 				</p>
-				<ol class="mt-10 grid gap-x-12 gap-y-10 md:grid-cols-3">
+				<div class="mt-10"><Walkthrough /></div>
+			</div>
+		</section>
+
+		<section id="features" class="scroll-mt-16 border-t border-border">
+			<div class="mx-auto max-w-6xl px-5 py-20">
+				<div class="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+					<div>
+						<h2 class="font-display text-4xl font-bold text-balance">Never lose track of who's waiting</h2>
+						<p class="mt-4 max-w-md text-muted">
+							The inbox knows whose turn it is. Tickets waiting on your team are marked in amber, longest wait first,
+							so nothing slips through while everyone assumes someone else has it.
+						</p>
+						<p class="mt-4 max-w-md text-muted">
+							Read the whole conversation, reply, add a private note or close it, without opening Discord. Keyboard
+							shortcuts take you from one ticket to the next.
+						</p>
+					</div>
+					<QueueDemo />
+				</div>
+
+				<div class="mt-20 grid gap-x-12 gap-y-12 md:grid-cols-3">
+					{#each audiences as a (a.title)}
+						<div>
+							<h3 class="border-b border-border pb-3 font-semibold">{a.title}</h3>
+							<dl class="mt-5 space-y-5">
+								{#each a.items as f (f.title)}
+									<div>
+										<dt class="text-sm font-medium">{f.title}</dt>
+										<dd class="mt-1 text-sm leading-relaxed text-muted">{f.body}</dd>
+									</div>
+								{/each}
+							</dl>
+						</div>
+					{/each}
+				</div>
+			</div>
+		</section>
+
+		<section class="border-t border-border bg-surface">
+			<div class="mx-auto max-w-6xl px-5 py-20">
+				<div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+					<div>
+						<h2 class="font-display text-4xl font-bold">Live in a few minutes</h2>
+						<p class="mt-3 max-w-xl text-muted">
+							No config files, no commands to memorise. Everything is set up in the dashboard.
+						</p>
+					</div>
+					{@render ctas('h-10 px-4')}
+				</div>
+				<ol class="mt-12 grid gap-x-12 gap-y-10 md:grid-cols-3">
 					{#each steps as s, i (s.title)}
 						<li class="border-t border-border pt-5">
 							<TicketStub number={i + 1} size="sm" />
@@ -247,57 +263,86 @@
 			</div>
 		</section>
 
-		<section class="border-t border-border">
+		<section id="pricing" class="scroll-mt-16 border-t border-border">
 			<div class="mx-auto max-w-6xl px-5 py-20">
-				<h2 class="font-display text-4xl font-bold">A ticket, start to finish</h2>
+				<h2 class="font-display text-4xl font-bold">Free, with room to grow</h2>
 				<p class="mt-3 max-w-xl text-muted">
-					This is what your members and your team see in Discord. Pick a step to follow one along.
+					The free plan covers what most servers need, including transcripts, analytics and replying from the
+					dashboard. Premium raises the limits for busier servers.
 				</p>
-				<div class="mt-10"><Walkthrough /></div>
-			</div>
-		</section>
 
-		<section class="border-t border-border">
-			<div class="mx-auto grid max-w-6xl items-center gap-12 px-5 py-20 lg:grid-cols-[1fr_1.6fr]">
-				<div>
-					<h2 class="font-display text-4xl font-bold text-balance">Never lose track of who's waiting</h2>
-					<p class="mt-4 text-muted">
-						The dashboard knows whose turn it is. Tickets waiting on your team are marked in amber, longest wait
-						first, so nothing slips through while everyone assumes someone else has it.
-					</p>
-					<ul class="mt-6 space-y-3 text-sm">
-						<li class="flex gap-3">
-							<Icon name="inbox" size={16} class="mt-0.5 text-muted" />
-							<span>Search every ticket by number, member, type or who claimed it.</span>
-						</li>
-						<li class="flex gap-3">
-							<Icon name="send" size={16} class="mt-0.5 text-muted" />
-							<span>Read the conversation and reply without opening Discord.</span>
-						</li>
-						<li class="flex gap-3">
-							<Icon name="chart" size={16} class="mt-0.5 text-muted" />
-							<span>See response times, busiest hours and ratings, compared with last period.</span>
-						</li>
-					</ul>
-				</div>
-				<QueueDemo />
-			</div>
-		</section>
+				<div class="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16">
+					<div class="min-w-0">
+						<h3 class="font-semibold">How it compares</h3>
+						<p class="mt-1 text-sm text-muted">{APP_NAME} against the two bots most servers switch from.</p>
 
-		<section id="features" class="scroll-mt-16 border-t border-border">
-			<div class="mx-auto max-w-6xl px-5 py-20">
-				<h2 class="font-display text-4xl font-bold">Everything you need, nothing you don't</h2>
-				<dl class="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-					{#each features as f (f.title)}
-						<div class="flex gap-3.5">
-							<Icon name={f.icon} size={18} class="mt-0.5 shrink-0 text-accent" />
-							<div>
-								<dt class="font-semibold">{f.title}</dt>
-								<dd class="mt-1 text-sm leading-relaxed text-muted">{f.body}</dd>
-							</div>
+						{#snippet cell(value: string | boolean, muted = false)}
+							{#if typeof value === 'boolean'}
+								<Icon
+									name={value ? 'check' : 'x'}
+									size={16}
+									class={value ? 'text-success' : 'text-subtle'}
+								/>
+								<span class="sr-only">{value ? 'Yes' : 'No'}</span>
+							{:else}
+								<span class={muted ? 'text-muted' : ''}>{value}</span>
+							{/if}
+						{/snippet}
+
+						<div class="relative mt-6 overflow-x-auto">
+							<table class="w-full min-w-[36rem] border-collapse text-sm">
+								<thead>
+									<tr class="text-left">
+										<th class="pr-4 pb-3 align-bottom font-medium text-subtle"><span class="sr-only">Feature</span></th>
+										<th class="rounded-t-xl bg-accent/10 px-4 pt-3 pb-3 align-bottom">
+											<div class="font-display text-lg font-bold whitespace-nowrap">{APP_NAME}</div>
+										</th>
+										<th class="px-4 pb-3 align-bottom font-medium text-muted">Ticket Tool</th>
+										<th class="px-4 pb-3 align-bottom font-medium text-muted">Tickets</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each comparison as row, i (row.label)}
+										<tr>
+											<td class="border-t border-border py-3.5 pr-4 text-muted">{row.label}</td>
+											<td
+												class="border-t border-accent/15 bg-accent/10 px-4 py-3.5 font-medium text-fg {i === comparison.length - 1 ? 'rounded-b-xl' : ''}"
+											>
+												{@render cell(row.tower)}
+											</td>
+											<td class="border-t border-border px-4 py-3.5">{@render cell(row.a, true)}</td>
+											<td class="border-t border-border px-4 py-3.5">{@render cell(row.b, true)}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
 						</div>
-					{/each}
-				</dl>
+						<p class="mt-4 text-xs text-subtle">
+							Competitor pricing and features as published on their sites; check theirs before switching, since plans
+							change.
+						</p>
+					</div>
+
+					<div class="self-start rounded-xl border border-border bg-surface p-6">
+						<h3 class="font-semibold">Premium</h3>
+						<p class="mt-1 text-sm text-muted">For busier servers. Upgrade any time from the dashboard.</p>
+						<ul class="mt-5 space-y-3">
+							{#each premium as benefit (benefit)}
+								<li class="flex items-start gap-3 text-sm">
+									<Icon name="check" size={15} class="mt-0.5 shrink-0 text-success" />
+									{benefit}
+								</li>
+							{/each}
+						</ul>
+						<a
+							href={user ? '/servers' : loginURL}
+							data-sveltekit-reload={user ? undefined : true}
+							class="btn btn-secondary mt-6 w-full"
+						>
+							See premium in the dashboard
+						</a>
+					</div>
+				</div>
 			</div>
 		</section>
 
@@ -347,94 +392,6 @@
 			</div>
 		</section>
 
-		<section class="border-t border-border">
-			<div class="mx-auto max-w-6xl px-5 py-20">
-				<h2 class="font-display text-4xl font-bold">How it compares</h2>
-				<p class="mt-3 max-w-xl text-muted">
-					{APP_NAME} against the two bots most servers switch from.
-				</p>
-
-				{#snippet cell(value: string | boolean, muted = false)}
-					{#if typeof value === 'boolean'}
-						<Icon
-							name={value ? 'check' : 'x'}
-							size={16}
-							class={value ? 'text-success' : 'text-subtle'}
-						/>
-					{:else}
-						<span class={muted ? 'text-muted' : ''}>{value}</span>
-					{/if}
-				{/snippet}
-
-				<div class="mt-10 overflow-x-auto">
-					<table class="w-full min-w-[38rem] border-collapse text-sm">
-						<thead>
-							<tr class="text-left">
-								<th class="pb-4 pr-4 align-bottom font-medium text-subtle"></th>
-								<th class="rounded-t-xl bg-accent/10 px-4 pt-4 pb-4 align-bottom">
-									<div class="font-display text-lg font-bold">{APP_NAME}</div>
-									<div class="mt-0.5 text-xs font-normal text-accent">Free & open source</div>
-								</th>
-								<th class="px-4 pb-4 align-bottom font-medium text-muted">Ticket Tool</th>
-								<th class="px-4 pb-4 align-bottom font-medium text-muted">Tickets</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each comparison as row, i (row.label)}
-								<tr>
-									<td class="border-t border-border py-3.5 pr-4 text-muted">{row.label}</td>
-									<td
-										class="border-t border-accent/15 bg-accent/10 px-4 py-3.5 font-medium text-fg {i === comparison.length - 1 ? 'rounded-b-xl' : ''}"
-									>
-										{@render cell(row.tower)}
-									</td>
-									<td class="border-t border-border px-4 py-3.5">{@render cell(row.a, true)}</td>
-									<td class="border-t border-border px-4 py-3.5">{@render cell(row.b, true)}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-				<p class="mt-4 text-xs text-subtle">
-					Competitor pricing and features as published on their sites; check theirs before switching, since plans
-					change.
-				</p>
-			</div>
-		</section>
-
-		<section class="border-t border-border bg-surface">
-			<div class="mx-auto grid max-w-6xl items-center gap-10 px-5 py-20 lg:grid-cols-[1fr_1fr]">
-				<div>
-					<h2 class="font-display text-4xl font-bold text-balance">More room to grow, when you need it</h2>
-					<p class="mt-4 max-w-md text-muted">
-						The free plan covers most servers. Premium raises the limits for busier ones and drops the "Powered
-						by" footer.
-					</p>
-					<div class="mt-7">
-						<a href={user ? '/servers' : loginURL} data-sveltekit-reload={user ? undefined : true} class="btn btn-primary h-11 px-5">
-							See premium <Icon name="arrow-right" size={15} />
-						</a>
-					</div>
-				</div>
-				<ul class="space-y-3 border-t border-border pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
-					{#each [
-						'100 ticket types instead of 25',
-						'50 ticket panels instead of 10',
-						'200 saved replies instead of 50',
-						'Transcripts kept forever, not just 90 days',
-						`No "Powered by ${APP_NAME}" footer on ticket panels`
-					] as benefit (benefit)}
-						<li class="flex items-start gap-3 text-sm">
-							<span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
-								<Icon name="check" size={12} />
-							</span>
-							{benefit}
-						</li>
-					{/each}
-				</ul>
-			</div>
-		</section>
-
 		<section id="faq" class="scroll-mt-16 border-t border-border">
 			<div class="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1fr_2fr]">
 				<div>
@@ -451,7 +408,7 @@
 					{#each faqs as f (f.q)}
 						<details class="group">
 							<summary
-								class="flex cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium transition-colors hover:text-accent [&::-webkit-details-marker]:hidden"
+								class="flex cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium transition-colors hover:text-accent-ink [&::-webkit-details-marker]:hidden"
 							>
 								{f.q}
 								<Icon name="plus" size={16} class="text-muted transition-transform group-open:rotate-45" />

@@ -21,7 +21,7 @@
 		<h1 class="text-3xl font-semibold tracking-tight">Privacy policy</h1>
 		<p class="mt-2 text-sm text-muted">
 			This explains what {APP_NAME} stores and why. {APP_NAME} is open source, so you can check
-			exactly how it works on <a href={GITHUB_URL} class="text-accent hover:underline">GitHub</a>.
+			exactly how it works on <a href={GITHUB_URL} class="text-accent-ink hover:underline">GitHub</a>.
 		</p>
 
 		<div class="mt-10 space-y-8 text-[15px] leading-relaxed text-muted [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-medium [&_h2]:text-fg [&_li]:ml-5 [&_li]:list-disc">
@@ -77,13 +77,13 @@
 				<p>
 					To have your own messages or ratings deleted from a server's transcripts, ask that server's
 					managers. For anything else, open an issue on
-					<a href={GITHUB_URL} class="text-accent hover:underline">GitHub</a> or contact the bot's
+					<a href={GITHUB_URL} class="text-accent-ink hover:underline">GitHub</a> or contact the bot's
 					operator, and include the server or user ID.
 				</p>
 			</section>
 
 			<p>
-				Using {APP_NAME} is also covered by the <a href="/terms" class="text-accent hover:underline">terms of service</a>.
+				Using {APP_NAME} is also covered by the <a href="/terms" class="text-accent-ink hover:underline">terms of service</a>.
 			</p>
 		</div>
 	</main>

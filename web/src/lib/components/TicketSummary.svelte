@@ -23,7 +23,7 @@
 			<TicketStub number={t.number} tone={state.tone} size="lg" />
 			<div class="min-w-0">
 				<h2 class="truncate text-lg font-semibold">{t.type_name}</h2>
-				<p class="text-sm {state.tone === 'waiting' ? 'text-accent' : 'text-muted'}">{state.label}</p>
+				<p class="text-sm {state.tone === 'waiting' ? 'text-accent-ink' : 'text-muted'}">{state.label}</p>
 			</div>
 		</div>
 		{#if actions}<div class="flex flex-wrap gap-2">{@render actions()}</div>{/if}

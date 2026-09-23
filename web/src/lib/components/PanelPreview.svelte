@@ -11,7 +11,8 @@
 		imageUrl = '',
 		thumbnailUrl = '',
 		placeholder = '',
-		types
+		types,
+		onpick
 	}: {
 		title: string;
 		description: string;
@@ -21,6 +22,8 @@
 		thumbnailUrl?: string;
 		placeholder?: string;
 		types: TicketType[];
+		/** Makes the buttons clickable, for demos. */
+		onpick?: (t: TicketType) => void;
 	} = $props();
 
 	// Discord's button colours.
@@ -92,13 +95,25 @@
 					{#each rows as row, i (i)}
 						<div class="flex flex-wrap gap-2">
 							{#each row as t (t.id)}
-								<span
-									class="inline-flex items-center gap-1.5 rounded px-4 py-1.5 text-sm font-medium text-white"
-									style="background:{buttonColor[t.button_style] ?? buttonColor.primary}"
-								>
-									{#if t.emoji}<span>{emojiText(t.emoji)}</span>{/if}
-									{t.button_label || t.name}
-								</span>
+								{#if onpick}
+									<button
+										type="button"
+										onclick={() => onpick(t)}
+										class="inline-flex items-center gap-1.5 rounded px-4 py-1.5 text-sm font-medium text-white transition-[filter,transform] hover:brightness-110 active:translate-y-px"
+										style="background:{buttonColor[t.button_style] ?? buttonColor.primary}"
+									>
+										{#if t.emoji}<span aria-hidden="true">{emojiText(t.emoji)}</span>{/if}
+										{t.button_label || t.name}
+									</button>
+								{:else}
+									<span
+										class="inline-flex items-center gap-1.5 rounded px-4 py-1.5 text-sm font-medium text-white"
+										style="background:{buttonColor[t.button_style] ?? buttonColor.primary}"
+									>
+										{#if t.emoji}<span>{emojiText(t.emoji)}</span>{/if}
+										{t.button_label || t.name}
+									</span>
+								{/if}
 							{/each}
 						</div>
 					{/each}

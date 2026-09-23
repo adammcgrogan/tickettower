@@ -30,9 +30,9 @@
 				<p>
 					{APP_NAME} runs support tickets in Discord servers. You can use it on any server you manage, as long as
 					you and your server follow
-					<a href="https://discord.com/terms" class="text-accent hover:underline">Discord's Terms of Service</a>
+					<a href="https://discord.com/terms" class="text-accent-ink hover:underline">Discord's Terms of Service</a>
 					and
-					<a href="https://discord.com/guidelines" class="text-accent hover:underline">Community Guidelines</a>.
+					<a href="https://discord.com/guidelines" class="text-accent-ink hover:underline">Community Guidelines</a>.
 				</p>
 			</section>
 
@@ -50,7 +50,7 @@
 				<h2>Your server's content</h2>
 				<p>
 					Tickets, transcripts, ticket panels and settings belong to your server. {APP_NAME} stores them only to run
-					the bot, as described in the <a href="/privacy" class="text-accent hover:underline">privacy policy</a>.
+					the bot, as described in the <a href="/privacy" class="text-accent-ink hover:underline">privacy policy</a>.
 					Server managers are responsible for what their team and members post in tickets, and for telling
 					members that ticket conversations are saved.
 				</p>
@@ -95,7 +95,7 @@
 				<h2>Changes and contact</h2>
 				<p>
 					These terms may be updated; the current version is always on this page. Questions go to
-					<a href={GITHUB_URL} class="text-accent hover:underline">GitHub</a>.
+					<a href={GITHUB_URL} class="text-accent-ink hover:underline">GitHub</a>.
 				</p>
 			</section>
 		</div>

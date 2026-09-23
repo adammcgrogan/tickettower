@@ -24,6 +24,9 @@
 	--color-accent: #f2b544;
 	--color-accent-hover: #f7c566;
 	--color-on-accent: #1c1405;
+	/* Amber as text. The same as the accent on dark surfaces; stepped darker on
+	   light ones, where #f2b544 text is unreadable (heat-3's value, 4.5:1). */
+	--color-accent-ink: #f2b544;
 	/* Chart marks: the accent stepped into the dataviz validator's dark
 	   lightness band (#f2b544 is too light for a data mark). */
 	--color-chart: #c28622;
@@ -57,6 +60,7 @@ html {
 		--color-border-strong: #c7d0dc;
 		--color-fg: #141a24;
 		--color-muted: #5b6472;
+		--color-accent-ink: #9c6a0e;
 		--color-subtle: #7a849a;
 		--color-chart: #b37a1e;
 		--color-heat-1: #d2a94f;
@@ -76,6 +80,7 @@ html {
 	--color-border-strong: #c7d0dc;
 	--color-fg: #141a24;
 	--color-muted: #5b6472;
+	--color-accent-ink: #9c6a0e;
 	--color-subtle: #7a849a;
 	--color-chart: #b37a1e;
 	--color-heat-1: #d2a94f;
@@ -157,6 +162,10 @@ body {
 	}
 	.label {
 		@apply text-sm font-medium;
+	}
+	/* A key to press, in shortcut hints. */
+	.kbd {
+		@apply inline-grid h-5 min-w-5 place-items-center rounded border border-border-strong bg-elevated px-1 font-sans text-[11px] leading-none font-medium text-muted;
 	}
 	.hint {
 		@apply text-xs text-muted;

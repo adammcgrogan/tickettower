@@ -5,7 +5,7 @@
 </script>
 
 {#if compact}
-	<span class="inline-flex items-center gap-0.5 text-accent" title={label} aria-label={label}>
+	<span class="inline-flex items-center gap-0.5 text-accent-ink" title={label} aria-label={label}>
 		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
 			<path d="M12 2.5l2.9 6.2 6.8.8-5 4.6 1.3 6.7L12 17.4l-6 3.4 1.3-6.7-5-4.6 6.8-.8z" />
 		</svg>
@@ -20,7 +20,7 @@
 				width="14"
 				height="14"
 				fill="currentColor"
-				class={n <= rating ? 'text-accent' : 'text-border'}
+				class={n <= rating ? 'text-accent-ink' : 'text-border'}
 				aria-hidden="true"
 			>
 				<path d="M12 2.5l2.9 6.2 6.8.8-5 4.6 1.3 6.7L12 17.4l-6 3.4 1.3-6.7-5-4.6 6.8-.8z" />

@@ -22,27 +22,27 @@
 		type TicketMember,
 		type TicketNote,
 		type TicketType,
-		type Transcript
+		type Transcript,
+		type User
 	} from '$lib/api';
 	import { APP_NAME } from '$lib/brand';
-	import { discordURL, ticketState, timeAgo } from '$lib/format';
+	import { discordURL, formatDuration, ticketState, timeAgo } from '$lib/format';
 	import { toast } from '$lib/toast.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Field from '$lib/components/Field.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
 	import LoadError from '$lib/components/LoadError.svelte';
-	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Rating from '$lib/components/Rating.svelte';
-	import Segmented from '$lib/components/Segmented.svelte';
 	import TicketStub from '$lib/components/TicketStub.svelte';
-	import TicketSummary from '$lib/components/TicketSummary.svelte';
 	import TranscriptView from '$lib/components/TranscriptView.svelte';
 
 	type Filter = 'open' | 'closed' | 'all';
 
 	const getGuild = getContext<() => Guild>('guild');
 	const guild = $derived(getGuild());
+	const getUser = getContext<() => User | null>('user');
+	const me = $derived(getUser());
 	// Viewers can read along but not act.
 	const canAct = $derived(atLeast(guild.level, 'support'));
 
@@ -181,8 +181,53 @@
 	});
 	const isOverdue = (t: Ticket) => {
 		const at = overdueAt(t, types);
-		return at !== null && at <= Date.now();
+		return at !== null && at <= now;
 	};
+
+	// Wait times tick along without reloading.
+	let now = $state(Date.now());
+	$effect(() => {
+		const timer = setInterval(() => (now = Date.now()), 30_000);
+		return () => clearInterval(timer);
+	});
+	const waitedFor = (t: Ticket) =>
+		formatDuration((now - new Date(t.waiting_since ?? t.last_activity_at).getTime()) / 1000);
+	/** A compact age for the list: 4m, 3h, 2d, 5w. */
+	function short(iso: string) {
+		const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);
+		if (s < 60) return 'now';
+		if (s < 3600) return `${Math.floor(s / 60)}m`;
+		if (s < 86400) return `${Math.floor(s / 3600)}h`;
+		if (s < 604800) return `${Math.floor(s / 86400)}d`;
+		return `${Math.floor(s / 604800)}w`;
+	}
+	const fullTime = (iso: string) =>
+		new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+	// The list in the order it's shown, for moving through it with the keyboard
+	// and going on to the next ticket after closing one.
+	const ordered = $derived(groups.flatMap((g) => g.items));
+	const waitingCount = $derived(filter === 'open' ? (groups.find((g) => g.label === 'Waiting on your team')?.items.length ?? 0) : 0);
+	const nextUp = $derived(waitingCount > 0 ? ordered[0] : null);
+
+	function select(id: number | null) {
+		goto(hrefWith({ t: id === null ? null : String(id) }), { replaceState: true, noScroll: true, keepFocus: true });
+	}
+
+	/** The ticket to show after `id` leaves the list: the one below it, else the one above. */
+	function neighbour(id: number): Ticket | null {
+		const i = ordered.findIndex((x) => x.id === id);
+		if (i === -1) return null;
+		return ordered[i + 1] ?? ordered[i - 1] ?? null;
+	}
+
+	// Keep the selected row in view when moving with the keyboard.
+	let queueScroller = $state<HTMLElement>();
+	$effect(() => {
+		const id = selectedId;
+		if (!id || !queueScroller) return;
+		tick().then(() => queueScroller?.querySelector(`[data-ticket="${id}"]`)?.scrollIntoView({ block: 'nearest' }));
+	});
 
 	// --- The selected ticket ---
 
@@ -214,6 +259,53 @@
 			stale = true;
 		};
 	});
+
+	// The conversation opens at its latest message, and follows new ones
+	// while you're reading at the bottom.
+	let scroller = $state<HTMLElement>();
+	let shown = { id: 0, count: 0 };
+	$effect(() => {
+		const d = detail;
+		const el = scroller;
+		if (!d || !el) return;
+		const count = d.messages.length + (d.notes?.length ?? 0);
+		const fresh = shown.id !== d.ticket.id;
+		const grew = count > shown.count;
+		const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+		shown = { id: d.ticket.id, count };
+		if (fresh || (grew && atBottom)) tick().then(() => (el.scrollTop = el.scrollHeight));
+	});
+
+	// New messages and tickets show up without reloading: the list and the
+	// open conversation are refreshed quietly while the tab is visible.
+	$effect(() => {
+		const timer = setInterval(() => {
+			if (document.visibilityState !== 'visible') return;
+			refreshQuietly();
+		}, 20_000);
+		return () => clearInterval(timer);
+	});
+
+	function refreshQuietly() {
+		if (tickets && !loading && !loadingMore && tickets.length <= PAGE) {
+			const req = ++seq;
+			api<Ticket[]>(listURL())
+				.then((t) => {
+					if (req !== seq) return;
+					tickets = t;
+					more = t.length === PAGE;
+				})
+				.catch(() => {});
+		}
+		const id = selectedId;
+		if (id && detail?.ticket.status === 'open') {
+			api<Transcript>(`/transcripts/${id}`)
+				.then((d) => {
+					if (selectedId === id && detail?.ticket.id === id) detail = d;
+				})
+				.catch(() => {});
+		}
+	}
 
 	// --- Closing from the dashboard ---
 
@@ -569,11 +661,14 @@
 				`/guilds/${guild.id}/tickets/${t.id}/close`,
 				send('POST', { reason: closeReason })
 			);
+			// In the open queue, go straight on to the next ticket.
+			const next = filter === 'open' ? neighbour(t.id) : null;
 			detail = { ...detail, ticket: updated };
 			closedCache.set(t.id, detail);
 			showClosed(updated);
 			closeOpen = false;
 			toast(`Ticket #${t.number} closed`);
+			if (filter === 'open') select(next?.id ?? null);
 		} catch (e) {
 			if (e instanceof ApiError && e.field) closeError = e.message;
 			else {
@@ -762,6 +857,8 @@
 			showClosed(updated);
 			mergeOpen = false;
 			toast(`Ticket #${t.number} merged into ${target ? `#${target.number}` : 'the other ticket'}`);
+			// Carry on in the ticket it was merged into.
+			if (filter === 'open' && target) select(target.id);
 		} catch (err) {
 			if (err instanceof ApiError && err.field) mergeError = err.message;
 			else {
@@ -811,30 +908,77 @@
 		replyBox?.setSelectionRange(cursor, cursor);
 	}
 
+	// Saved replies pop up above the reply box, with a filter once there are many.
+	let savedOpen = $state(false);
+	let savedQuery = $state('');
+	let savedMenu = $state<HTMLElement>();
+	let savedSearch = $state<HTMLInputElement>();
+	const savedMatches = $derived.by(() => {
+		const q = savedQuery.trim().toLowerCase();
+		return q
+			? savedReplies.filter((r) => r.name.toLowerCase().includes(q) || r.content.toLowerCase().includes(q))
+			: savedReplies;
+	});
+	async function openSaved() {
+		savedOpen = !savedOpen;
+		savedQuery = '';
+		if (savedOpen) {
+			await tick();
+			savedSearch?.focus();
+		}
+	}
+	function pickSaved(id: number) {
+		savedOpen = false;
+		insertSaved(id);
+	}
+
+	let noteBox = $state<HTMLTextAreaElement>();
+	function composeKeys(e: KeyboardEvent) {
+		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitCompose();
+		else if (e.key === 'Escape') (e.currentTarget as HTMLElement).blur();
+	}
+
 	// --- The More menu ---
 	let moreOpen = $state(false);
 	let moreMenu = $state<HTMLElement>();
 	const menuItem =
 		'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-border/60 hover:text-fg';
 	// What the More menu offers for an open ticket, for people who can act on it.
+	// On narrower screens the details panel is tucked away, so everything it
+	// does is here too.
 	const moreActions = $derived.by(() => {
 		const t = detail?.ticket;
 		if (!t || t.status !== 'open' || !canAct) return [];
-		const items: { icon: IconName; label: string; run: () => void }[] = [
-			{ icon: 'user', label: 'Assign to someone', run: openAssign },
+		const items: { icon: IconName; label: string; run: () => void }[] = [];
+		if (!t.claimed_by) items.push({ icon: 'check', label: 'Claim', run: claimTicket });
+		else if (t.claimed_by === me?.id) items.push({ icon: 'x', label: 'Unclaim', run: unclaimTicket });
+		items.push({ icon: 'user', label: 'Assign to someone', run: openAssign });
+		if (t.on_hold) items.push({ icon: 'play', label: 'Resume', run: resumeTicket });
+		else items.push({ icon: 'pause', label: 'Put on hold', run: openHold });
+		items.push(
 			{ icon: 'user-plus', label: 'Add someone', run: openAdd },
 			{ icon: 'user-minus', label: 'Remove someone', run: openRemove },
 			{ icon: 'pencil', label: 'Rename', run: openRename }
-		];
+		);
 		if (moveTargets.length > 0) items.push({ icon: 'arrow-right', label: 'Move to another ticket type', run: openMove });
 		if (mergeTargets.length > 0) items.push({ icon: 'merge', label: 'Merge into another ticket', run: openMerge });
 		return items;
 	});
 
+	// Other tickets from the same member that are in the list.
+	const related = $derived.by(() => {
+		const t = detail?.ticket;
+		return t && tickets ? tickets.filter((x) => x.opener_id === t.opener_id && x.id !== t.id).slice(0, 5) : [];
+	});
+
+	// The details panel, as a drawer on narrower screens.
+	let detailsOpen = $state(false);
+
 	// A draft belongs to the ticket it was written for.
 	$effect(() => {
 		void selectedId;
 		moreOpen = false;
+		savedOpen = false;
 		reply = '';
 		replyError = '';
 		note = '';
@@ -913,15 +1057,83 @@
 			? { title: 'No open tickets', body: "You're all caught up." }
 			: { title: 'No tickets yet', body: 'Tickets show up here once members start opening them.' }
 	);
+
+	// --- Keyboard shortcuts ---
+
+	let keysOpen = $state(false);
+	let searchBox = $state<HTMLInputElement>();
+	const keyList = [
+		{ label: 'Next ticket', keys: ['J'] },
+		{ label: 'Previous ticket', keys: ['K'] },
+		{ label: 'Reply', keys: ['R'] },
+		{ label: 'Write a private note', keys: ['N'] },
+		{ label: 'Close the ticket', keys: ['E'] },
+		{ label: 'Send', keys: ['⌘', 'Enter'] },
+		{ label: 'Search tickets', keys: ['/'] },
+		{ label: 'Back to the list', keys: ['Esc'] },
+		{ label: 'Find anything', keys: ['⌘', 'K'] }
+	];
+
+	function step(by: number) {
+		if (ordered.length === 0) return;
+		const i = ordered.findIndex((x) => x.id === selectedId);
+		const next = i === -1 ? (by > 0 ? 0 : ordered.length - 1) : Math.min(ordered.length - 1, Math.max(0, i + by));
+		select(ordered[next].id);
+	}
+
+	async function focusCompose(mode: 'reply' | 'note') {
+		if (!detail || !canAct) return;
+		if (detail.ticket.status === 'open') composeMode = mode;
+		await tick();
+		(noting ? noteBox : replyBox)?.focus();
+	}
+
+	function shortcuts(e: KeyboardEvent) {
+		if (e.key === 'Escape' && (moreOpen || savedOpen || detailsOpen)) {
+			moreOpen = savedOpen = detailsOpen = false;
+			return;
+		}
+		if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+		const el = e.target as HTMLElement;
+		if (el.closest('input, textarea, select, [contenteditable], dialog[open]') || document.querySelector('dialog[open]')) return;
+		switch (e.key) {
+			case 'j':
+				step(1);
+				break;
+			case 'k':
+				step(-1);
+				break;
+			case 'r':
+				focusCompose('reply');
+				break;
+			case 'n':
+				focusCompose('note');
+				break;
+			case 'e':
+				if (detail?.ticket.status === 'open' && canAct) openClose();
+				break;
+			case '/':
+				searchBox?.focus();
+				break;
+			case '?':
+				keysOpen = true;
+				break;
+			case 'Escape':
+				if (selectedId) select(null);
+				return;
+			default:
+				return;
+		}
+		e.preventDefault();
+	}
 </script>
 
 <svelte:window
 	onclick={(e) => {
 		if (moreOpen && moreMenu && !moreMenu.contains(e.target as Node)) moreOpen = false;
+		if (savedOpen && savedMenu && !savedMenu.contains(e.target as Node)) savedOpen = false;
 	}}
-	onkeydown={(e) => {
-		if (e.key === 'Escape') moreOpen = false;
-	}}
+	onkeydown={shortcuts}
 />
 
 <svelte:head><title>Tickets · {guild.name} · {APP_NAME}</title></svelte:head>
@@ -945,351 +1157,742 @@
 	</ul>
 {/snippet}
 
-<PageHeader title="Tickets" description="Everything members have opened. Pick a ticket to read the conversation." />
-
-<div class="mt-6 flex-wrap items-center gap-2 {selectedId ? 'hidden lg:flex' : 'flex'}">
-	<Segmented
-		options={filters}
-		value={filter}
-		label="Show tickets"
-		onchange={(v) => goto(hrefWith({ status: v === 'open' ? null : v, t: null }), { replaceState: true, noScroll: true })}
-	/>
-	<label class="relative block w-full sm:w-72">
-		<span class="sr-only">Search tickets</span>
-		<Icon
-			name="search"
-			size={15}
-			class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-subtle"
-		/>
-		<input bind:value={query} placeholder="Search tickets and messages" class="input pl-9" />
-	</label>
-	{#if types.length > 1}
-		<select bind:value={typeFilter} class="input w-auto" aria-label="Ticket type">
-			<option value="">All ticket types</option>
-			{#each types as tt (tt.id)}<option value={String(tt.id)}>{tt.name}</option>{/each}
-		</select>
-	{/if}
-	{#if canAct && filter === 'open' && tickets?.length}
-		<button
-			class="btn btn-secondary ml-auto"
-			onclick={() => (selecting ? stopSelecting() : (selecting = true))}
-			aria-pressed={selecting}
-		>
-			<Icon name="check" size={14} />
-			{selecting ? 'Done selecting' : 'Select'}
-		</button>
-	{/if}
-</div>
-
-<div class="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)]">
-	<div class={selectedId ? 'hidden lg:block' : ''}>
-		{#if error}
-			<LoadError message={error} onretry={load} />
-		{:else if tickets === null}
-			<div class="space-y-px overflow-hidden rounded-xl border border-border" aria-busy="true">
-				{#each Array(6) as _, i (i)}<div class="h-[84px] animate-pulse bg-surface"></div>{/each}
-			</div>
-		{:else if tickets.length === 0 && filtering}
-			<EmptyState icon="search" title="No tickets match">Try a different search or ticket type.</EmptyState>
-		{:else if tickets.length === 0}
-			<EmptyState icon="inbox" title={emptyText.title}>{emptyText.body}</EmptyState>
-		{:else}
-			{#if selecting}
-				<div class="mb-2 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-2">
-					<span class="text-sm {picked.size ? '' : 'text-muted'}" aria-live="polite">
-						{picked.size ? `${picked.size} selected` : 'Pick the tickets to close'}
-					</span>
-					<button class="btn btn-primary h-8 px-3" onclick={openBulkClose} disabled={picked.size === 0}>
-						<Icon name="lock" size={13} /> Close selected
+<!-- The facts about the selected ticket, and the actions that change them.
+     Beside the conversation on wide screens, in a drawer otherwise. -->
+{#snippet details(t: Ticket)}
+	{@const state = ticketState(t)}
+	<div class="border-b border-border px-5 py-4">
+		<p class="text-xs text-subtle">Status</p>
+		<p class="mt-1 flex items-center gap-2 text-sm font-medium {state.tone === 'waiting' ? 'text-accent-ink' : ''}">
+			<span
+				class="size-2 shrink-0 rounded-full {state.tone === 'waiting'
+					? isOverdue(t)
+						? 'bg-danger'
+						: 'bg-accent'
+					: state.tone === 'closed'
+						? 'bg-subtle'
+						: 'bg-success'}"
+			></span>
+			{state.label}
+		</p>
+		{#if t.status === 'open' && t.waiting_on_staff && !t.on_hold}
+			<p class="mt-1 text-xs {isOverdue(t) ? 'text-danger' : 'text-muted'}">
+				{isOverdue(t) ? 'Past the reply target. ' : ''}Waiting {waitedFor(t)}
+			</p>
+		{/if}
+		{#if t.status === 'open' && canAct}
+			<div class="mt-3">
+				{#if t.on_hold}
+					<button class="btn btn-secondary h-8 w-full" onclick={resumeTicket} disabled={holding}>
+						<Icon name="play" size={12} />
+						{holding ? 'Resuming…' : 'Resume'}
 					</button>
-				</div>
-			{/if}
-			<ul
-				aria-busy={loading}
-				class="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface transition-opacity lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto {loading
-					? 'opacity-60'
-					: ''}"
-			>
-				{#each groups as g (g.label)}
-					{#if g.label}
-						<li class="flex items-baseline justify-between gap-2 bg-bg/50 px-4 py-2 text-xs">
-							<span class="font-medium {g.label === 'Waiting on your team' ? 'text-accent' : 'text-muted'}">{g.label}</span>
-							<span class="flex items-baseline gap-3">
-								{#if selecting}
-									<button
-										class="text-muted underline-offset-4 hover:text-fg hover:underline"
-										onclick={() => toggleGroup(g.items)}
-									>
-										{allPicked(g.items) ? 'Clear' : 'Select all'}
-									</button>
-								{/if}
-								<span class="text-subtle tabular-nums">{g.items.length}</span>
-							</span>
-						</li>
-					{/if}
-				{#each g.items as t (t.id)}
-					{@const state = ticketState(t)}
-					{@const active = t.id === selectedId}
-					<li class="flex">
-						{#if selecting}
-							<label class="flex items-start pt-4 pl-4">
-								<span class="sr-only">Select ticket #{t.number}</span>
-								<input
-									type="checkbox"
-									class="size-4 accent-accent"
-									checked={picked.has(t.id)}
-									onchange={() => togglePicked(t.id)}
-								/>
-							</label>
-						{/if}
-						<a
-							href={hrefWith({ t: String(t.id) })}
-							data-sveltekit-noscroll
-							data-sveltekit-replacestate
-							aria-current={active ? 'true' : undefined}
-							onclick={(e) => {
-								if (!selecting) return;
-								e.preventDefault();
-								togglePicked(t.id);
-							}}
-							class="relative flex min-w-0 flex-1 gap-3 px-4 py-3 transition-colors {active
-								? 'bg-elevated'
-								: 'hover:bg-elevated/50'}"
-						>
-							{#if active}<span class="absolute inset-y-0 left-0 w-0.5 bg-accent"></span>{/if}
-							<TicketStub number={t.number} tone={state.tone} size="sm" />
-							<div class="min-w-0 flex-1">
-								<div class="flex items-baseline justify-between gap-2">
-									<span class="truncate text-sm font-medium">{t.opener_name}</span>
-									<span class="flex shrink-0 items-center gap-2 text-xs text-subtle">
-										{#if t.feedback}<Rating rating={t.feedback.rating} compact />{/if}
-										{timeAgo(t.closed_at ?? t.last_activity_at)}
-									</span>
-								</div>
-								<div class="truncate text-sm text-muted">{t.type_name}</div>
-								<div class="mt-1 truncate text-xs {state.tone === 'waiting' ? 'text-accent' : 'text-subtle'}">
-									{#if isOverdue(t)}<span class="font-medium text-danger">Overdue</span>{', '}{/if}{state.label}{t.claimed_by_name && t.status === 'open' ? `, claimed by ${t.claimed_by_name}` : ''}
-								</div>
-								{#if t.match}
-									<p class="mt-1.5 line-clamp-2 text-xs text-muted">
-										<span class="text-subtle">{t.match.author_name}:</span>
-										{#each snippetParts(t.match.snippet) as part, i (i)}{#if part.hit}<mark
-													class="rounded-sm bg-accent/20 px-0.5 text-fg">{part.text}</mark
-												>{:else}{part.text}{/if}{/each}
-									</p>
-								{/if}
-							</div>
-						</a>
-					</li>
-				{/each}
-				{/each}
-				{#if more}
-					<li class="p-2">
-						<button class="btn btn-ghost w-full" onclick={loadMore} disabled={loadingMore}>
-							{loadingMore ? 'Loading…' : 'Load older tickets'}
-						</button>
-					</li>
+				{:else}
+					<button class="btn btn-secondary h-8 w-full" onclick={openHold}>
+						<Icon name="pause" size={12} /> Put on hold
+					</button>
 				{/if}
-			</ul>
+			</div>
 		{/if}
 	</div>
 
-	<div class="min-w-0 {selectedId ? '' : 'hidden lg:block'}">
-		{#if !selectedId}
-			<div
-				class="grid min-h-96 place-items-center rounded-xl border border-dashed border-border px-6 text-center"
-			>
+	<dl class="space-y-4 border-b border-border px-5 py-4 text-sm">
+		<div>
+			<dt class="text-xs text-subtle">Opened by</dt>
+			<dd class="mt-1 truncate">{t.opener_name}</dd>
+		</div>
+		<div>
+			<dt class="flex items-center justify-between text-xs text-subtle">
+				Assigned to
+				{#if t.status === 'open' && canAct}
+					<button class="text-muted hover:text-fg" onclick={openAssign}>Change</button>
+				{/if}
+			</dt>
+			<dd class="mt-1 flex items-center justify-between gap-2">
+				<span class="truncate {t.claimed_by_name ? '' : 'text-subtle'}">{t.claimed_by_name ?? 'Nobody yet'}</span>
+				{#if t.status === 'open' && canAct}
+					{#if !t.claimed_by}
+						<button class="btn btn-secondary h-7 px-2.5 text-xs" onclick={claimTicket} disabled={claiming}>
+							{claiming ? 'Claiming…' : 'Claim'}
+						</button>
+					{:else if t.claimed_by === me?.id}
+						<button class="text-xs text-muted hover:text-fg" onclick={unclaimTicket} disabled={claiming}>
+							{claiming ? 'Unclaiming…' : 'Unclaim'}
+						</button>
+					{/if}
+				{/if}
+			</dd>
+		</div>
+		<div>
+			<dt class="flex items-center justify-between text-xs text-subtle">
+				Ticket type
+				{#if t.status === 'open' && canAct && moveTargets.length > 0}
+					<button class="text-muted hover:text-fg" onclick={openMove}>Move</button>
+				{/if}
+			</dt>
+			<dd class="mt-1 truncate">{t.type_name}</dd>
+		</div>
+		<div>
+			<dt class="text-xs text-subtle">{t.mode === 'thread' ? 'Thread' : 'Channel'}</dt>
+			<dd class="mt-1 flex items-center justify-between gap-2">
+				<span class="truncate">{detail?.channels[t.channel_id] ? `#${detail.channels[t.channel_id]}` : t.mode === 'thread' ? 'Private thread' : 'Private channel'}</span>
+				{#if t.status === 'open'}
+					<a
+						href={discordURL(guild.id, t.channel_id)}
+						target="_blank"
+						rel="noopener"
+						class="inline-flex shrink-0 items-center gap-1 text-xs text-muted hover:text-fg"
+					>
+						Open in Discord <Icon name="external" size={12} />
+					</a>
+				{/if}
+			</dd>
+		</div>
+		<div class="grid grid-cols-2 gap-3">
+			<div>
+				<dt class="text-xs text-subtle">Opened</dt>
+				<dd class="mt-1" title={fullTime(t.opened_at)}>{timeAgo(t.opened_at)}</dd>
+			</div>
+			{#if t.status === 'closed'}
 				<div>
-					<p class="font-medium">Pick a ticket</p>
-					<p class="mt-1 text-sm text-muted">Its details and the conversation show up here.</p>
+					<dt class="text-xs text-subtle">Closed</dt>
+					<dd class="mt-1" title={t.closed_at ? fullTime(t.closed_at) : ''}>{t.closed_at ? timeAgo(t.closed_at) : 'Yes'}</dd>
+				</div>
+			{:else}
+				<div>
+					<dt class="text-xs text-subtle">Last message</dt>
+					<dd class="mt-1" title={fullTime(t.last_activity_at)}>{timeAgo(t.last_activity_at)}</dd>
+				</div>
+			{/if}
+		</div>
+		{#if t.status === 'closed'}
+			<div>
+				<dt class="text-xs text-subtle">Closed by</dt>
+				<dd class="mt-1">{t.closed_by_name ?? 'The bot'}{t.close_reason ? `: ${t.close_reason}` : ''}</dd>
+			</div>
+		{/if}
+		{#if t.feedback}
+			<div>
+				<dt class="text-xs text-subtle">Rating</dt>
+				<dd class="mt-1.5"><Rating rating={t.feedback.rating} /></dd>
+				{#if t.feedback.comment}
+					<dd class="mt-1.5 whitespace-pre-wrap text-muted">{t.feedback.comment}</dd>
+				{/if}
+			</div>
+		{/if}
+	</dl>
+
+	{#if t.status === 'open' && canAct}
+		<div class="border-b border-border px-5 py-4">
+			<p class="text-xs text-subtle">People</p>
+			<div class="mt-2 flex gap-2">
+				<button class="btn btn-secondary h-8 flex-1 px-2.5" onclick={openAdd}>
+					<Icon name="user-plus" size={13} /> Add
+				</button>
+				<button class="btn btn-secondary h-8 flex-1 px-2.5" onclick={openRemove}>
+					<Icon name="user-minus" size={13} /> Remove
+				</button>
+			</div>
+		</div>
+	{/if}
+
+	{#if related.length > 0}
+		<div class="border-b border-border px-5 py-4">
+			<p class="flex items-center justify-between text-xs text-subtle">
+				Also from {t.opener_name}
+				{#if t.status === 'open' && canAct && mergeTargets.length > 0}
+					<button class="text-muted hover:text-fg" onclick={openMerge}>Merge</button>
+				{/if}
+			</p>
+			<ul class="mt-2 space-y-1">
+				{#each related as r (r.id)}
+					<li>
+						<a
+							href={hrefWith({ t: String(r.id) })}
+							data-sveltekit-noscroll
+							data-sveltekit-replacestate
+							class="-mx-2 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-elevated"
+						>
+							<TicketStub number={r.number} tone={ticketState(r).tone} size="sm" />
+							<span class="min-w-0 flex-1 truncate text-muted">{r.type_name}</span>
+							<span class="shrink-0 text-xs text-subtle">{r.status === 'closed' ? 'Closed' : 'Open'}</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+
+	<div class="space-y-1 px-3 py-3">
+		{#if t.status === 'open' && canAct}
+			<button class={menuItem} onclick={openRename}><Icon name="pencil" size={14} /> Rename</button>
+		{/if}
+		<a href="/transcripts/{t.id}" target="_blank" rel="noopener" class={menuItem}>
+			<Icon name="transcript" size={14} /> Open the transcript page
+		</a>
+	</div>
+{/snippet}
+
+<!-- The details panel shows beside the conversation when the workspace
+     itself is wide enough (a container query, so the sidebar counts). -->
+<div class="@container flex h-[calc(100dvh-3.5rem)] md:h-dvh" style="--queue-w: 22rem" data-workspace>
+	<!-- The queue -->
+	<section
+		aria-label="Tickets"
+		class="min-h-0 w-full flex-col border-r border-border bg-bg lg:w-[var(--queue-w)] lg:shrink-0 {selectedId ? 'hidden lg:flex' : 'flex'}"
+	>
+		<div class="shrink-0 px-4 pt-5 md:pt-6">
+			<div class="flex items-center justify-between gap-2">
+				<h1 class="font-display text-3xl leading-none font-bold">Tickets</h1>
+				<div class="flex items-center gap-1">
+					{#if canAct && filter === 'open' && tickets?.length}
+						<button
+							class="btn h-8 px-2.5 {selecting ? 'btn-secondary' : 'btn-ghost'}"
+							onclick={() => (selecting ? stopSelecting() : (selecting = true))}
+							aria-pressed={selecting}
+						>
+							<Icon name="check" size={14} />
+							{selecting ? 'Done' : 'Select'}
+						</button>
+					{/if}
+					<button
+						class="btn btn-ghost hidden size-8 p-0 md:inline-flex"
+						onclick={() => (keysOpen = true)}
+						aria-label="Keyboard shortcuts"
+						title="Keyboard shortcuts (?)"
+					>
+						<Icon name="keyboard" size={15} />
+					</button>
 				</div>
 			</div>
-		{:else}
-			<a
-				href={hrefWith({ t: null })}
-				data-sveltekit-noscroll
-				class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg lg:hidden"
-			>
-				<Icon name="arrow-left" size={14} /> All tickets
-			</a>
-			{#if detailError}
-				<LoadError message={detailError} />
-			{:else if !detail}
-				<div class="h-40 animate-pulse rounded-xl bg-surface"></div>
-				<div class="mt-4 h-80 animate-pulse rounded-xl bg-surface"></div>
+
+			<div role="radiogroup" aria-label="Show tickets" class="mt-4 flex gap-5 border-b border-border">
+				{#each filters as f (f.value)}
+					<button
+						type="button"
+						role="radio"
+						aria-checked={filter === f.value}
+						onclick={() => goto(hrefWith({ status: f.value === 'open' ? null : f.value, t: null }), { replaceState: true, noScroll: true, keepFocus: true })}
+						class="-mb-px flex items-center gap-1.5 border-b-2 pb-2.5 text-sm transition-colors {filter === f.value
+							? 'border-accent font-medium text-fg'
+							: 'border-transparent text-muted hover:text-fg'}"
+					>
+						{f.label}
+						{#if f.value === 'open' && filter === 'open' && tickets && !filtering}
+							<span class="text-xs text-subtle tabular-nums">{more ? `${tickets.length}+` : tickets.length}</span>
+						{/if}
+					</button>
+				{/each}
+				{#if types.length > 1}
+					<select
+						bind:value={typeFilter}
+						class="input mb-1.5 ml-auto h-7 w-auto max-w-36 min-w-0 self-center border-transparent bg-transparent pl-2 text-sm {typeFilter ? 'text-fg' : 'text-muted'} hover:border-border"
+						aria-label="Ticket type"
+					>
+						<option value="">All types</option>
+						{#each types as tt (tt.id)}<option value={String(tt.id)}>{tt.name}</option>{/each}
+					</select>
+				{/if}
+			</div>
+
+			<div class="mt-3 flex gap-2">
+				<label class="relative block min-w-0 flex-1">
+					<span class="sr-only">Search tickets</span>
+					<Icon
+						name="search"
+						size={15}
+						class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-subtle"
+					/>
+					<input
+						bind:this={searchBox}
+						bind:value={query}
+						placeholder="Search tickets and messages"
+						class="input pl-9"
+						onkeydown={(e) => {
+							if (e.key === 'Escape') {
+								query = '';
+								searchBox?.blur();
+							}
+						}}
+					/>
+				</label>
+			</div>
+		</div>
+
+		{#if selecting}
+			<div class="mx-4 mt-3 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-surface py-1.5 pr-1.5 pl-3">
+				<span class="text-sm {picked.size ? '' : 'text-muted'}" aria-live="polite">
+					{picked.size ? `${picked.size} selected` : 'Pick tickets to close'}
+				</span>
+				<button class="btn btn-primary h-8 px-3" onclick={openBulkClose} disabled={picked.size === 0}>
+					<Icon name="lock" size={13} /> Close
+				</button>
+			</div>
+		{/if}
+
+		<div class="mt-3 min-h-0 flex-1 overflow-y-auto" bind:this={queueScroller}>
+			{#if error}
+				<div class="px-4"><LoadError message={error} onretry={load} /></div>
+			{:else if tickets === null}
+				<div class="space-y-px" aria-busy="true">
+					{#each Array(7) as _, i (i)}
+						<div class="flex gap-3 px-4 py-3.5">
+							<div class="h-6 w-14 animate-pulse rounded bg-elevated"></div>
+							<div class="flex-1 space-y-2">
+								<div class="h-3 w-2/3 animate-pulse rounded bg-elevated"></div>
+								<div class="h-3 w-1/3 animate-pulse rounded bg-elevated"></div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else if tickets.length === 0}
+				<div class="px-4 pb-4">
+					{#if filtering}
+						<EmptyState icon="search" title="No tickets match">Try a different search or ticket type.</EmptyState>
+					{:else}
+						<EmptyState icon="inbox" title={emptyText.title}>{emptyText.body}</EmptyState>
+					{/if}
+				</div>
 			{:else}
-				{@const t = detail.ticket}
-				<TicketSummary ticket={t}>
-					{#snippet actions()}
-						{#if t.status === 'open'}
-							<a
-								href={discordURL(guild.id, t.channel_id)}
-								target="_blank"
-								rel="noopener"
-								class="btn btn-secondary h-8 px-3"
+				<ul aria-busy={loading} class="pb-4 transition-opacity {loading ? 'opacity-60' : ''}">
+					{#each groups as g (g.label)}
+						{#if g.label}
+							<li
+								class="sticky top-0 z-10 flex items-baseline justify-between gap-2 border-y border-border bg-bg/95 px-4 py-1.5 text-xs backdrop-blur first:border-t-0"
 							>
-								Open in Discord <Icon name="external" size={13} />
-							</a>
-							{#if canAct}
-								{#if t.claimed_by}
-									<button class="btn btn-secondary h-8 px-3" onclick={unclaimTicket} disabled={claiming}>
-										{claiming ? 'Unclaiming…' : 'Unclaim'}
-									</button>
-								{:else}
-									<button class="btn btn-secondary h-8 px-3" onclick={claimTicket} disabled={claiming}>
-										{claiming ? 'Claiming…' : 'Claim'}
-									</button>
+								<span class="font-medium {g.label === 'Waiting on your team' ? 'text-accent-ink' : 'text-muted'}">{g.label}</span>
+								<span class="flex items-baseline gap-3">
+									{#if selecting}
+										<button
+											class="text-muted underline-offset-4 hover:text-fg hover:underline"
+											onclick={() => toggleGroup(g.items)}
+										>
+											{allPicked(g.items) ? 'Clear' : 'Select all'}
+										</button>
+									{/if}
+									<span class="text-subtle tabular-nums">{g.items.length}</span>
+								</span>
+							</li>
+						{/if}
+						{#each g.items as t (t.id)}
+							{@const state = ticketState(t)}
+							{@const active = t.id === selectedId}
+							{@const overdue = isOverdue(t)}
+							<li class="flex">
+								{#if selecting}
+									<label class="flex items-start pt-4 pl-4">
+										<span class="sr-only">Select ticket #{t.number}</span>
+										<input
+											type="checkbox"
+											class="size-4 accent-accent"
+											checked={picked.has(t.id)}
+											onchange={() => togglePicked(t.id)}
+										/>
+									</label>
 								{/if}
-								{#if t.on_hold}
-									<button class="btn btn-secondary h-8 px-3" onclick={resumeTicket} disabled={holding}>
-										<Icon name="clock" size={13} /> {holding ? 'Resuming…' : 'Resume'}
-									</button>
-								{:else}
-									<button class="btn btn-secondary h-8 px-3" onclick={openHold}>
-										<Icon name="clock" size={13} /> Hold
-									</button>
-								{/if}
-								<button class="btn btn-secondary h-8 px-3" onclick={openClose}>
-									<Icon name="lock" size={13} /> Close ticket
+								<a
+									href={hrefWith({ t: String(t.id) })}
+									data-sveltekit-noscroll
+									data-sveltekit-replacestate
+									data-ticket={t.id}
+									aria-current={active ? 'true' : undefined}
+									onclick={(e) => {
+										if (!selecting) return;
+										e.preventDefault();
+										togglePicked(t.id);
+									}}
+									class="relative flex min-w-0 flex-1 gap-3 px-4 py-3 transition-colors {active
+										? 'bg-elevated'
+										: 'hover:bg-surface'}"
+								>
+									{#if active}<span class="absolute inset-y-0 left-0 w-0.5 bg-accent"></span>{/if}
+									<TicketStub number={t.number} tone={state.tone} size="sm" />
+									<div class="min-w-0 flex-1">
+										<div class="flex items-baseline justify-between gap-2">
+											<span class="truncate text-sm font-medium">{t.opener_name}</span>
+											{#if t.status === 'open' && t.waiting_on_staff && !t.on_hold}
+												<span
+													class="shrink-0 text-xs font-medium tabular-nums {overdue ? 'text-danger' : 'text-accent-ink'}"
+													title="{overdue ? 'Past the reply target. ' : ''}Waiting since {fullTime(t.waiting_since ?? t.last_activity_at)}"
+												>
+													{overdue ? 'Overdue, ' : ''}{short(t.waiting_since ?? t.last_activity_at)}
+												</span>
+											{:else}
+												<span class="flex shrink-0 items-center gap-2 text-xs text-subtle tabular-nums">
+													{#if t.feedback}<Rating rating={t.feedback.rating} compact />{/if}
+													{short(t.closed_at ?? t.last_activity_at)}
+												</span>
+											{/if}
+										</div>
+										<div class="mt-0.5 flex items-baseline justify-between gap-2 text-sm">
+											<span class="truncate text-muted">{t.type_name}</span>
+											{#if t.status === 'open'}
+												<span class="shrink-0 truncate text-xs {t.claimed_by_name ? 'text-muted' : 'text-subtle'}">
+													{t.claimed_by_name ?? 'Unclaimed'}
+												</span>
+											{/if}
+										</div>
+										{#if filter !== 'open' || t.on_hold}
+											<div class="mt-1 truncate text-xs {state.tone === 'waiting' ? 'text-accent-ink' : 'text-subtle'}">
+												{state.label}
+											</div>
+										{/if}
+										{#if t.match}
+											<p class="mt-1.5 line-clamp-2 text-xs text-muted">
+												<span class="text-subtle">{t.match.author_name}:</span>
+												{#each snippetParts(t.match.snippet) as part, i (i)}{#if part.hit}<mark
+															class="rounded-sm bg-accent/20 px-0.5 text-fg">{part.text}</mark
+														>{:else}{part.text}{/if}{/each}
+											</p>
+										{/if}
+									</div>
+								</a>
+							</li>
+						{/each}
+					{/each}
+					{#if more}
+						<li class="px-4 pt-2">
+							<button class="btn btn-ghost w-full" onclick={loadMore} disabled={loadingMore}>
+								{loadingMore ? 'Loading…' : 'Load older tickets'}
+							</button>
+						</li>
+					{/if}
+				</ul>
+			{/if}
+		</div>
+	</section>
+
+	<!-- The conversation -->
+	<section
+		aria-label="Conversation"
+		class="min-h-0 min-w-0 flex-1 flex-col {selectedId ? 'flex' : 'hidden lg:flex'}"
+	>
+		{#if !selectedId}
+			<div class="grid flex-1 place-items-center px-6 text-center">
+				<div class="max-w-sm">
+					{#if nextUp}
+						<p class="font-display text-3xl leading-tight font-bold">
+							{waitingCount === 1 ? '1 ticket is' : `${waitingCount} tickets are`} waiting on your team
+						</p>
+						<p class="mt-2 text-sm text-muted">
+							{nextUp.opener_name} has waited longest, for {waitedFor(nextUp)}.
+						</p>
+						<a
+							href={hrefWith({ t: String(nextUp.id) })}
+							data-sveltekit-noscroll
+							data-sveltekit-replacestate
+							class="btn btn-primary mt-5"
+						>
+							Open #{String(nextUp.number).padStart(4, '0')}
+						</a>
+					{:else}
+						<p class="font-medium">Pick a ticket</p>
+						<p class="mt-1 text-sm text-muted">The conversation and everything about it shows up here.</p>
+					{/if}
+					<p class="mt-8 hidden items-center justify-center gap-2 text-xs text-subtle md:flex">
+						<kbd class="kbd">J</kbd><kbd class="kbd">K</kbd> move between tickets
+						<span class="mx-1 text-border-strong">|</span>
+						<kbd class="kbd">?</kbd> all shortcuts
+					</p>
+				</div>
+			</div>
+		{:else if detailError}
+			<div class="p-5">
+				<a href={hrefWith({ t: null })} data-sveltekit-noscroll class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg lg:hidden">
+					<Icon name="arrow-left" size={14} /> All tickets
+				</a>
+				<LoadError message={detailError} />
+			</div>
+		{:else if !detail}
+			<div class="flex h-16 shrink-0 items-center gap-3 border-b border-border px-5">
+				<div class="h-8 w-20 animate-pulse rounded bg-elevated"></div>
+				<div class="h-4 w-40 animate-pulse rounded bg-elevated"></div>
+			</div>
+			<div class="flex-1 p-5"><div class="h-full animate-pulse rounded-xl bg-surface"></div></div>
+		{:else}
+			{@const t = detail.ticket}
+			{@const state = ticketState(t)}
+			<header class="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
+				<a
+					href={hrefWith({ t: null })}
+					data-sveltekit-noscroll
+					class="btn btn-ghost -ml-2 size-8 shrink-0 p-0 lg:hidden"
+					aria-label="All tickets"
+				>
+					<Icon name="arrow-left" size={16} />
+				</a>
+				<TicketStub number={t.number} tone={state.tone} />
+				<div class="min-w-0 flex-1">
+					<h2 class="truncate text-[15px] leading-tight font-semibold">{t.opener_name}</h2>
+					<p class="truncate text-sm {state.tone === 'waiting' ? 'text-accent-ink' : 'text-muted'}">
+						{t.type_name}, {state.label.charAt(0).toLowerCase() + state.label.slice(1)}
+					</p>
+				</div>
+				<div class="flex shrink-0 items-center gap-1.5">
+					{#if canAct}
+						{#if t.status === 'open'}
+							{#if !t.claimed_by}
+								<button class="btn btn-secondary hidden h-8 px-3 sm:inline-flex" onclick={claimTicket} disabled={claiming}>
+									{claiming ? 'Claiming…' : 'Claim'}
 								</button>
 							{/if}
-						{:else if canReopen(t) && canAct}
+							<button class="btn btn-secondary h-8 px-3" onclick={openClose} aria-label="Close ticket" title="Close ticket (E)">
+								<Icon name="lock" size={13} /> <span class="hidden sm:inline">Close ticket</span>
+							</button>
+						{:else if canReopen(t)}
 							<button class="btn btn-secondary h-8 px-3" onclick={reopenTicket} disabled={reopening}>
 								<Icon name="unlock" size={13} /> {reopening ? 'Reopening…' : 'Reopen'}
 							</button>
 						{/if}
-						<div class="relative" bind:this={moreMenu}>
-							<button
-								class="btn btn-ghost size-8 p-0"
-								onclick={() => (moreOpen = !moreOpen)}
-								aria-haspopup="menu"
-								aria-expanded={moreOpen}
-								aria-label="More actions"
-								title="More actions"
+					{/if}
+					<div class="relative" bind:this={moreMenu}>
+						<button
+							class="btn btn-ghost size-8 p-0"
+							onclick={() => (moreOpen = !moreOpen)}
+							aria-haspopup="menu"
+							aria-expanded={moreOpen}
+							aria-label="More actions"
+							title="More actions"
+						>
+							<Icon name="more" />
+						</button>
+						{#if moreOpen}
+							<div
+								role="menu"
+								class="absolute top-full right-0 z-30 mt-1 w-60 rounded-lg border border-border-strong bg-elevated p-1 shadow-xl shadow-black/40"
 							>
-								<Icon name="more" />
-							</button>
-							{#if moreOpen}
-								<div
-									role="menu"
-									class="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-border-strong bg-elevated p-1 shadow-xl shadow-black/40"
-								>
-									{#each moreActions as a (a.label)}
-										<button
-											role="menuitem"
-											class={menuItem}
-											onclick={() => {
-												moreOpen = false;
-												a.run();
-											}}
-										>
-											<Icon name={a.icon} size={14} /> {a.label}
-										</button>
-									{/each}
-									<a role="menuitem" href="/transcripts/{t.id}" target="_blank" rel="noopener" class={menuItem}>
-										<Icon name="transcript" size={14} /> Open the transcript page
+								{#each moreActions as a (a.label)}
+									<button
+										role="menuitem"
+										class={menuItem}
+										onclick={() => {
+											moreOpen = false;
+											a.run();
+										}}
+									>
+										<Icon name={a.icon} size={14} /> {a.label}
+									</button>
+								{/each}
+								{#if t.status === 'open'}
+									<a role="menuitem" href={discordURL(guild.id, t.channel_id)} target="_blank" rel="noopener" class={menuItem}>
+										<Icon name="external" size={14} /> Open in Discord
 									</a>
-								</div>
-							{/if}
-						</div>
-					{/snippet}
-				</TicketSummary>
-				<div class="mt-4">
-					<TranscriptView
-						messages={detail.messages}
-						notes={detail.notes ?? []}
-						openerId={t.opener_id}
-						openerName={t.opener_name}
-						roles={detail.roles}
-						channels={detail.channels}
-					/>
-				</div>
-				{#if canAct}
-					<form
-						onsubmit={submitCompose}
-						class="mt-4 rounded-xl border bg-surface p-3 transition-colors focus-within:border-border-strong {composeError
-							? 'border-danger/50'
-							: noting
-								? 'border-dashed border-border-strong'
-								: 'border-border'}"
-					>
-						{#if t.status === 'open'}
-							<div class="mb-2">
-								<Segmented options={composeModes} bind:value={composeMode} label="Write a reply or a private note" />
-							</div>
-						{/if}
-						{#if noting}
-							<label for="note" class="sr-only">Private note on ticket #{t.number}</label>
-							<textarea
-								id="note"
-								rows="3"
-								maxlength={MAX_NOTE}
-								bind:value={note}
-								placeholder="Add a private note for your team…"
-								aria-invalid={!!noteError}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitCompose();
-								}}
-								class="block w-full resize-y bg-transparent px-1 text-sm outline-none placeholder:text-subtle"
-							></textarea>
-						{:else}
-							<label for="reply" class="sr-only">Reply to {t.opener_name}</label>
-							<textarea
-								id="reply"
-								rows="3"
-								maxlength="2000"
-								bind:this={replyBox}
-								bind:value={reply}
-								placeholder="Reply to {t.opener_name}…"
-								aria-invalid={!!replyError}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitCompose();
-								}}
-								class="block w-full resize-y bg-transparent px-1 text-sm outline-none placeholder:text-subtle"
-							></textarea>
-						{/if}
-						<div class="mt-2 flex items-center justify-between gap-3">
-							<p class="text-xs {composeError ? 'text-danger' : 'text-subtle'}">
-								{composeError ||
-									(noting
-										? 'Only your team sees notes, here and in the transcript. The member never does.'
-										: hasPlaceholders
-											? "Placeholders are filled in when it's sent. ⌘ or Ctrl + Enter sends."
-											: `${APP_NAME} posts it in the ticket under your name. ⌘ or Ctrl + Enter sends.`)}
-							</p>
-							<div class="flex shrink-0 items-center gap-2">
-								{#if noting}
-									<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={savingNote || !note.trim()}>
-										<Icon name="lock" size={13} />
-										{savingNote ? 'Saving…' : 'Add note'}
-									</button>
-								{:else}
-									{#if savedReplies.length > 0}
-										<select
-											class="input h-8 w-auto max-w-44 py-0 text-sm"
-											aria-label="Insert a saved reply"
-											onchange={(e) => {
-												insertSaved(Number(e.currentTarget.value));
-												e.currentTarget.value = '';
-											}}
-										>
-											<option value="" selected disabled>Saved replies</option>
-											{#each savedReplies as r (r.id)}<option value={String(r.id)}>{r.name}</option>{/each}
-										</select>
-									{/if}
-									<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={sending || !reply.trim()}>
-										<Icon name="send" size={13} />
-										{sending ? 'Sending…' : 'Send'}
-									</button>
 								{/if}
+								<a role="menuitem" href="/transcripts/{t.id}" target="_blank" rel="noopener" class={menuItem}>
+									<Icon name="transcript" size={14} /> Open the transcript page
+								</a>
 							</div>
-						</div>
-					</form>
-				{/if}
-			{/if}
-		{/if}
-	</div>
+						{/if}
+					</div>
+					<button
+						class="btn size-8 p-0 @min-[72rem]:hidden {detailsOpen ? 'btn-secondary' : 'btn-ghost'}"
+						onclick={() => (detailsOpen = !detailsOpen)}
+						aria-expanded={detailsOpen}
+						aria-controls="ticket-details"
+						aria-label="Ticket details"
+						title="Ticket details"
+					>
+						<Icon name="panel-right" />
+					</button>
+				</div>
+			</header>
+
+			<div class="flex min-h-0 flex-1">
+				<div class="flex min-w-0 flex-1 flex-col">
+					<div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-5" bind:this={scroller}>
+						<!-- Short conversations sit at the bottom, by the reply box, as in Discord. -->
+						<div class="mt-auto"></div>
+<div class="shrink-0">
+						<TranscriptView
+							messages={detail.messages}
+							notes={detail.notes ?? []}
+							openerId={t.opener_id}
+							openerName={t.opener_name}
+							roles={detail.roles}
+							channels={detail.channels}
+						/>
 </div>
+					</div>
+
+					{#if canAct}
+						<form onsubmit={submitCompose} class="shrink-0 px-4 pb-4 sm:px-5">
+							<div
+								class="rounded-xl border bg-surface transition-colors focus-within:border-border-strong {composeError
+									? 'border-danger/50'
+									: noting
+										? 'border-dashed border-border-strong'
+										: 'border-border'}"
+							>
+								{#if t.status === 'open'}
+									<div role="radiogroup" aria-label="Write a reply or a private note" class="flex gap-4 px-3.5 pt-2.5">
+										{#each composeModes as m (m.value)}
+											<button
+												type="button"
+												role="radio"
+												aria-checked={composeMode === m.value}
+												onclick={async () => {
+													composeMode = m.value;
+													await tick();
+													(m.value === 'note' ? noteBox : replyBox)?.focus();
+												}}
+												class="text-sm transition-colors {composeMode === m.value
+													? 'font-medium text-fg'
+													: 'text-subtle hover:text-muted'}"
+											>
+												{m.label}
+											</button>
+										{/each}
+									</div>
+								{/if}
+								{#if noting}
+									<label for="note" class="sr-only">Private note on ticket #{t.number}</label>
+									<textarea
+										id="note"
+										rows="2"
+										maxlength={MAX_NOTE}
+										bind:this={noteBox}
+										bind:value={note}
+										placeholder={t.status === 'open' ? 'Only your team sees this…' : 'Add a private note for your team…'}
+										aria-invalid={!!noteError}
+										onkeydown={composeKeys}
+										class="block max-h-60 min-h-16 w-full resize-none bg-transparent px-3.5 py-2 text-sm [field-sizing:content] outline-none focus-visible:outline-none placeholder:text-subtle"
+									></textarea>
+								{:else}
+									<label for="reply" class="sr-only">Reply to {t.opener_name}</label>
+									<textarea
+										id="reply"
+										rows="2"
+										maxlength="2000"
+										bind:this={replyBox}
+										bind:value={reply}
+										placeholder="Reply to {t.opener_name}…"
+										aria-invalid={!!replyError}
+										onkeydown={composeKeys}
+										class="block max-h-60 min-h-16 w-full resize-none bg-transparent px-3.5 py-2 text-sm [field-sizing:content] outline-none focus-visible:outline-none placeholder:text-subtle"
+									></textarea>
+								{/if}
+								<div class="flex items-center justify-between gap-3 px-2 pb-2 pl-3.5">
+									<p class="min-w-0 truncate text-xs {composeError ? 'text-danger' : 'text-subtle'}">
+										{composeError ||
+											(noting
+												? 'The member never sees notes.'
+												: hasPlaceholders
+													? "Placeholders are filled in when it's sent."
+													: `Posted in the ticket under your name.`)}
+									</p>
+									<div class="flex shrink-0 items-center gap-1.5">
+										{#if noting}
+											<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={savingNote || !note.trim()}>
+												<Icon name="lock" size={13} />
+												{savingNote ? 'Saving…' : 'Add note'}
+											</button>
+										{:else}
+											{#if savedReplies.length > 0}
+												<div class="relative" bind:this={savedMenu}>
+													<button
+														type="button"
+														class="btn btn-ghost h-8 px-2.5"
+														onclick={openSaved}
+														aria-haspopup="menu"
+														aria-expanded={savedOpen}
+													>
+														<Icon name="message" size={14} /> <span class="hidden sm:inline">Saved replies</span>
+													</button>
+													{#if savedOpen}
+														<div
+															class="absolute right-0 bottom-full z-30 mb-1 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border-strong bg-elevated shadow-xl shadow-black/40"
+														>
+															{#if savedReplies.length > 5}
+																<div class="border-b border-border p-1.5">
+																	<input
+																		bind:this={savedSearch}
+																		bind:value={savedQuery}
+																		placeholder="Find a saved reply"
+																		aria-label="Find a saved reply"
+																		class="h-8 w-full rounded-md bg-transparent px-2 text-sm outline-none placeholder:text-subtle"
+																		onkeydown={(e) => {
+																			if (e.key === 'Enter' && savedMatches[0]) {
+																				e.preventDefault();
+																				pickSaved(savedMatches[0].id);
+																			}
+																		}}
+																	/>
+																</div>
+															{/if}
+															<ul role="menu" class="max-h-72 overflow-y-auto p-1">
+																{#each savedMatches as r (r.id)}
+																	<li>
+																		<button
+																			type="button"
+																			role="menuitem"
+																			class="block w-full rounded-md px-2.5 py-2 text-left transition-colors hover:bg-border/60"
+																			onclick={() => pickSaved(r.id)}
+																		>
+																			<span class="block truncate text-sm">{r.name}</span>
+																			<span class="block truncate text-xs text-subtle">{r.content}</span>
+																		</button>
+																	</li>
+																{:else}
+																	<li class="px-2.5 py-2 text-sm text-muted">No saved reply matches.</li>
+																{/each}
+															</ul>
+														</div>
+													{/if}
+												</div>
+											{/if}
+											<button type="submit" class="btn btn-primary h-8 shrink-0 px-3" disabled={sending || !reply.trim()} title="Send (⌘ or Ctrl + Enter)">
+												<Icon name="send" size={13} />
+												{sending ? 'Sending…' : 'Send'}
+											</button>
+										{/if}
+									</div>
+								</div>
+							</div>
+						</form>
+					{/if}
+				</div>
+
+				<aside
+					id="ticket-details"
+					aria-label="Ticket details"
+					class="{detailsOpen
+						? 'fixed inset-y-0 right-0 z-40 flex w-80 max-w-[90vw] shadow-2xl shadow-black/50'
+						: 'hidden'} flex-col overflow-y-auto border-l border-border bg-surface @min-[72rem]:static @min-[72rem]:z-auto @min-[72rem]:flex @min-[72rem]:w-72 @min-[72rem]:max-w-none @min-[72rem]:shrink-0 @min-[72rem]:shadow-none"
+				>
+					<div class="flex items-center justify-between border-b border-border px-5 py-3 @min-[72rem]:hidden">
+						<span class="text-sm font-medium">Ticket #{String(t.number).padStart(4, '0')}</span>
+						<button class="btn btn-ghost size-8 p-0" onclick={() => (detailsOpen = false)} aria-label="Close details">
+							<Icon name="x" />
+						</button>
+					</div>
+					{@render details(t)}
+				</aside>
+				{#if detailsOpen}
+					<button
+						class="fixed inset-0 z-30 bg-black/40 @min-[72rem]:hidden"
+						onclick={() => (detailsOpen = false)}
+						aria-label="Close details"
+						tabindex="-1"
+					></button>
+				{/if}
+			</div>
+		{/if}
+	</section>
+</div>
+
+<Dialog bind:open={keysOpen} title="Keyboard shortcuts" description="They work whenever you're not typing in a box.">
+	<dl class="divide-y divide-border text-sm">
+		{#each keyList as k (k.label)}
+			<div class="flex items-center justify-between gap-4 py-2">
+				<dt class="text-muted">{k.label}</dt>
+				<dd class="flex gap-1">{#each k.keys as key (key)}<kbd class="kbd">{key}</kbd>{/each}</dd>
+			</div>
+		{/each}
+	</dl>
+	{#snippet footer()}
+		<button class="btn btn-ghost" onclick={() => (keysOpen = false)}>Done</button>
+	{/snippet}
+</Dialog>
 
 <Dialog
 	bind:open={moveOpen}

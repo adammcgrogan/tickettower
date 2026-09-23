@@ -13,5 +13,5 @@
 			/>
 		</svg>
 	</span>
-	<span class="font-display text-[22px] leading-none font-extrabold tracking-[0.01em]">{APP_NAME}</span>
+	<span class="font-display text-[22px] leading-none font-extrabold tracking-[0.01em] whitespace-nowrap">{APP_NAME}</span>
 </span>

@@ -35,7 +35,7 @@
 			{#if o.icon}
 				<span
 					class="grid size-8 shrink-0 place-items-center rounded-lg bg-elevated {selected
-						? 'text-accent'
+						? 'text-accent-ink'
 						: 'text-muted'}"
 				>
 					<Icon name={o.icon} />
