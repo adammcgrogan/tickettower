@@ -7,7 +7,9 @@
 		kinds,
 		placeholder = 'Select a channel',
 		id,
-		invalid = false
+		invalid = false,
+		disabled = false,
+		onchange
 	}: {
 		channels: Channel[];
 		value: string | null;
@@ -15,6 +17,9 @@
 		placeholder?: string;
 		id?: string;
 		invalid?: boolean;
+		disabled?: boolean;
+		/** Called after a pick, with the new value. */
+		onchange?: (value: string | null) => void;
 	} = $props();
 
 	const prefix = (c: Channel) => (c.kind === 'category' ? '' : '# ');
@@ -38,8 +43,12 @@
 	{id}
 	class="input"
 	aria-invalid={invalid}
+	{disabled}
 	value={value ?? ''}
-	onchange={(e) => (value = e.currentTarget.value || null)}
+	onchange={(e) => {
+		value = e.currentTarget.value || null;
+		onchange?.(value);
+	}}
 >
 	<option value="">{placeholder}</option>
 	{#each groups as group (group.label)}

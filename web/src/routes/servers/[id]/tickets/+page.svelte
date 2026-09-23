@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext, tick } from 'svelte';
+	import { getContext, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -101,7 +101,8 @@
 		tickets = null;
 		types = [];
 		savedReplies = [];
-		typeFilter = '';
+		// A link can start the list filtered to one type (from Ticket types).
+		typeFilter = untrack(() => page.url.searchParams.get('type') ?? '');
 		api<TicketType[]>(`/guilds/${id}/ticket-types`)
 			.then((t) => {
 				if (!stale) types = t;

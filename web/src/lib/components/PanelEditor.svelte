@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import {
 		api,
 		ApiError,
@@ -23,6 +24,7 @@
 	import Icon from './Icon.svelte';
 	import PanelPreview from './PanelPreview.svelte';
 	import SaveBar from './SaveBar.svelte';
+	import { guardUnsaved } from '$lib/unsaved';
 	import Segmented from './Segmented.svelte';
 
 	let {
@@ -71,6 +73,7 @@
 	);
 	let saved = $state(untrack(() => JSON.stringify(form)));
 	const dirty = $derived(JSON.stringify(form) !== saved);
+	guardUnsaved(() => dirty && !saving);
 
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
@@ -142,6 +145,11 @@
 		publishError = '';
 		publishOpen = true;
 	}
+
+	// "Publish" on the ticket panels list lands here with the dialog open.
+	onMount(() => {
+		if (panel && page.url.searchParams.has('publish')) openPublish();
+	});
 
 	async function publish() {
 		if (!publishChannel) {
@@ -370,7 +378,7 @@
 		</section>
 
 		<SaveBar status={dirty ? 'Unsaved changes' : panel ? 'All changes saved' : ''}>
-			<a href="/servers/{guildId}/panels" class="btn btn-ghost">{panel ? 'Back' : 'Cancel'}</a>
+			{#if !panel}<a href="/servers/{guildId}/panels" class="btn btn-ghost">Cancel</a>{/if}
 			<button type="submit" class="btn btn-primary" disabled={saving || (!!panel && !dirty)}>
 				{saving ? 'Saving…' : panel ? 'Save changes' : 'Create ticket panel'}
 			</button>

@@ -43,6 +43,7 @@
 	import PlaceholderChips from './PlaceholderChips.svelte';
 	import RolePicker from './RolePicker.svelte';
 	import SaveBar from './SaveBar.svelte';
+	import { guardUnsaved } from '$lib/unsaved';
 	import Segmented from './Segmented.svelte';
 	import WelcomePreview from './WelcomePreview.svelte';
 
@@ -244,6 +245,7 @@
 	const snapshot = () => JSON.stringify([form, [...addTo].sort()]);
 	let saved = $state('');
 	const dirty = $derived(!!initial && saved !== '' && snapshot() !== saved);
+	guardUnsaved(() => dirty && !saving);
 
 	onMount(async () => {
 		api<Panel[]>(`/guilds/${guildId}/panels`)
@@ -1199,7 +1201,7 @@
 		<SaveBar
 			status={initial ? (dirty ? 'Unsaved changes' : 'All changes saved') : 'Every tab is saved together'}
 		>
-			<a href="/servers/{guildId}/ticket-types" class="btn btn-ghost">{initial ? 'Back' : 'Cancel'}</a>
+			{#if !initial}<a href="/servers/{guildId}/ticket-types" class="btn btn-ghost">Cancel</a>{/if}
 			<button type="submit" class="btn btn-primary" disabled={saving || (!!initial && !dirty)}>
 				{saving ? 'Saving…' : initial ? 'Save changes' : 'Create ticket type'}
 			</button>
