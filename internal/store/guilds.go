@@ -14,6 +14,8 @@ type Guild struct {
 	Name    string
 	Icon    *string
 	OwnerID snowflake.ID
+	// MemberCount is 0 when unknown, which keeps the last count recorded.
+	MemberCount int
 }
 
 // UpsertGuild records that the bot is in a guild, creating default settings
@@ -26,12 +28,13 @@ func (s *Store) UpsertGuild(ctx context.Context, g Guild) error {
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO guilds (id, name, icon, owner_id)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO guilds (id, name, icon, owner_id, member_count)
+		VALUES ($1, $2, $3, $4, NULLIF($5, 0))
 		ON CONFLICT (id) DO UPDATE
 		SET name = EXCLUDED.name, icon = EXCLUDED.icon, owner_id = EXCLUDED.owner_id,
+		    member_count = COALESCE(EXCLUDED.member_count, guilds.member_count),
 		    left_at = NULL, updated_at = now()`,
-		int64(g.ID), g.Name, g.Icon, int64(g.OwnerID))
+		int64(g.ID), g.Name, g.Icon, int64(g.OwnerID), g.MemberCount)
 	if err != nil {
 		return err
 	}

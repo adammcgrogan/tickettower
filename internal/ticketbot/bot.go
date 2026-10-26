@@ -159,7 +159,7 @@ func (b *Bot) Run(ctx context.Context) error {
 func (b *Bot) upsertGuild(g discord.Guild) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := b.store.UpsertGuild(ctx, store.Guild{ID: g.ID, Name: g.Name, Icon: g.Icon, OwnerID: g.OwnerID})
+	err := b.store.UpsertGuild(ctx, store.Guild{ID: g.ID, Name: g.Name, Icon: g.Icon, OwnerID: g.OwnerID, MemberCount: g.MemberCount})
 	if err != nil {
 		b.log.Error("failed to save guild", slog.String("guild_id", g.ID.String()), slog.Any("err", err))
 	}

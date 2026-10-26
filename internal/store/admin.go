@@ -13,12 +13,16 @@ import (
 type AdminOverview struct {
 	TotalGuilds  int `json:"total_guilds"`  // ever installed, including ones that left
 	ActiveGuilds int `json:"active_guilds"` // bot currently installed
-	JoinedLast30 int `json:"joined_last_30"`
-	LeftLast30   int `json:"left_last_30"`
+	// ActiveMembers adds up the member counts of active guilds, so someone in
+	// two of them counts twice.
+	ActiveMembers int `json:"active_members"`
+	JoinedLast30  int `json:"joined_last_30"`
+	LeftLast30    int `json:"left_last_30"`
 	// Among active guilds.
 	PremiumGuilds int `json:"premium_guilds"`
 	FreeGuilds    int `json:"free_guilds"`
 
+	TicketsTotal        int `json:"tickets_total"` // ever opened, in any guild
 	TicketsOpenedLast30 int `json:"tickets_opened_last_30"`
 	TicketsClosedLast30 int `json:"tickets_closed_last_30"`
 	// UsingGuilds30 is how many active guilds opened at least one ticket in
@@ -38,8 +42,9 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 		SELECT count(*),
 		       count(*) FILTER (WHERE left_at IS NULL),
 		       count(*) FILTER (WHERE left_at IS NULL AND joined_at >= now() - interval '30 days'),
-		       count(*) FILTER (WHERE left_at IS NOT NULL AND left_at >= now() - interval '30 days')
-		FROM guilds`).Scan(&o.TotalGuilds, &o.ActiveGuilds, &o.JoinedLast30, &o.LeftLast30)
+		       count(*) FILTER (WHERE left_at IS NOT NULL AND left_at >= now() - interval '30 days'),
+		       COALESCE(sum(member_count) FILTER (WHERE left_at IS NULL), 0)
+		FROM guilds`).Scan(&o.TotalGuilds, &o.ActiveGuilds, &o.JoinedLast30, &o.LeftLast30, &o.ActiveMembers)
 	if err != nil {
 		return o, err
 	}
@@ -53,10 +58,11 @@ func (s *Store) AdminOverview(ctx context.Context) (AdminOverview, error) {
 	}
 
 	err = s.pool.QueryRow(ctx, `
-		SELECT count(*) FILTER (WHERE opened_at >= now() - interval '30 days'),
+		SELECT count(*),
+		       count(*) FILTER (WHERE opened_at >= now() - interval '30 days'),
 		       count(*) FILTER (WHERE closed_at >= now() - interval '30 days'),
 		       count(DISTINCT guild_id) FILTER (WHERE opened_at >= now() - interval '30 days')
-		FROM tickets`).Scan(&o.TicketsOpenedLast30, &o.TicketsClosedLast30, &o.UsingGuilds30)
+		FROM tickets`).Scan(&o.TicketsTotal, &o.TicketsOpenedLast30, &o.TicketsClosedLast30, &o.UsingGuilds30)
 	if err != nil {
 		return o, err
 	}
@@ -71,6 +77,7 @@ type AdminGuild struct {
 	Name          string       `json:"name"`
 	Icon          *string      `json:"icon"`
 	Tier          string       `json:"tier"`
+	MemberCount   *int         `json:"member_count"` // nil until the bot has seen it
 	JoinedAt      time.Time    `json:"joined_at"`
 	LeftAt        *time.Time   `json:"left_at"`
 	TicketsTotal  int          `json:"tickets_total"`
@@ -85,7 +92,7 @@ type AdminGuild struct {
 // joined first, with its plan and how much it's used the bot.
 func (s *Store) AdminGuilds(ctx context.Context) ([]AdminGuild, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT g.id, g.name, g.icon, COALESCE(e.tier, 'free'), g.joined_at, g.left_at,
+		SELECT g.id, g.name, g.icon, COALESCE(e.tier, 'free'), g.member_count, g.joined_at, g.left_at,
 		       COALESCE(t.total, 0), COALESCE(t.last_30, 0), t.last_ticket_at,
 		       (SELECT count(*) FROM ticket_types tt WHERE tt.guild_id = g.id),
 		       EXISTS (SELECT 1 FROM panels p WHERE p.guild_id = g.id AND p.message_id IS NOT NULL)
@@ -107,7 +114,7 @@ func (s *Store) AdminGuilds(ctx context.Context) ([]AdminGuild, error) {
 	for rows.Next() {
 		var g AdminGuild
 		var id int64
-		if err := rows.Scan(&id, &g.Name, &g.Icon, &g.Tier, &g.JoinedAt, &g.LeftAt,
+		if err := rows.Scan(&id, &g.Name, &g.Icon, &g.Tier, &g.MemberCount, &g.JoinedAt, &g.LeftAt,
 			&g.TicketsTotal, &g.TicketsLast30, &g.LastTicketAt, &g.TicketTypes, &g.PanelPublished); err != nil {
 			return nil, err
 		}

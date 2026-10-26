@@ -36,6 +36,8 @@
 		blog: 'Blog posts'
 	};
 
+	const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+
 	const tierOptions: { value: 'free' | 'premium'; label: string }[] = [
 		{ value: 'free', label: 'Free' },
 		{ value: 'premium', label: 'Premium' }
@@ -118,7 +120,17 @@
 	{:else}
 		<PageHeader title="Admin" description="Install and usage stats across every server. Only you can see this." />
 
-		<dl class="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border lg:grid-cols-4">
+		<p class="mt-8 text-lg text-muted">
+			Running in <span class="font-semibold text-fg">{plural(overview.active_guilds, 'server')}</span> with
+			<span class="font-semibold text-fg">{plural(overview.active_members, 'member')}</span>, and
+			<span class="font-semibold text-fg">{plural(overview.tickets_total, 'ticket')}</span> opened so far.
+		</p>
+		<p class="hint mt-1">
+			Members are counted per server, so someone in two servers counts twice. Counts update when the bot
+			restarts or joins a server.
+		</p>
+
+		<dl class="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border lg:grid-cols-4">
 			<div class="bg-surface p-5">
 				<dt class="text-sm text-muted">Active servers</dt>
 				<dd class="mt-3 font-display text-4xl leading-none font-bold tabular-nums">
@@ -192,6 +204,7 @@
 							<tr>
 								<th class="px-5 py-2 font-medium">Server</th>
 								<th class="px-3 py-2 font-medium">Plan</th>
+								<th class="px-3 py-2 text-right font-medium">Members</th>
 								<th class="px-3 py-2 text-right font-medium">Joined</th>
 								<th class="px-3 py-2 text-right font-medium">Tickets</th>
 								<th class="px-3 py-2 text-right font-medium">Last activity</th>
@@ -217,6 +230,9 @@
 											label="Plan for {g.name}"
 											onchange={(v) => setTier(g, v)}
 										/>
+									</td>
+									<td class="px-3 py-2.5 text-right tabular-nums {g.member_count === null ? 'text-subtle' : ''}">
+										{g.member_count === null ? '–' : g.member_count.toLocaleString()}
 									</td>
 									<td class="px-3 py-2.5 text-right tabular-nums text-muted" title={g.joined_at}>
 										{timeAgo(g.joined_at)}

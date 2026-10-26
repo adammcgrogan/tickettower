@@ -14,6 +14,15 @@ func TestAdminOverviewAndGuilds(t *testing.T) {
 	seedGuild(t, s, 3001) // free, active, one ticket
 	seedGuild(t, s, 3002) // premium, active, no tickets
 	seedGuild(t, s, 3003) // free, left
+	for id, members := range map[snowflake.ID]int{3001: 100, 3003: 50} {
+		if err := s.UpsertGuild(ctx, Guild{ID: id, Name: "Guild", OwnerID: 1, MemberCount: members}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An unknown count (0) keeps the last one recorded.
+	if err := s.UpsertGuild(ctx, Guild{ID: 3001, Name: "Guild", OwnerID: 1}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.MarkGuildLeft(ctx, 3003); err != nil {
 		t.Fatal(err)
 	}
@@ -32,10 +41,10 @@ func TestAdminOverviewAndGuilds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.TotalGuilds != 3 || o.ActiveGuilds != 2 || o.PremiumGuilds != 1 || o.FreeGuilds != 1 {
+	if o.TotalGuilds != 3 || o.ActiveGuilds != 2 || o.ActiveMembers != 100 || o.PremiumGuilds != 1 || o.FreeGuilds != 1 {
 		t.Errorf("overview = %+v", o)
 	}
-	if o.TicketsOpenedLast30 != 1 || o.UsingGuilds30 != 1 {
+	if o.TicketsTotal != 1 || o.TicketsOpenedLast30 != 1 || o.UsingGuilds30 != 1 {
 		t.Errorf("overview tickets = %+v", o)
 	}
 
@@ -50,10 +59,10 @@ func TestAdminOverviewAndGuilds(t *testing.T) {
 	for _, g := range guilds {
 		byID[g.ID] = g
 	}
-	if g := byID[3001]; g.Tier != "free" || g.TicketsTotal != 1 || g.TicketsLast30 != 1 || g.LastTicketAt == nil || g.TicketTypes != 1 || g.PanelPublished {
+	if g := byID[3001]; g.Tier != "free" || g.MemberCount == nil || *g.MemberCount != 100 || g.TicketsTotal != 1 || g.TicketsLast30 != 1 || g.LastTicketAt == nil || g.TicketTypes != 1 || g.PanelPublished {
 		t.Errorf("guild 3001 = %+v", g)
 	}
-	if g := byID[3002]; g.Tier != "premium" || g.TicketsTotal != 0 {
+	if g := byID[3002]; g.Tier != "premium" || g.MemberCount != nil || g.TicketsTotal != 0 {
 		t.Errorf("guild 3002 = %+v", g)
 	}
 	if g := byID[3003]; g.LeftAt == nil {

@@ -11,11 +11,15 @@ export type AdminOverview = {
 	/** Ever installed, including servers that removed the bot. */
 	total_guilds: number;
 	active_guilds: number;
+	/** Member counts of active guilds added up, so someone in two counts twice. */
+	active_members: number;
 	joined_last_30: number;
 	left_last_30: number;
 	/** Among active guilds. */
 	premium_guilds: number;
 	free_guilds: number;
+	/** Ever opened, in any guild. */
+	tickets_total: number;
 	tickets_opened_last_30: number;
 	tickets_closed_last_30: number;
 	/** Active guilds that opened at least one ticket in the last 30 days. */
@@ -29,6 +33,8 @@ export type AdminGuild = {
 	name: string;
 	icon_url: string | null;
 	tier: 'free' | 'premium';
+	/** Null until the bot has connected to the server since counts were added. */
+	member_count: number | null;
 	joined_at: string;
 	left_at: string | null;
 	tickets_total: number;
