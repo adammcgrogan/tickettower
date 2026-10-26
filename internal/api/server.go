@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/overview", s.getAdminOverview)
 				r.Get("/guilds", s.listAdminGuilds)
 				r.Post("/guilds/{guildID}/tier", s.setAdminGuildTier)
+				r.Post("/guilds/{guildID}/invite", s.createAdminInvite)
 			})
 			r.Route("/guilds/{guildID}", func(r chi.Router) {
 				r.Use(s.requireGuild)

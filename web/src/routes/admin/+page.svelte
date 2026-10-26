@@ -63,6 +63,28 @@
 
 	onMount(load);
 
+	let inviting = $state<string | null>(null);
+
+	// Opens an invite into the server: its public link if it has one,
+	// otherwise a single-use one the bot creates, valid for an hour.
+	async function invite(g: AdminGuild) {
+		inviting = g.id;
+		// Open the tab now, while the click still counts, so it isn't blocked
+		// as a popup once the request returns.
+		const tab = window.open('', '_blank');
+		if (tab) tab.opener = null;
+		try {
+			const { url } = await api<{ url: string; vanity: boolean }>(`/admin/guilds/${g.id}/invite`, send('POST', {}));
+			if (tab) tab.location.href = url;
+			else window.location.href = url;
+		} catch (e) {
+			tab?.close();
+			toast(errorMessage(e), 'error');
+		} finally {
+			inviting = null;
+		}
+	}
+
 	async function setTier(g: AdminGuild, tier: 'free' | 'premium') {
 		if (g.tier === tier) return;
 		const prev = g.tier;
@@ -172,7 +194,8 @@
 								<th class="px-3 py-2 font-medium">Plan</th>
 								<th class="px-3 py-2 text-right font-medium">Joined</th>
 								<th class="px-3 py-2 text-right font-medium">Tickets</th>
-								<th class="px-5 py-2 text-right font-medium">Last activity</th>
+								<th class="px-3 py-2 text-right font-medium">Last activity</th>
+								<th class="px-5 py-2"><span class="sr-only">Actions</span></th>
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-border">
@@ -202,8 +225,19 @@
 										{g.tickets_total.toLocaleString()}
 										<span class="text-subtle">({g.tickets_last_30} in 30d)</span>
 									</td>
-									<td class="px-5 py-2.5 text-right tabular-nums {g.last_ticket_at ? '' : 'text-subtle'}">
+									<td class="px-3 py-2.5 text-right tabular-nums {g.last_ticket_at ? '' : 'text-subtle'}">
 										{g.last_ticket_at ? timeAgo(g.last_ticket_at) : 'Never'}
+									</td>
+									<td class="px-5 py-2.5 text-right">
+										{#if !g.left_at}
+											<button
+												class="btn btn-ghost whitespace-nowrap"
+												disabled={inviting === g.id}
+												onclick={() => invite(g)}
+											>
+												{inviting === g.id ? 'Getting invite…' : 'Join'}
+											</button>
+										{/if}
 									</td>
 								</tr>
 							{/each}

@@ -1,15 +1,18 @@
 package api
 
 import (
+	"cmp"
 	"crypto/subtle"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 
 	"github.com/adammcgrogan/tickettower/internal/auth"
+	"github.com/adammcgrogan/tickettower/internal/discordx"
 	"github.com/adammcgrogan/tickettower/internal/entitlements"
 	"github.com/adammcgrogan/tickettower/internal/store"
 )
@@ -90,6 +93,81 @@ func (s *Server) setAdminGuildTier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// createAdminInvite gets the owner an invite into a guild the bot is in. A
+// server's public vanity link is used when it has one. Otherwise the bot
+// creates a single-use invite that expires in an hour, in the system, rules or
+// first text channel where it may. Create Invite isn't in BotPermissions, so
+// this only works where the server's roles grant it (@everyone does by
+// default). The invite is credited to the bot in the server's audit log.
+func (s *Server) createAdminInvite(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r, "guildID")
+	if !ok {
+		writeError(w, http.StatusNotFound, "guild not found")
+		return
+	}
+	ctx, guildID := r.Context(), snowflake.ID(id)
+	guild, err := s.discord.GetGuild(guildID, false, rest.WithCtx(ctx))
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	if guild.VanityURLCode != nil && *guild.VanityURLCode != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"url": "https://discord.gg/" + *guild.VanityURLCode, "vanity": true})
+		return
+	}
+
+	channels, err := s.rawChannels(ctx, guildID)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	roles, err := s.rawRoles(ctx, guildID)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	botRoles, err := s.memberRoles(ctx, guildID, s.cfg.DiscordClientID)
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	rank := func(c discord.GuildChannel) int {
+		switch {
+		case guild.SystemChannelID != nil && c.ID() == *guild.SystemChannelID:
+			return 0
+		case guild.RulesChannelID != nil && c.ID() == *guild.RulesChannelID:
+			return 1
+		}
+		return 2
+	}
+	var where discord.GuildChannel
+	for _, c := range channels {
+		if c.Type() != discord.ChannelTypeGuildText {
+			continue
+		}
+		perms := discordx.Permissions(guildID, s.cfg.DiscordClientID, botRoles, roles, c.PermissionOverwrites())
+		if !perms.Has(discord.PermissionViewChannel | discord.PermissionCreateInstantInvite) {
+			continue
+		}
+		if where == nil || cmp.Or(cmp.Compare(rank(c), rank(where)), cmp.Compare(c.Position(), where.Position())) < 0 {
+			where = c
+		}
+	}
+	if where == nil {
+		writeError(w, http.StatusUnprocessableEntity, "The bot isn't allowed to create invites in this server.")
+		return
+	}
+
+	maxAge, maxUses := 3600, 1
+	invite, err := s.discord.CreateInvite(where.ID(), discord.InviteCreate{MaxAge: &maxAge, MaxUses: &maxUses, Unique: true},
+		rest.WithCtx(ctx), rest.WithReason("Requested by the "+s.cfg.AppName+" developer"))
+	if err != nil {
+		s.writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"url": "https://discord.gg/" + invite.Code, "vanity": false})
 }
 
 // requireAdminToken protects the report endpoint scripts call without a

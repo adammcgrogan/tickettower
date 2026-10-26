@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,12 +35,20 @@ func TestAdminRequiresSuperadmin(t *testing.T) {
 	if rec := env.do("GET", "/api/admin/overview", login(42)); rec.Code != http.StatusNotFound {
 		t.Errorf("non-owner: got %d, want 404", rec.Code)
 	}
+	req := httptest.NewRequest("POST", "/api/admin/guilds/1/invite", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(login(42))
+	rec := httptest.NewRecorder()
+	env.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("non-owner invite: got %d, want 404", rec.Code)
+	}
 	// No session at all is still a plain 401 from the auth middleware.
 	if rec := env.do("GET", "/api/admin/overview", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("no session: got %d, want 401", rec.Code)
 	}
 
-	rec := env.do("GET", "/api/me", login(999))
+	rec = env.do("GET", "/api/me", login(999))
 	if rec.Code != 200 {
 		t.Fatalf("me: got %d", rec.Code)
 	}
