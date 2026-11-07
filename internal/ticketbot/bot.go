@@ -156,7 +156,7 @@ func (b *Bot) Run(ctx context.Context) error {
 	return nil
 }
 
-func (b *Bot) upsertGuild(g discord.Guild) {
+func (b *Bot) upsertGuild(g discord.CacheGuild) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err := b.store.UpsertGuild(ctx, store.Guild{ID: g.ID, Name: g.Name, Icon: g.Icon, OwnerID: g.OwnerID, MemberCount: g.MemberCount})
@@ -169,7 +169,7 @@ func (b *Bot) onGuildReady(e *events.GuildReady) {
 	b.readyMu.Lock()
 	b.readyGuilds = append(b.readyGuilds, e.Guild.ID)
 	b.readyMu.Unlock()
-	b.upsertGuild(e.Guild.Guild)
+	b.upsertGuild(e.Guild)
 }
 
 // onGuildsReady fires once all guilds from the initial connection are loaded.
@@ -240,7 +240,7 @@ func (b *Bot) channelExists(id snowflake.ID) bool {
 
 func (b *Bot) onGuildJoin(e *events.GuildJoin) {
 	b.log.Info("joined guild", slog.String("guild_id", e.Guild.ID.String()), slog.String("name", e.Guild.Name))
-	b.upsertGuild(e.Guild.Guild)
+	b.upsertGuild(e.Guild)
 	// Tickets from before the bot left are closed by now; tickets opened
 	// while it was here before a restart may have lost their channel.
 	go b.closeMissingTickets(e.Guild.ID)
